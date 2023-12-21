@@ -1,16 +1,22 @@
+use std::hash::Hash;
+use std::path::PathBuf;
 use std::rc::Rc;
 use crate::test::{Test, TestGenerator};
 
 pub struct Subtask {
-    points: i32,
-    tests: Vec<Test>,
+    pub(super) number: usize,
+    pub(super) points: i32,
+    pub(super) tests: Vec<Test>,
+    pub(super) dependencies: Vec<usize>,
 }
 
 impl Subtask {
     pub fn new(points: i32) -> Subtask {
         Subtask {
+            number: 0,
             points,
             tests: Vec::new(),
+            dependencies: Vec::new(),
         }
     }
     
@@ -29,9 +35,27 @@ impl Subtask {
         self.tests.push(Test::new(test_generator));
     }
     
-    pub fn add_dependency(&mut self, subtask: &Subtask) {
-        for test in &subtask.tests {
-            self.tests.push(test.clone());
+    pub(super) fn generate_tests(&mut self) {
+        for test in &mut self.tests {
+            test.generate_input();
+        }
+    }
+    
+    pub(super) fn write_tests(&self, curr_test_id: &mut i32, subtasks: &Vec<Subtask>, tests_path: &PathBuf, subtask_visited: &mut Vec<bool>) {
+        if subtask_visited[self.number] {
+            return;
+        }
+        subtask_visited[self.number] = true;
+        
+        for test in &self.tests {
+            for dependency in &self.dependencies {
+                subtasks[*dependency].write_tests(curr_test_id, subtasks, tests_path, subtask_visited);
+            }
+            
+            let test_id = *curr_test_id;
+            *curr_test_id += 1;
+            let input_file_path = tests_path.join(format!("input.{:0>3}", test_id));
+            std::fs::write(input_file_path, test.get_input()).unwrap();
         }
     }
 }

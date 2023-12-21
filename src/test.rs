@@ -32,7 +32,7 @@ impl Test {
     }
     
     pub fn generate_input(&mut self) {
-        self.input = (self.input_generator.function)();
+        self.input = self.input_generator.generate();
     }
     
     pub fn get_input(&self) -> &str {
