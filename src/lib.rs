@@ -154,4 +154,5 @@ mod subtask;
 mod test;
 
 pub use task::Task;
+pub use subtask::Subtask;
 
