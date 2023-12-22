@@ -4,7 +4,9 @@ use std::path::PathBuf;
 pub struct Task {
     name: String,
     path: PathBuf,
-    tests_path: PathBuf,
+    pub tests_path: PathBuf,
+    pub solution_path: PathBuf,
+    pub solution_exe_path: PathBuf,
     subtasks: Vec<Subtask>,
 }
 
@@ -14,6 +16,8 @@ impl Task {
             name: name.to_owned(),
             path: path.clone(),
             tests_path: path.join("tests"),
+            solution_path: path.join("solution.cpp"),
+            solution_exe_path: path.join("solution"),
             subtasks: Vec::new(),
         }
     }
@@ -41,9 +45,13 @@ impl Task {
         }
 
         println!("Generating tests...");
-        self.create_tests();
+        self.generate_tests();
         println!("Writing tests...");
-        self.write_tests();
+        let num_tests = self.write_tests();
+        println!("Building solution...");
+        self.build_solution();
+        println!("Generating test solutions...");
+        self.generate_test_solutions(num_tests);
     }
 
     fn generate_tests(&mut self) {
@@ -52,7 +60,7 @@ impl Task {
         }
     }
 
-    fn write_tests(&self) {
+    fn write_tests(&self) -> i32 {
         // create tests directory if it doesn't exist
         if !self.tests_path.exists() {
             std::fs::create_dir(&self.tests_path).unwrap();
@@ -68,6 +76,45 @@ impl Task {
         for subtask in &self.subtasks {
             let mut subtask_visited = vec![false; self.subtasks.len()];
             subtask.write_tests(&mut curr_test_id, &self.subtasks, &self.tests_path, &mut subtask_visited);
+        }
+
+        curr_test_id
+    }
+
+    fn build_solution(&self) {
+        // check that solution file exists
+        if !self.solution_path.exists() {
+            panic!("Solution file \"{}\" doesn't exist", self.solution_path.to_str().unwrap());
+        }
+
+        // invoke g++ to build solution
+        std::process::Command::new("g++")
+            .arg("-std=c++17")
+            .arg("-O2")
+            .arg("-o")
+            .arg(&self.solution_exe_path)
+            .arg(&self.solution_path)
+            .output()
+            .expect("Failed to build solution");
+    }
+
+    fn generate_test_solutions(&self, num_tests: i32) {
+        // invoke solution on each test
+        for test_id in 0..num_tests {
+            let input_file_path = self.tests_path.join(format!("input.{:0>3}", test_id));
+            let output_file_path = self.tests_path.join(format!("output.{:0>3}", test_id));
+
+            let mut solution_process = std::process::Command::new(&self.solution_exe_path)
+                .stdin(std::fs::File::open(&input_file_path).unwrap())
+                .stdout(std::fs::File::create(&output_file_path).unwrap())
+                .spawn()
+                .expect("Failed to run solution");
+
+            let solution_status = solution_process.wait().expect("Failed to wait for solution");
+
+            if !solution_status.success() {
+                panic!("Solution failed on test {}", test_id);
+            }
         }
     }
 }
