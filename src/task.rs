@@ -67,12 +67,7 @@ impl Task {
         let mut curr_test_id = 0;
         for subtask in &self.subtasks {
             let mut subtask_visited = vec![false; self.subtasks.len()];
-            subtask.write_tests(
-                &mut curr_test_id,
-                &self.subtasks,
-                &self.tests_path,
-                &mut subtask_visited,
-            );
+            subtask.write_tests(&mut curr_test_id, &self.subtasks, &self.tests_path, &mut subtask_visited);
         }
     }
 }

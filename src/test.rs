@@ -9,9 +9,7 @@ impl TestGenerator {
     where
         F: Fn() -> String + 'static,
     {
-        Self {
-            function: Box::new(function),
-        }
+        Self { function: Box::new(function) }
     }
 
     pub fn generate(&self) -> String {

@@ -43,13 +43,7 @@ impl Subtask {
         }
     }
 
-    pub(super) fn write_tests(
-        &self,
-        curr_test_id: &mut i32,
-        subtasks: &Vec<Subtask>,
-        tests_path: &PathBuf,
-        subtask_visited: &mut Vec<bool>,
-    ) {
+    pub(super) fn write_tests(&self, curr_test_id: &mut i32, subtasks: &Vec<Subtask>, tests_path: &PathBuf, subtask_visited: &mut Vec<bool>) {
         if subtask_visited[self.number] {
             return;
         }
@@ -57,12 +51,7 @@ impl Subtask {
 
         for test in &self.tests {
             for dependency in &self.dependencies {
-                subtasks[*dependency].write_tests(
-                    curr_test_id,
-                    subtasks,
-                    tests_path,
-                    subtask_visited,
-                );
+                subtasks[*dependency].write_tests(curr_test_id, subtasks, tests_path, subtask_visited);
             }
 
             let test_id = *curr_test_id;
