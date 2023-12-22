@@ -149,10 +149,9 @@
 #![allow(clippy::type_complexity)]
 #![allow(clippy::too_many_arguments)]
 
-mod task;
 mod subtask;
+mod task;
 mod test;
 
-pub use task::Task;
 pub use subtask::Subtask;
-
+pub use task::Task;
