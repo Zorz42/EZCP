@@ -149,9 +149,11 @@
 #![allow(clippy::type_complexity)]
 #![allow(clippy::too_many_arguments)]
 
+mod generators;
 mod subtask;
 mod task;
 mod test;
 
+pub use generators::{array_generator, array_generator_custom, array_to_string};
 pub use subtask::Subtask;
 pub use task::Task;
