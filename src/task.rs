@@ -44,23 +44,22 @@ impl Task {
             subtask.number = i;
         }
 
-        println!("Generating tests...");
         self.generate_tests();
-        println!("Writing tests...");
         let num_tests = self.write_tests();
-        println!("Building solution...");
         self.build_solution();
-        println!("Generating test solutions...");
         self.generate_test_solutions(num_tests);
     }
 
     fn generate_tests(&mut self) {
+        println!("Generating tests...");
         for subtask in &mut self.subtasks {
             subtask.generate_tests();
         }
     }
 
     fn write_tests(&self) -> i32 {
+        println!("Writing tests...");
+
         // create tests directory if it doesn't exist
         if !self.tests_path.exists() {
             std::fs::create_dir(&self.tests_path).unwrap();
@@ -87,6 +86,19 @@ impl Task {
             panic!("Solution file \"{}\" doesn't exist", self.solution_path.to_str().unwrap());
         }
 
+        // if solution executable exists, check if it's up to date
+        if self.solution_exe_path.exists() {
+            let solution_last_modified = std::fs::metadata(&self.solution_path).unwrap().modified().unwrap();
+            let solution_exe_last_modified = std::fs::metadata(&self.solution_exe_path).unwrap().modified().unwrap();
+
+            if solution_exe_last_modified > solution_last_modified {
+                println!("Skipping solution compilation as it is up to date");
+                return;
+            }
+        }
+
+        println!("Building solution...");
+
         // invoke g++ to build solution
         std::process::Command::new("g++")
             .arg("-std=c++17")
@@ -99,6 +111,7 @@ impl Task {
     }
 
     fn generate_test_solutions(&self, num_tests: i32) {
+        println!("Generating test solutions...");
         // invoke solution on each test
         for test_id in 0..num_tests {
             let input_file_path = self.tests_path.join(format!("input.{:0>3}", test_id));
