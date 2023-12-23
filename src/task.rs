@@ -117,7 +117,12 @@ impl Task {
         let mut curr_test_id = 0;
         for subtask in &self.subtasks {
             let mut subtask_visited = vec![false; self.subtasks.len()];
-            subtask.write_tests(&mut curr_test_id, &self.subtasks, &self.tests_path, &mut subtask_visited);
+            let checker = subtask.checker.as_ref().map(|checker| &**checker);
+            if checker.is_none() {
+                println!("Warning: no checker for subtask {}", subtask.number);
+            }
+            println!("Writing subtask {}...", subtask.number);
+            subtask.write_tests(&mut curr_test_id, &self.subtasks, &self.tests_path, &mut subtask_visited, checker);
         }
 
         curr_test_id
