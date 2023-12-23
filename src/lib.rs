@@ -1,4 +1,4 @@
-// enable a bunch of clippy lints
+// Enable a bunch of Clippy lints.
 #![deny(clippy::all)]
 #![warn(clippy::pedantic)]
 #![warn(clippy::nursery)]
@@ -126,7 +126,7 @@
 #![warn(clippy::verbose_file_reads)]
 #![warn(clippy::wildcard_dependencies)]
 #![warn(clippy::zero_sized_map_values)]
-// disable some Clippy lints
+// Disable some Clippy lints.
 #![allow(clippy::cast_possible_truncation)]
 #![allow(clippy::cast_possible_wrap)]
 #![allow(clippy::cast_precision_loss)]

@@ -30,8 +30,7 @@ impl Subtask {
         }
     }
 
-    pub fn add_test_str(&mut self, input: &str) {
-        let input = input.to_owned();
+    pub fn add_test_str(&mut self, input: String) {
         let func = move || input.clone();
         let test_generator = Rc::new(TestGenerator::new(func));
         self.tests.push(Test::new(test_generator));

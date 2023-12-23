@@ -6,18 +6,21 @@ pub struct Task {
     path: PathBuf,
     pub tests_path: PathBuf,
     pub solution_path: PathBuf,
-    pub solution_exe_path: PathBuf,
+    solution_exe_path: PathBuf,
+    build_folder_path: PathBuf,
     subtasks: Vec<Subtask>,
 }
 
 impl Task {
     pub fn new(name: &str, path: PathBuf) -> Task {
+        let build_folder_path = path.join("build");
         Task {
             name: name.to_owned(),
             path: path.clone(),
             tests_path: path.join("tests"),
             solution_path: path.join("solution.cpp"),
-            solution_exe_path: path.join("solution"),
+            solution_exe_path: build_folder_path.join("solution"),
+            build_folder_path,
             subtasks: Vec::new(),
         }
     }
@@ -37,6 +40,16 @@ impl Task {
         // create task directory if it doesn't exist
         if !self.path.exists() {
             std::fs::create_dir(&self.path).unwrap();
+        }
+
+        // create build directory if it doesn't exist
+        if !self.build_folder_path.exists() {
+            std::fs::create_dir(&self.build_folder_path).unwrap();
+        }
+
+        // check if solution file exists
+        if !self.solution_path.exists() {
+            panic!("Solution file \"{}\" doesn't exist", self.solution_path.to_str().unwrap());
         }
 
         // assign numbers to subtasks
@@ -81,11 +94,6 @@ impl Task {
     }
 
     fn build_solution(&self) {
-        // check that solution file exists
-        if !self.solution_path.exists() {
-            panic!("Solution file \"{}\" doesn't exist", self.solution_path.to_str().unwrap());
-        }
-
         // if solution executable exists, check if it's up to date
         if self.solution_exe_path.exists() {
             let solution_last_modified = std::fs::metadata(&self.solution_path).unwrap().modified().unwrap();
