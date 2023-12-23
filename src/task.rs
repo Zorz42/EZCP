@@ -1,4 +1,5 @@
 use crate::subtask::Subtask;
+use std::io::Write;
 use std::path::PathBuf;
 
 pub struct Task {
@@ -9,6 +10,35 @@ pub struct Task {
     solution_exe_path: PathBuf,
     build_folder_path: PathBuf,
     subtasks: Vec<Subtask>,
+}
+
+fn print_progress_bar(progress: f32) {
+    let bar_length = (termsize::get().unwrap().cols as usize - 10).max(0);
+    let num_filled = (progress * bar_length as f32) as usize;
+    let num_empty = (bar_length - num_filled - 1).max(0);
+
+    print!("\r {:.2}% [", progress * 100.0);
+    for _ in 0..num_filled {
+        print!("=");
+    }
+    if num_filled > 0 {
+        print!(">");
+    }
+    for _ in 0..num_empty {
+        print!(" ");
+    }
+    print!("]");
+    std::io::stdout().flush().unwrap();
+}
+
+fn clear_progress_bar() {
+    let bar_length = termsize::get().unwrap().cols as usize;
+    print!("\r");
+    for _ in 0..bar_length {
+        print!(" ");
+    }
+    print!("\r");
+    std::io::stdout().flush().unwrap();
 }
 
 impl Task {
@@ -122,6 +152,8 @@ impl Task {
         println!("Generating test solutions...");
         // invoke solution on each test
         for test_id in 0..num_tests {
+            print_progress_bar((test_id as f32) / (num_tests as f32));
+
             let input_file_path = self.tests_path.join(format!("input.{:0>3}", test_id));
             let output_file_path = self.tests_path.join(format!("output.{:0>3}", test_id));
 
@@ -137,5 +169,6 @@ impl Task {
                 panic!("Solution failed on test {}", test_id);
             }
         }
+        clear_progress_bar();
     }
 }
