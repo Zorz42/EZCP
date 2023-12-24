@@ -58,14 +58,7 @@ impl Subtask {
         self.checker = Some(Box::new(function));
     }
 
-    pub(super) fn write_tests(
-        &self,
-        curr_test_id: &mut i32,
-        subtasks: &Vec<Subtask>,
-        tests_path: &PathBuf,
-        subtask_visited: &mut Vec<bool>,
-        checker: Option<&dyn Fn(Input) -> Result<()>>,
-    ) -> Result<()> {
+    pub(super) fn write_tests(&self, curr_test_id: &mut i32, subtasks: &Vec<Self>, tests_path: &PathBuf, subtask_visited: &mut Vec<bool>, checker: Option<&dyn Fn(Input) -> Result<()>>) -> Result<()> {
         if *subtask_visited.get(self.number).ok_or_else(|| anyhow!("Subtask number out of bounds"))? {
             return Ok(());
         }

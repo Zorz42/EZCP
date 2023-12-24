@@ -1,7 +1,7 @@
 use crate::subtask::Subtask;
 use anyhow::{bail, Result};
 use std::io::Write;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 pub struct Task {
     name: String,
@@ -50,11 +50,11 @@ fn clear_progress_bar() {
 
 impl Task {
     #[must_use]
-    pub fn new(name: &str, path: &PathBuf) -> Self {
+    pub fn new(name: &str, path: &Path) -> Self {
         let build_folder_path = path.join("build");
         Self {
             name: name.to_owned(),
-            path: path.clone(),
+            path: path.to_path_buf(),
             tests_path: path.join("tests"),
             solution_path: path.join("solution.cpp"),
             solution_exe_path: build_folder_path.join("solution"),

@@ -6,19 +6,23 @@ pub struct Input {
 
 impl Input {
     pub(super) fn new(input_str: &str) -> Self {
-        let elements: Vec<_> = input_str.split_whitespace().map(std::borrow::ToOwned::to_owned).collect();
-        Self { iter: elements.into_iter() }
+        Self {
+            iter: input_str.split_whitespace().map(std::borrow::ToOwned::to_owned).collect::<Vec<_>>().into_iter(),
+        }
     }
 
     pub fn get_int(&mut self) -> Result<i32> {
         self.iter
             .next()
             .ok_or_else(|| anyhow!("Expected integer"))
-            .and_then(|s| s.parse().map_err(|_| anyhow!("Expected integer")))
+            .and_then(|s| s.parse().map_err(|_err| anyhow!("Expected integer")))
     }
 
     pub fn get_float(&mut self) -> Result<f32> {
-        self.iter.next().ok_or_else(|| anyhow!("Expected float")).and_then(|s| s.parse().map_err(|_| anyhow!("Expected float")))
+        self.iter
+            .next()
+            .ok_or_else(|| anyhow!("Expected float"))
+            .and_then(|s| s.parse().map_err(|_err| anyhow!("Expected float")))
     }
 
     pub fn get_string(&mut self) -> Result<String> {
