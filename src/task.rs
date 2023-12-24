@@ -229,16 +229,16 @@ impl Task {
         }
         *subtask_visited.get_mut(subtask_number).ok_or_else(|| anyhow!("Subtask number out of bounds"))? = true;
 
-        let dependencies = self.subtasks[subtask_number].dependencies.clone();
+        let dependencies = self.subtasks.get(subtask_number).ok_or_else(|| anyhow!("Subtask number out of bounds"))?.dependencies.clone();
         for dependency in dependencies {
             self.write_tests_for_subtask(dependency, curr_test_id, tests_path, subtask_visited, loading_progress_max)?;
         }
 
-        for test in &mut self.subtasks[subtask_number].tests {
+        for test in &mut self.subtasks.get_mut(subtask_number).ok_or_else(|| anyhow!("Subtask number out of bounds"))?.tests {
             let test_id = *curr_test_id;
             *curr_test_id += 1;
             let input_file_path = tests_path.join(format!("input.{test_id:0>3}"));
-            test.generate_input(input_file_path.clone());
+            test.generate_input(&input_file_path)?;
             print_progress_bar((*curr_test_id as f32) / (loading_progress_max as f32));
         }
         Ok(())
@@ -256,11 +256,11 @@ impl Task {
         *subtask_visited.get_mut(subtask_number).ok_or_else(|| anyhow!("Subtask number out of bounds"))? = true;
 
         let mut result = 0;
-        for dependency in &self.subtasks[subtask_number].dependencies {
+        for dependency in &self.subtasks.get(subtask_number).ok_or_else(|| anyhow!("Subtask number out of bounds"))?.dependencies {
             result += self.get_total_tests_inner(*dependency, subtask_visited)?;
         }
 
-        result += self.subtasks[subtask_number].tests.len() as i32;
+        result += self.subtasks.get(subtask_number).ok_or_else(|| anyhow!("Subtask number out of bounds"))?.tests.len() as i32;
 
         Ok(result)
     }

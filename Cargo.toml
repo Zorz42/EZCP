@@ -2,6 +2,13 @@
 name = "ezcp"
 version = "0.1.0"
 edition = "2021"
+description = "A simple tool to automatically generate test cases for competitive programming problems."
+license-file = "LICENSE"
+repository = "https://github.com/Zorz42/EZCP"
+keywords = ["competitive_programming", "test_data", "framework", "generator"]
+categories = ["development-tools"]
+readme = "README.md"
+
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
