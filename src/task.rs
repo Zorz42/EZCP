@@ -65,7 +65,17 @@ impl Task {
     }
 
     pub fn create_tests(&mut self) {
-        println!("Creating tests for task \"{}\"", self.name);
+        let text = format!("Creating tests for task \"{}\"", self.name);
+        // print = before and after text
+        println!();
+        for _ in 0..text.len() {
+            print!("=");
+        }
+        println!("\n\x1b[1m{}\x1b[0m", text);
+        for _ in 0..text.len() {
+            print!("=");
+        }
+        println!();
 
         // create task directory if it doesn't exist
         if !self.path.exists() {
@@ -119,7 +129,7 @@ impl Task {
             let mut subtask_visited = vec![false; self.subtasks.len()];
             let checker = subtask.checker.as_ref().map(|checker| &**checker);
             if checker.is_none() {
-                println!("Warning: no checker for subtask {}", subtask.number);
+                println!("\x1b[33mWarning: no checker for subtask {}\x1b[0m", subtask.number);
             }
             println!("Writing subtask {}...", subtask.number);
             subtask.write_tests(&mut curr_test_id, &self.subtasks, &self.tests_path, &mut subtask_visited, checker);
