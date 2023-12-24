@@ -64,12 +64,19 @@ impl Task {
         }
     }
 
+    fn get_input_file_path(&self, test_id: i32) -> PathBuf {
+        self.tests_path.join(format!("input.{test_id:0>3}"))
+    }
+
+    fn get_output_file_path(&self, test_id: i32) -> PathBuf {
+        self.tests_path.join(format!("output.{test_id:0>3}"))
+    }
+
     pub fn add_subtask(&mut self, subtask: Subtask) -> usize {
         self.subtasks.push(subtask);
         self.subtasks.len() - 1
     }
 
-    #[allow(clippy::indexing_slicing)]
     pub fn add_subtask_dependency(&mut self, subtask: usize, dependency: usize) {
         assert!(subtask < self.subtasks.len());
         assert!(dependency < subtask);
@@ -154,13 +161,12 @@ impl Task {
             result
         };
 
-        let tests_path = self.tests_path.clone();
         let mut curr_test_id = 0;
         println!("Generating tests...");
         print_progress_bar(0.0);
         for subtask_number in 0..self.subtasks.len() {
             let mut subtask_visited = vec![false; self.subtasks.len()];
-            self.write_tests_for_subtask(subtask_number, &mut curr_test_id, &tests_path, &mut subtask_visited, loading_progress_max)?;
+            self.write_tests_for_subtask(subtask_number, &mut curr_test_id, &mut subtask_visited, loading_progress_max)?;
         }
 
         let mut loading_progress = num_tests;
@@ -196,14 +202,11 @@ impl Task {
         for test_id in 0..num_tests {
             print_progress_bar((loading_progress as f32) / (loading_progress_max as f32));
 
-            let input_file_path = self.tests_path.join(format!("input.{test_id:0>3}"));
-            let output_file_path = self.tests_path.join(format!("output.{test_id:0>3}"));
-
             // also time the solution
             let start_time = std::time::Instant::now();
             let mut solution_process = std::process::Command::new(&self.solution_exe_path)
-                .stdin(std::fs::File::open(&input_file_path)?)
-                .stdout(std::fs::File::create(&output_file_path)?)
+                .stdin(std::fs::File::open(&self.get_input_file_path(test_id))?)
+                .stdout(std::fs::File::create(&self.get_output_file_path(test_id))?)
                 .spawn()?;
 
             let solution_status = solution_process.wait()?;
@@ -223,23 +226,31 @@ impl Task {
         Ok(())
     }
 
-    fn write_tests_for_subtask(&mut self, subtask_number: usize, curr_test_id: &mut i32, tests_path: &PathBuf, subtask_visited: &mut Vec<bool>, loading_progress_max: i32) -> Result<()> {
-        if *subtask_visited.get(subtask_number).ok_or_else(|| anyhow!("Subtask number out of bounds"))? {
+    fn write_tests_for_subtask(&mut self, subtask_number: usize, curr_test_id: &mut i32, subtask_visited: &mut Vec<bool>, loading_progress_max: i32) -> Result<()> {
+        if subtask_visited[subtask_number] {
             return Ok(());
         }
-        *subtask_visited.get_mut(subtask_number).ok_or_else(|| anyhow!("Subtask number out of bounds"))? = true;
+        subtask_visited[subtask_number] = true;
 
-        let dependencies = self.subtasks.get(subtask_number).ok_or_else(|| anyhow!("Subtask number out of bounds"))?.dependencies.clone();
+        let dependencies = self.subtasks[subtask_number].dependencies.clone();
         for dependency in dependencies {
-            self.write_tests_for_subtask(dependency, curr_test_id, tests_path, subtask_visited, loading_progress_max)?;
+            self.write_tests_for_subtask(dependency, curr_test_id, subtask_visited, loading_progress_max)?;
         }
 
-        for test in &mut self.subtasks.get_mut(subtask_number).ok_or_else(|| anyhow!("Subtask number out of bounds"))?.tests {
+        let mut tests_input_files = Vec::new();
+        let num_tests = self.subtasks[subtask_number].tests.len();
+        let initial_progress = *curr_test_id;
+        for _ in 0..num_tests {
             let test_id = *curr_test_id;
             *curr_test_id += 1;
-            let input_file_path = tests_path.join(format!("input.{test_id:0>3}"));
-            test.generate_input(&input_file_path)?;
-            print_progress_bar((*curr_test_id as f32) / (loading_progress_max as f32));
+            tests_input_files.push(self.get_input_file_path(test_id));
+        }
+
+        let mut progress = initial_progress;
+        for (test, input_file) in &mut self.subtasks[subtask_number].tests.iter_mut().zip(tests_input_files) {
+            progress += 1;
+            test.generate_input(&input_file)?;
+            print_progress_bar((progress as f32) / (loading_progress_max as f32));
         }
         Ok(())
     }
@@ -250,17 +261,18 @@ impl Task {
     }
 
     fn get_total_tests_inner(&self, subtask_number: usize, subtask_visited: &mut Vec<bool>) -> Result<i32> {
-        if *subtask_visited.get(subtask_number).ok_or_else(|| anyhow!("Subtask number out of bounds"))? {
+        // check if subtask has already been visited
+        if subtask_visited[subtask_number] {
             return Ok(0);
         }
         *subtask_visited.get_mut(subtask_number).ok_or_else(|| anyhow!("Subtask number out of bounds"))? = true;
 
         let mut result = 0;
-        for dependency in &self.subtasks.get(subtask_number).ok_or_else(|| anyhow!("Subtask number out of bounds"))?.dependencies {
+        for dependency in &self.subtasks[subtask_number].dependencies {
             result += self.get_total_tests_inner(*dependency, subtask_visited)?;
         }
 
-        result += self.subtasks.get(subtask_number).ok_or_else(|| anyhow!("Subtask number out of bounds"))?.tests.len() as i32;
+        result += self.subtasks[subtask_number].tests.len() as i32;
 
         Ok(result)
     }

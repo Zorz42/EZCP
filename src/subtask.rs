@@ -5,7 +5,7 @@ use std::rc::Rc;
 
 pub struct Subtask {
     pub(super) number: usize,
-    pub(super) points: i32,
+    pub(super) _points: i32,
     pub(super) tests: Vec<Test>,
     pub(super) dependencies: Vec<usize>,
     pub(super) checker: Option<Box<dyn Fn(Input) -> Result<()>>>,
@@ -16,17 +16,14 @@ impl Subtask {
     pub fn new(points: i32) -> Self {
         Self {
             number: 0,
-            points,
+            _points: points,
             tests: Vec::new(),
             dependencies: Vec::new(),
             checker: None,
         }
     }
 
-    pub fn add_test<F>(&mut self, number: i32, function: F)
-    where
-        F: Fn() -> String + 'static,
-    {
+    pub fn add_test<F: Fn() -> String + 'static>(&mut self, number: i32, function: F) {
         let test_generator = Rc::new(TestGenerator::new(function));
 
         for _ in 0..(number as usize) {
@@ -34,20 +31,14 @@ impl Subtask {
         }
     }
 
-    pub fn add_test_str<S>(&mut self, input: S)
-    where
-        S: Into<String>,
-    {
+    pub fn add_test_str<S: Into<String>>(&mut self, input: S) {
         let input: String = input.into();
         let func = move || input.clone();
         let test_generator = Rc::new(TestGenerator::new(func));
         self.tests.push(Test::new(test_generator));
     }
 
-    pub fn set_checker<F>(&mut self, function: F)
-    where
-        F: Fn(Input) -> Result<()> + 'static,
-    {
+    pub fn set_checker<F: Fn(Input) -> Result<()> + 'static>(&mut self, function: F) {
         self.checker = Some(Box::new(function));
     }
 }

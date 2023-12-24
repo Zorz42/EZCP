@@ -20,7 +20,6 @@
 #![warn(clippy::fn_to_numeric_cast_any)]
 #![warn(clippy::format_push_string)]
 #![warn(clippy::if_then_some_else_none)]
-#![warn(clippy::indexing_slicing)]
 #![warn(clippy::let_underscore_must_use)]
 #![warn(clippy::map_err_ignore)]
 #![warn(clippy::mem_forget)]
@@ -148,6 +147,7 @@
 #![allow(clippy::unimplemented)]
 #![allow(clippy::type_complexity)]
 #![allow(clippy::too_many_arguments)]
+#![allow(clippy::multiple_crate_versions)]
 
 mod generators;
 mod input;

@@ -17,10 +17,7 @@ pub fn array_to_string(array: &Vec<i32>, include_count: bool) -> String {
     result
 }
 
-pub fn array_generator_custom<F>(min_n: i32, max_n: i32, gen: F) -> impl Fn() -> String
-where
-    F: Fn(&mut ThreadRng) -> i32,
-{
+pub fn array_generator_custom<F: Fn(&mut ThreadRng) -> i32>(min_n: i32, max_n: i32, gen: F) -> impl Fn() -> String {
     move || {
         let mut rng = rand::thread_rng();
         let n = rng.gen_range(min_n..=max_n);

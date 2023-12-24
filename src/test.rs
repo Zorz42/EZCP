@@ -7,10 +7,7 @@ pub struct TestGenerator {
 }
 
 impl TestGenerator {
-    pub fn new<F>(function: F) -> Self
-    where
-        F: Fn() -> String + 'static,
-    {
+    pub fn new<F: Fn() -> String + 'static>(function: F) -> Self {
         Self { function: Box::new(function) }
     }
 
