@@ -132,16 +132,13 @@ impl Task {
     }
 
     fn generate_tests(&mut self) -> Result<()> {
-        // create tests directory if it doesn't exist
-        if !self.tests_path.exists() {
-            std::fs::create_dir_all(&self.tests_path)?;
-        }
-
-        // delete all files in tests directory
+        // create tests directory if it doesn't exist and clear it
+        std::fs::create_dir_all(&self.tests_path)?;
         for entry in std::fs::read_dir(&self.tests_path)? {
             std::fs::remove_file(entry?.path())?;
         }
 
+        // count how many tests there are in total (if one subtask is a dependency of another, its tests are counted twice)
         let num_tests = {
             let mut result = 0;
             for subtask in &self.subtasks {
@@ -150,6 +147,7 @@ impl Task {
             result
         };
 
+        // calculate how many steps there are in total for the progress bar. If checkers are missing, it is less steps.
         let loading_progress_max = {
             let mut result = 2 * num_tests; // 2 generating input and producing output
             for subtask in &self.subtasks {
@@ -161,19 +159,24 @@ impl Task {
             result
         };
 
-        let mut curr_test_id = 0;
         println!("Generating tests...");
+
+        // Generate and write tests for each subtask
+        let mut curr_test_id = 0;
         print_progress_bar(0.0);
         for subtask_number in 0..self.subtasks.len() {
             let mut subtask_visited = vec![false; self.subtasks.len()];
             self.write_tests_for_subtask(subtask_number, &mut curr_test_id, &mut subtask_visited, loading_progress_max)?;
         }
 
+        // loading progress at this point is exactly num_tests
         let mut loading_progress = num_tests;
 
         clear_progress_bar();
         println!("Checking tests...");
         print_progress_bar((loading_progress as f32) / (loading_progress_max as f32));
+
+        // check all tests
         curr_test_id = 0;
         for subtask in &self.subtasks {
             let checker = &subtask.checker;
@@ -196,14 +199,16 @@ impl Task {
         clear_progress_bar();
         println!("Generating test solutions...");
         print_progress_bar((loading_progress as f32) / (loading_progress_max as f32));
+
         // invoke solution on each test
         let mut max_elapsed_time: f32 = 0.0;
-
         for test_id in 0..num_tests {
             print_progress_bar((loading_progress as f32) / (loading_progress_max as f32));
 
             // also time the solution
             let start_time = std::time::Instant::now();
+
+            // spawn the solution process
             let mut solution_process = std::process::Command::new(&self.solution_exe_path)
                 .stdin(std::fs::File::open(&self.get_input_file_path(test_id))?)
                 .stdout(std::fs::File::create(&self.get_output_file_path(test_id))?)
@@ -227,16 +232,19 @@ impl Task {
     }
 
     fn write_tests_for_subtask(&mut self, subtask_number: usize, curr_test_id: &mut i32, subtask_visited: &mut Vec<bool>, loading_progress_max: i32) -> Result<()> {
+        // check if subtask has already been visited
         if subtask_visited[subtask_number] {
             return Ok(());
         }
         subtask_visited[subtask_number] = true;
 
+        // first, write tests for dependencies
         let dependencies = self.subtasks[subtask_number].dependencies.clone();
         for dependency in dependencies {
             self.write_tests_for_subtask(dependency, curr_test_id, subtask_visited, loading_progress_max)?;
         }
 
+        // generate input files paths for all tests because of rust borrow checker
         let mut tests_input_files = Vec::new();
         let num_tests = self.subtasks[subtask_number].tests.len();
         let initial_progress = *curr_test_id;
@@ -246,6 +254,7 @@ impl Task {
             tests_input_files.push(self.get_input_file_path(test_id));
         }
 
+        // generate input files for all tests
         let mut progress = initial_progress;
         for (test, input_file) in &mut self.subtasks[subtask_number].tests.iter_mut().zip(tests_input_files) {
             progress += 1;
