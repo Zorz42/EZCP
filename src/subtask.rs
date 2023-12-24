@@ -1,5 +1,6 @@
 use crate::test::{Test, TestGenerator};
 use crate::Input;
+use anyhow::Result;
 use std::path::PathBuf;
 use std::rc::Rc;
 
@@ -8,7 +9,7 @@ pub struct Subtask {
     pub(super) points: i32,
     pub(super) tests: Vec<Test>,
     pub(super) dependencies: Vec<usize>,
-    pub(super) checker: Option<Box<dyn Fn(Input) -> bool>>,
+    pub(super) checker: Option<Box<dyn Fn(Input) -> Result<()>>>,
 }
 
 impl Subtask {
@@ -33,7 +34,11 @@ impl Subtask {
         }
     }
 
-    pub fn add_test_str(&mut self, input: String) {
+    pub fn add_test_str<S>(&mut self, input: S)
+    where
+        S: Into<String>,
+    {
+        let input: String = input.into();
         let func = move || input.clone();
         let test_generator = Rc::new(TestGenerator::new(func));
         self.tests.push(Test::new(test_generator));
@@ -47,12 +52,12 @@ impl Subtask {
 
     pub fn set_checker<F>(&mut self, function: F)
     where
-        F: Fn(Input) -> bool + 'static,
+        F: Fn(Input) -> Result<()> + 'static,
     {
         self.checker = Some(Box::new(function));
     }
 
-    pub(super) fn write_tests(&self, curr_test_id: &mut i32, subtasks: &Vec<Subtask>, tests_path: &PathBuf, subtask_visited: &mut Vec<bool>, checker: Option<&dyn Fn(Input) -> bool>) {
+    pub(super) fn write_tests(&self, curr_test_id: &mut i32, subtasks: &Vec<Subtask>, tests_path: &PathBuf, subtask_visited: &mut Vec<bool>, checker: Option<&dyn Fn(Input) -> Result<()>>) {
         if subtask_visited[self.number] {
             return;
         }
@@ -70,8 +75,8 @@ impl Subtask {
 
             if let Some(checker) = checker {
                 let input = Input::new(test.get_input().to_owned());
-                if !checker(input) {
-                    panic!("Checker failed for subtask {}", self.number);
+                if let Err(error) = checker(input) {
+                    panic!("Checker failed for subtask {} with message: {}", self.number, error);
                 }
             }
         }
