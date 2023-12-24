@@ -166,12 +166,16 @@ impl Task {
     fn generate_test_solutions(&self, num_tests: i32) {
         println!("Generating test solutions...");
         // invoke solution on each test
+        let mut max_elapsed_time: f32 = 0.0;
+
         for test_id in 0..num_tests {
             print_progress_bar((test_id as f32) / (num_tests as f32));
 
             let input_file_path = self.tests_path.join(format!("input.{:0>3}", test_id));
             let output_file_path = self.tests_path.join(format!("output.{:0>3}", test_id));
 
+            // also time the solution
+            let start_time = std::time::Instant::now();
             let mut solution_process = std::process::Command::new(&self.solution_exe_path)
                 .stdin(std::fs::File::open(&input_file_path).unwrap())
                 .stdout(std::fs::File::create(&output_file_path).unwrap())
@@ -179,11 +183,16 @@ impl Task {
                 .expect("Failed to run solution");
 
             let solution_status = solution_process.wait().expect("Failed to wait for solution");
+            let elapsed_time = start_time.elapsed().as_secs_f32();
+            max_elapsed_time = max_elapsed_time.max(elapsed_time);
 
             if !solution_status.success() {
                 panic!("Solution failed on test {}", test_id);
             }
         }
         clear_progress_bar();
+        let tests_size = fs_extra::dir::get_size(&self.tests_path).unwrap() as f32 / 1_000_000.0;
+
+        println!("\x1b[32;1mMax solution time: {:.2}s, tests size: {:.2}MB\x1b[0m", max_elapsed_time, tests_size);
     }
 }
