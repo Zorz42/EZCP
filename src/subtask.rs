@@ -1,7 +1,6 @@
 use crate::test::{Test, TestGenerator};
 use crate::Input;
-use anyhow::{anyhow, bail, Result};
-use std::path::PathBuf;
+use anyhow::Result;
 use std::rc::Rc;
 
 pub struct Subtask {
@@ -45,45 +44,10 @@ impl Subtask {
         self.tests.push(Test::new(test_generator));
     }
 
-    pub(super) fn generate_tests(&mut self) {
-        for test in &mut self.tests {
-            test.generate_input();
-        }
-    }
-
     pub fn set_checker<F>(&mut self, function: F)
     where
         F: Fn(Input) -> Result<()> + 'static,
     {
         self.checker = Some(Box::new(function));
-    }
-
-    pub(super) fn write_tests(&self, curr_test_id: &mut i32, subtasks: &Vec<Self>, tests_path: &PathBuf, subtask_visited: &mut Vec<bool>, checker: Option<&dyn Fn(Input) -> Result<()>>) -> Result<()> {
-        if *subtask_visited.get(self.number).ok_or_else(|| anyhow!("Subtask number out of bounds"))? {
-            return Ok(());
-        }
-        *subtask_visited.get_mut(self.number).ok_or_else(|| anyhow!("Subtask number out of bounds"))? = true;
-
-        for test in &self.tests {
-            for dependency in &self.dependencies {
-                subtasks
-                    .get(*dependency)
-                    .ok_or_else(|| anyhow!("Dependency number out of bounds"))?
-                    .write_tests(curr_test_id, subtasks, tests_path, subtask_visited, checker)?;
-            }
-
-            let test_id = *curr_test_id;
-            *curr_test_id += 1;
-            let input_file_path = tests_path.join(format!("input.{test_id:0>3}"));
-            std::fs::write(input_file_path, test.get_input())?;
-
-            if let Some(checker) = checker {
-                let input = Input::new(test.get_input());
-                if let Err(error) = checker(input) {
-                    bail!("Checker failed for subtask {} with message: {}", self.number, error);
-                }
-            }
-        }
-        Ok(())
     }
 }
