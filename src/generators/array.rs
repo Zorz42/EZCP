@@ -1,17 +1,19 @@
 use rand::prelude::ThreadRng;
 use rand::Rng;
+use std::fmt::Write;
 
+#[must_use]
 pub fn array_to_string(array: &Vec<i32>, include_count: bool) -> String {
     let mut result = String::new();
     if include_count {
-        result.push_str(&format!("{}\n", array.len()));
+        writeln!(result, "{}", array.len()).ok();
     }
 
-    for i in 0..array.len() {
-        result.push_str(&format!("{} ", array[i]));
+    for i in array {
+        write!(result, "{i} ").ok();
     }
 
-    result.push_str("\n");
+    result.push('\n');
     result
 }
 
