@@ -300,6 +300,11 @@ impl Task {
 
         println!("Building solution...");
 
+        // check if g++ is installed
+        if std::process::Command::new("g++").arg("--version").output().is_err() {
+            bail!("g++ is not installed");
+        }
+
         // invoke g++ to build solution
         std::process::Command::new("g++")
             .arg("-std=c++17")
@@ -309,6 +314,17 @@ impl Task {
             .arg(&self.solution_path)
             .output()?;
 
+        Ok(())
+    }
+
+    pub fn generate_task_pdf(&self) {
+        let res = self.generate_task_pdf_inner();
+        if let Err(err) = res {
+            println!("\x1b[31;1mError: {err}\x1b[0m");
+        }
+    }
+
+    pub fn generate_task_pdf_inner(&self) -> Result<()> {
         Ok(())
     }
 }
