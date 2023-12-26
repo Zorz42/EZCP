@@ -17,7 +17,6 @@ impl TestGenerator {
 }
 
 /// It takes a generator instead of a test
-#[derive(Clone)]
 pub struct Test {
     input_generator: Rc<TestGenerator>,
     input_file: Option<PathBuf>,

@@ -1,14 +1,14 @@
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
-mod generic_tests {
+pub mod generic_tests {
     use crate::{Subtask, Task};
     use std::path::PathBuf;
     use std::sync::Once;
 
-    const TESTS_DIR: &str = "test_tasks";
+    pub const TESTS_DIR: &str = "test_tasks";
     static INIT: Once = Once::new();
 
-    pub fn initialize() {
+    pub fn initialize_test() {
         INIT.call_once(|| {
             std::fs::remove_dir_all(TESTS_DIR).unwrap();
             std::fs::create_dir_all(TESTS_DIR).unwrap();
@@ -17,7 +17,7 @@ mod generic_tests {
 
     #[test]
     fn create_empty() {
-        initialize();
+        initialize_test();
 
         let task_name = "empty";
         let task_path = PathBuf::from(TESTS_DIR).join(task_name);
@@ -35,7 +35,7 @@ mod generic_tests {
 
     #[test]
     fn create_with_subtasks() {
-        initialize();
+        initialize_test();
 
         let task_name = "subtasks";
         let task_path = PathBuf::from(TESTS_DIR).join(task_name);
@@ -72,7 +72,7 @@ mod generic_tests {
 
     #[test]
     fn create_with_tests() {
-        initialize();
+        initialize_test();
 
         let task_name = "tests";
         let task_path = PathBuf::from(TESTS_DIR).join(task_name);
@@ -117,7 +117,7 @@ mod generic_tests {
 
     #[test]
     fn create_with_dependencies() {
-        initialize();
+        initialize_test();
 
         let task_name = "dependencies";
         let task_path = PathBuf::from(TESTS_DIR).join(task_name);
@@ -166,7 +166,7 @@ mod generic_tests {
 
     #[test]
     fn test_create_multiple_times() {
-        initialize();
+        initialize_test();
 
         let task_name = "multiple_times";
         let task_path = PathBuf::from(TESTS_DIR).join(task_name);
@@ -217,7 +217,7 @@ mod generic_tests {
 
     #[test]
     fn test_fails_without_solution() {
-        initialize();
+        initialize_test();
 
         let task_name = "no_solution";
         let task_path = PathBuf::from(TESTS_DIR).join(task_name);
@@ -231,7 +231,7 @@ mod generic_tests {
 
     #[test]
     fn test_complicated_dependencies() {
-        initialize();
+        initialize_test();
 
         let task_name = "complicated_dependencies";
         let task_path = PathBuf::from(TESTS_DIR).join(task_name);

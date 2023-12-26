@@ -106,11 +106,6 @@ impl Task {
         }
         println!();
 
-        // create task directory if it doesn't exist
-        if !self.path.exists() {
-            std::fs::create_dir_all(&self.path)?;
-        }
-
         // create build directory if it doesn't exist
         if !self.build_folder_path.exists() {
             std::fs::create_dir_all(&self.build_folder_path)?;

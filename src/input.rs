@@ -29,15 +29,8 @@ impl Input {
         self.iter.next().ok_or_else(|| anyhow!("Expected string"))
     }
 
-    pub fn get_char(&mut self) -> Result<char> {
-        self.iter
-            .next()
-            .ok_or_else(|| anyhow!("Expected char"))
-            .and_then(|s| s.chars().next().ok_or_else(|| anyhow!("Expected char")))
-    }
-
     pub fn expect_end(&mut self) -> Result<()> {
-        self.iter.next().is_none().then_some(()).ok_or_else(|| anyhow!("Expected end of input"))
+        self.iter.clone().peekable().peek().is_none().then_some(()).ok_or_else(|| anyhow!("Expected end of input"))
     }
 
     pub fn get_ints(&mut self, n: i32) -> Result<Vec<i32>> {
