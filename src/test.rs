@@ -35,9 +35,14 @@ impl Test {
         } else {
             // generate input and write it to file_path
             let input = self.input_generator.generate();
+            self.input_file = Some(file_path.to_path_buf());
             std::fs::write(file_path, input)?;
         }
 
         Ok(())
+    }
+
+    pub fn reset_input_file(&mut self) {
+        self.input_file = None;
     }
 }

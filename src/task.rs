@@ -88,7 +88,7 @@ impl Task {
         let res = self.create_tests_inner();
         let is_ok = res.is_ok();
         if let Err(err) = res {
-            println!("\x1b[31;1mError: {err}\x1b[0m");
+            println!("\n\x1b[31;1mError: {err}\x1b[0m");
         }
         println!("\x1b[32;1mElapsed time: {:.2}s\x1b[0m\n", start_time.elapsed().as_secs_f32());
         is_ok
@@ -124,6 +124,13 @@ impl Task {
         // assign numbers to subtasks
         for (i, subtask) in self.subtasks.iter_mut().enumerate() {
             subtask.number = i;
+        }
+
+        // reset subtask input files
+        for subtask in &mut self.subtasks {
+            for test in &mut subtask.tests {
+                test.reset_input_file();
+            }
         }
 
         self.build_solution()?;

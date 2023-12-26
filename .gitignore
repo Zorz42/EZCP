@@ -8,6 +8,7 @@ target
 
 /target
 /test_tasks
+**.profraw
 
 # Added by cargo
 #
