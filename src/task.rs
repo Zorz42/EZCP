@@ -16,12 +16,12 @@ pub struct Task {
 
 fn print_progress_bar(progress: f32) {
     let size = termsize::get();
+    print!("\r {:.2}% [", progress * 100.0);
     if let Some(size) = size {
         let bar_length = (size.cols as usize - 10).max(0);
         let num_filled = (progress * bar_length as f32) as usize;
         let num_empty = (bar_length - num_filled - 1).max(0);
 
-        print!("\r {:.2}% [", progress * 100.0);
         for _ in 0..num_filled {
             print!("=");
         }
@@ -32,21 +32,21 @@ fn print_progress_bar(progress: f32) {
             print!(" ");
         }
         print!("]");
-        std::io::stdout().flush().ok();
     }
+
+    std::io::stdout().flush().ok();
 }
 
 fn clear_progress_bar() {
     let size = termsize::get();
-    if let Some(size) = size {
-        let bar_length = size.cols as usize;
-        print!("\r");
-        for _ in 0..bar_length {
-            print!(" ");
-        }
-        print!("\r");
-        std::io::stdout().flush().ok();
+    let bar_length = size.map_or(10, |size| size.cols as usize);
+
+    print!("\r");
+    for _ in 0..bar_length {
+        print!(" ");
     }
+    print!("\r");
+    std::io::stdout().flush().ok();
 }
 
 impl Task {
