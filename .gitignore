@@ -7,7 +7,7 @@ target
 # Added by cargo
 
 /target
-
+/test_tasks
 
 # Added by cargo
 #

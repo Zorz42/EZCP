@@ -83,16 +83,18 @@ impl Task {
         self.subtasks[subtask].dependencies.push(dependency);
     }
 
-    pub fn create_tests(&mut self) {
+    pub fn create_tests(&mut self) -> bool {
         let start_time = std::time::Instant::now();
         let res = self.create_tests_inner();
+        let is_ok = res.is_ok();
         if let Err(err) = res {
             println!("\x1b[31;1mError: {err}\x1b[0m");
         }
         println!("\x1b[32;1mElapsed time: {:.2}s\x1b[0m\n", start_time.elapsed().as_secs_f32());
+        is_ok
     }
 
-    pub fn create_tests_inner(&mut self) -> Result<()> {
+    fn create_tests_inner(&mut self) -> Result<()> {
         let text = format!("Creating tests for task \"{}\"", self.name);
         // print = before and after text
         for _ in 0..text.len() {

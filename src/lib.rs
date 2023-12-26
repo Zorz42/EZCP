@@ -154,6 +154,7 @@ mod input;
 mod subtask;
 mod task;
 mod test;
+mod tests;
 
 pub use generators::{array_generator, array_generator_custom, array_to_string};
 pub use input::Input;
