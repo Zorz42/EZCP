@@ -11,7 +11,6 @@ Planned features:
 - premade array generator
 - more common and useful premade generators
 - automatically generate some parts of the statement (time/memory limit, subtasks, samples...) and save it to latex
-- test if a solution passes exactly the subtasks it was meant to pass
 - add partial solutions and specify which subtasks it should pass
 
 Suggestions and bug reports: jakob@zorz.si
