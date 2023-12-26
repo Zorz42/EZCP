@@ -10,7 +10,9 @@ pub mod generic_tests {
 
     pub fn initialize_test() {
         INIT.call_once(|| {
-            std::fs::remove_dir_all(TESTS_DIR).unwrap();
+            if PathBuf::from(TESTS_DIR).exists() {
+                std::fs::remove_dir_all(TESTS_DIR).unwrap();
+            }
             std::fs::create_dir_all(TESTS_DIR).unwrap();
         });
     }
