@@ -1,9 +1,9 @@
 # EZCP
-A rust framework to easily create tasks for competitive programming
+A rust framework to easily create tasks for competitive programming.
 
-Planned features:
+Features:
 - Generate tests and save them into files.
-- Generate solutions automatically.
+- Generate solutions.
 - Optionally have a testcase checker.
 - Make a solution checker if there are multiple valid solutions.
 - Have subtask dependencies.
