@@ -1,3 +1,4 @@
+use crate::solution_runner::{build_solution, run_solution};
 use crate::subtask::Subtask;
 use crate::Input;
 use anyhow::{anyhow, bail, Result};
@@ -131,7 +132,11 @@ impl Task {
             }
         }
 
-        self.build_solution()?;
+        println!("Building solution...");
+        let has_built = build_solution(&self.solution_path, &self.solution_exe_path)?;
+        if !has_built {
+            println!("Skipping solution compilation as it is up to date.");
+        }
 
         self.generate_tests()?;
 
@@ -212,33 +217,15 @@ impl Task {
         for test_id in 0..num_tests {
             print_progress_bar((loading_progress as f32) / (loading_progress_max as f32));
 
-            // also time the solution
-            let start_time = std::time::Instant::now();
-
-            // spawn the solution process
-            let mut solution_process = std::process::Command::new(&self.solution_exe_path)
-                .stdin(std::fs::File::open(&self.get_input_file_path(test_id))?)
-                .stdout(std::fs::File::create(&self.get_output_file_path(test_id))?)
-                .spawn()?;
-
-            while solution_process.try_wait()?.is_none() {
-                std::thread::sleep(std::time::Duration::from_millis(1));
-                if start_time.elapsed().as_secs_f32() > self.time_limit {
-                    solution_process.kill()?;
-                    clear_progress_bar();
-                    bail!("Solution timed out on test {}", test_id);
-                }
-            }
-
-            let solution_status = solution_process.wait()?;
-            let elapsed_time = start_time.elapsed().as_secs_f32();
-            max_elapsed_time = max_elapsed_time.max(elapsed_time);
             loading_progress += 1;
-
-            if !solution_status.success() {
-                clear_progress_bar();
-                bail!("Solution failed on test {}", test_id);
-            }
+            let elapsed_time = run_solution(
+                &self.solution_exe_path,
+                &self.get_input_file_path(test_id),
+                &self.get_output_file_path(test_id),
+                self.time_limit,
+                test_id,
+            )?;
+            max_elapsed_time = max_elapsed_time.max(elapsed_time);
         }
         clear_progress_bar();
         let tests_size = fs_extra::dir::get_size(&self.tests_path)? as f32 / 1_000_000.0;
@@ -303,38 +290,7 @@ impl Task {
         Ok(result)
     }
 
-    fn build_solution(&self) -> Result<()> {
-        // if solution executable exists, check if it's up to date
-        if self.solution_exe_path.exists() {
-            let solution_last_modified = std::fs::metadata(&self.solution_path)?.modified()?;
-            let solution_exe_last_modified = std::fs::metadata(&self.solution_exe_path)?.modified()?;
-
-            if solution_exe_last_modified > solution_last_modified {
-                println!("Skipping solution compilation as it is up to date");
-                return Ok(());
-            }
-        }
-
-        println!("Building solution...");
-
-        // check if g++ is installed
-        if std::process::Command::new("g++").arg("--version").output().is_err() {
-            bail!("g++ is not installed");
-        }
-
-        // invoke g++ to build solution
-        std::process::Command::new("g++")
-            .arg("-std=c++17")
-            .arg("-O2")
-            .arg("-o")
-            .arg(&self.solution_exe_path)
-            .arg(&self.solution_path)
-            .output()?;
-
-        Ok(())
-    }
-
-    pub fn generate_task_pdf(&self) {
+    /*pub fn generate_task_pdf(&self) {
         let res = self.generate_task_pdf_inner();
         if let Err(err) = res {
             println!("\x1b[31;1mError: {err}\x1b[0m");
@@ -343,5 +299,5 @@ impl Task {
 
     pub fn generate_task_pdf_inner(&self) -> Result<()> {
         Ok(())
-    }
+    }*/
 }
