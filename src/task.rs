@@ -1,3 +1,4 @@
+use crate::logger::Logger;
 use crate::solution_runner::{are_files_equal, build_solution, run_solution};
 use crate::subtask::Subtask;
 use crate::Input;
@@ -18,38 +19,38 @@ pub struct Task {
     partial_solutions: Vec<(PathBuf, HashSet<usize>)>,
 }
 
-fn print_progress_bar(progress: f32) {
+fn print_progress_bar(progress: f32, logger: &Logger) {
     let size = termsize::get();
-    print!("\r {:.2}% [", progress * 100.0);
+    logger.log(format!("\r {:.2}% [", progress * 100.0));
     if let Some(size) = size {
         let bar_length = (size.cols as usize - 10).max(0);
         let num_filled = (progress * bar_length as f32) as usize;
         let num_empty = (bar_length - num_filled - 1).max(0);
 
         for _ in 0..num_filled {
-            print!("=");
+            logger.log("=");
         }
         if num_filled > 0 {
-            print!(">");
+            logger.log(">");
         }
         for _ in 0..num_empty {
-            print!(" ");
+            logger.log(" ");
         }
-        print!("]");
+        logger.log("]");
     }
 
     std::io::stdout().flush().ok();
 }
 
-fn clear_progress_bar() {
+fn clear_progress_bar(logger: &Logger) {
     let size = termsize::get();
     let bar_length = size.map_or(10, |size| size.cols as usize);
 
-    print!("\r");
+    logger.log("\r");
     for _ in 0..bar_length {
-        print!(" ");
+        logger.log(" ");
     }
-    print!("\r");
+    logger.log("\r");
     std::io::stdout().flush().ok();
 }
 
@@ -89,36 +90,46 @@ impl Task {
         self.subtasks[subtask].dependencies.push(dependency);
     }
 
-    pub fn create_tests(&mut self) -> bool {
-        let start_time = std::time::Instant::now();
-        let res = self.create_tests_inner();
-        let is_ok = res.is_ok();
-        if let Err(err) = res {
-            println!("\n\x1b[31;1mError: {err}\x1b[0m");
-        } else {
-            println!("\n\x1b[32;1mSuccess!\x1b[0m");
-        }
-        println!("\x1b[36;1mElapsed time: {:.2}s\n\x1b[0m", start_time.elapsed().as_secs_f32());
-        is_ok
-    }
-
     pub fn add_partial_solution(&mut self, solution_path: &str, passes_subtasks: &[usize]) {
         let set = passes_subtasks.iter().copied().collect::<HashSet<_>>();
         self.partial_solutions.push((self.path.join(solution_path), set));
     }
 
-    fn create_tests_inner(&mut self) -> Result<()> {
-        println!();
+    pub fn create_tests(&mut self) -> bool {
+        self.create_tests_inner1(true)
+    }
+
+    pub fn create_tests_no_print(&mut self) -> bool {
+        self.create_tests_inner1(false)
+    }
+
+    fn create_tests_inner1(&mut self, print_output: bool) -> bool {
+        let logger = Logger::new(print_output);
+
+        let start_time = std::time::Instant::now();
+        let res = self.create_tests_inner2(&logger);
+        let is_ok = res.is_ok();
+        if let Err(err) = res {
+            logger.logln(format!("\n\x1b[31;1mError: {err}\x1b[0m"));
+        } else {
+            logger.logln("\n\x1b[32;1mSuccess!\x1b[0m");
+        }
+        logger.logln(format!("\x1b[36;1mElapsed time: {:.2}s\n\x1b[0m", start_time.elapsed().as_secs_f32()));
+        is_ok
+    }
+
+    fn create_tests_inner2(&mut self, logger: &Logger) -> Result<()> {
+        logger.logln("");
         let text = format!("Creating tests for task \"{}\"", self.name);
         // print = before and after text
         for _ in 0..text.len() {
-            print!("=");
+            logger.log("=");
         }
-        println!("\n\x1b[1m{text}\x1b[0m");
+        logger.logln(format!("\n\x1b[1m{text}\x1b[0m"));
         for _ in 0..text.len() {
-            print!("=");
+            logger.log("=");
         }
-        println!();
+        logger.logln("");
 
         // create build directory if it doesn't exist
         if !self.build_folder_path.exists() {
@@ -142,27 +153,27 @@ impl Task {
             }
         }
 
-        println!("Building solution...");
+        logger.logln("Building solution...");
         let has_built = build_solution(&self.solution_path, &self.solution_exe_path)?;
         if !has_built {
-            println!("Skipping solution compilation as it is up to date.");
+            logger.logln("Skipping solution compilation as it is up to date.");
         }
 
         for (i, partial_solution) in self.partial_solutions.iter().enumerate() {
-            println!("Building partial solution...");
+            logger.logln("Building partial solution...");
             let has_built = build_solution(&partial_solution.0, &self.build_folder_path.join(format!("partial_solution_{i}")))?;
             if !has_built {
-                println!("Skipping partial solution {i} compilation as it is up to date.");
+                logger.logln(format!("Skipping partial solution {i} compilation as it is up to date."));
             }
         }
 
-        self.generate_tests()?;
+        self.generate_tests(logger)?;
 
         Ok(())
     }
 
     #[allow(clippy::too_many_lines)]
-    fn generate_tests(&mut self) -> Result<()> {
+    fn generate_tests(&mut self, logger: &Logger) -> Result<()> {
         // create tests directory if it doesn't exist and clear it
         std::fs::create_dir_all(&self.tests_path)?;
         for entry in std::fs::read_dir(&self.tests_path)? {
@@ -190,22 +201,22 @@ impl Task {
             result
         };
 
-        println!("Generating tests...");
+        logger.logln("Generating tests...");
 
         // Generate and write tests for each subtask
         let mut curr_test_id = 0;
-        print_progress_bar(0.0);
+        print_progress_bar(0.0, logger);
         for subtask_number in 0..self.subtasks.len() {
             let mut subtask_visited = vec![false; self.subtasks.len()];
-            self.write_tests_for_subtask(subtask_number, &mut curr_test_id, &mut subtask_visited, loading_progress_max)?;
+            self.write_tests_for_subtask(subtask_number, &mut curr_test_id, &mut subtask_visited, loading_progress_max, logger)?;
         }
 
         // loading progress at this point is exactly num_tests
         let mut loading_progress = num_tests;
 
-        clear_progress_bar();
-        println!("Checking tests...");
-        print_progress_bar((loading_progress as f32) / (loading_progress_max as f32));
+        clear_progress_bar(logger);
+        logger.logln("Checking tests...");
+        print_progress_bar((loading_progress as f32) / (loading_progress_max as f32), logger);
 
         // check all tests
         curr_test_id = 0;
@@ -217,24 +228,24 @@ impl Task {
                     checker(Input::new(&input_str))?;
                     curr_test_id += 1;
                     loading_progress += 1;
-                    print_progress_bar((loading_progress as f32) / (loading_progress_max as f32));
+                    print_progress_bar((loading_progress as f32) / (loading_progress_max as f32), logger);
                 }
             } else {
-                clear_progress_bar();
-                println!("\x1b[33mWarning: no checker for subtask {}\x1b[0m", subtask.number);
-                print_progress_bar((loading_progress as f32) / (loading_progress_max as f32));
+                clear_progress_bar(logger);
+                logger.logln(format!("\x1b[33mWarning: no checker for subtask {}\x1b[0m", subtask.number));
+                print_progress_bar((loading_progress as f32) / (loading_progress_max as f32), logger);
                 curr_test_id += self.get_total_tests(subtask)?;
             }
         }
 
-        clear_progress_bar();
-        println!("Generating test solutions...");
-        print_progress_bar((loading_progress as f32) / (loading_progress_max as f32));
+        clear_progress_bar(logger);
+        logger.logln("Generating test solutions...");
+        print_progress_bar((loading_progress as f32) / (loading_progress_max as f32), logger);
 
         // invoke solution on each test
         let mut max_elapsed_time: f32 = 0.0;
         for test_id in 0..num_tests {
-            print_progress_bar((loading_progress as f32) / (loading_progress_max as f32));
+            print_progress_bar((loading_progress as f32) / (loading_progress_max as f32), logger);
 
             loading_progress += 1;
             let elapsed_time = run_solution(
@@ -246,11 +257,11 @@ impl Task {
             )?;
             max_elapsed_time = max_elapsed_time.max(elapsed_time);
         }
-        clear_progress_bar();
+        clear_progress_bar(logger);
         let tests_size = fs_extra::dir::get_size(&self.tests_path)? as f32 / 1_000_000.0;
 
         for (partial_id, partial_solution) in self.partial_solutions.iter().enumerate() {
-            println!("Checking partial solution {partial_id}...");
+            logger.logln(format!("Checking partial solution {partial_id}..."));
 
             let mut passed_subtasks = HashSet::new();
 
@@ -298,12 +309,12 @@ impl Task {
             }
         }
 
-        println!("\x1b[36;1mMax solution time: {max_elapsed_time:.2}s, tests size: {tests_size:.2}MB\x1b[0m");
+        logger.logln(format!("\x1b[36;1mMax solution time: {max_elapsed_time:.2}s, tests size: {tests_size:.2}MB\x1b[0m"));
 
         Ok(())
     }
 
-    fn write_tests_for_subtask(&mut self, subtask_number: usize, curr_test_id: &mut i32, subtask_visited: &mut Vec<bool>, loading_progress_max: i32) -> Result<()> {
+    fn write_tests_for_subtask(&mut self, subtask_number: usize, curr_test_id: &mut i32, subtask_visited: &mut Vec<bool>, loading_progress_max: i32, logger: &Logger) -> Result<()> {
         // check if subtask has already been visited
         if subtask_visited[subtask_number] {
             return Ok(());
@@ -313,7 +324,7 @@ impl Task {
         // first, write tests for dependencies
         let dependencies = self.subtasks[subtask_number].dependencies.clone();
         for dependency in dependencies {
-            self.write_tests_for_subtask(dependency, curr_test_id, subtask_visited, loading_progress_max)?;
+            self.write_tests_for_subtask(dependency, curr_test_id, subtask_visited, loading_progress_max, logger)?;
         }
 
         // generate input files paths for all tests because of rust borrow checker
@@ -331,7 +342,7 @@ impl Task {
         for (test, input_file) in &mut self.subtasks[subtask_number].tests.iter_mut().zip(tests_input_files) {
             progress += 1;
             test.generate_input(&input_file)?;
-            print_progress_bar((progress as f32) / (loading_progress_max as f32));
+            print_progress_bar((progress as f32) / (loading_progress_max as f32), logger);
         }
         Ok(())
     }

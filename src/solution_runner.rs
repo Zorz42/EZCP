@@ -3,7 +3,6 @@ use std::path::PathBuf;
 
 pub fn build_solution(source_file: &PathBuf, executable_file: &PathBuf) -> Result<bool> {
     // if solution executable exists, check if it's up to date
-    println!("{source_file:?} {executable_file:?}");
     if executable_file.exists() {
         let solution_last_modified = std::fs::metadata(source_file)?.modified()?;
         let solution_exe_last_modified = std::fs::metadata(executable_file)?.modified()?;

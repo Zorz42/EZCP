@@ -151,6 +151,7 @@
 
 mod generators;
 mod input;
+mod logger;
 mod solution_runner;
 mod subtask;
 mod task;
