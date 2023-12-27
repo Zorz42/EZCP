@@ -6,7 +6,6 @@ use std::path::{Path, PathBuf};
 
 pub struct Task {
     name: String,
-    path: PathBuf,
     pub tests_path: PathBuf,
     pub solution_path: PathBuf,
     solution_exe_path: PathBuf,
@@ -55,7 +54,6 @@ impl Task {
         let build_folder_path = path.join("build");
         Self {
             name: name.to_owned(),
-            path: path.to_path_buf(),
             tests_path: path.join("tests"),
             solution_path: path.join("solution.cpp"),
             solution_exe_path: build_folder_path.join("solution"),
