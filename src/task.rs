@@ -8,6 +8,7 @@ pub struct Task {
     name: String,
     pub tests_path: PathBuf,
     pub solution_path: PathBuf,
+    pub time_limit: f32,
     solution_exe_path: PathBuf,
     build_folder_path: PathBuf,
     subtasks: Vec<Subtask>,
@@ -58,6 +59,7 @@ impl Task {
             solution_path: path.join("solution.cpp"),
             solution_exe_path: build_folder_path.join("solution"),
             build_folder_path,
+            time_limit: 1.0,
             subtasks: Vec::new(),
         }
     }
@@ -87,12 +89,15 @@ impl Task {
         let is_ok = res.is_ok();
         if let Err(err) = res {
             println!("\n\x1b[31;1mError: {err}\x1b[0m");
+        } else {
+            println!("\n\x1b[32;1mSuccess!\x1b[0m");
         }
-        println!("\x1b[32;1mElapsed time: {:.2}s\x1b[0m\n", start_time.elapsed().as_secs_f32());
+        println!("\x1b[36;1mElapsed time: {:.2}s\n\x1b[0m", start_time.elapsed().as_secs_f32());
         is_ok
     }
 
     fn create_tests_inner(&mut self) -> Result<()> {
+        println!();
         let text = format!("Creating tests for task \"{}\"", self.name);
         // print = before and after text
         for _ in 0..text.len() {
@@ -216,19 +221,29 @@ impl Task {
                 .stdout(std::fs::File::create(&self.get_output_file_path(test_id))?)
                 .spawn()?;
 
+            while solution_process.try_wait()?.is_none() {
+                std::thread::sleep(std::time::Duration::from_millis(1));
+                if start_time.elapsed().as_secs_f32() > self.time_limit {
+                    solution_process.kill()?;
+                    clear_progress_bar();
+                    bail!("Solution timed out on test {}", test_id);
+                }
+            }
+
             let solution_status = solution_process.wait()?;
             let elapsed_time = start_time.elapsed().as_secs_f32();
             max_elapsed_time = max_elapsed_time.max(elapsed_time);
             loading_progress += 1;
 
             if !solution_status.success() {
+                clear_progress_bar();
                 bail!("Solution failed on test {}", test_id);
             }
         }
         clear_progress_bar();
         let tests_size = fs_extra::dir::get_size(&self.tests_path)? as f32 / 1_000_000.0;
 
-        println!("\x1b[32;1mMax solution time: {max_elapsed_time:.2}s, tests size: {tests_size:.2}MB\x1b[0m");
+        println!("\x1b[36;1mMax solution time: {max_elapsed_time:.2}s, tests size: {tests_size:.2}MB\x1b[0m");
 
         Ok(())
     }

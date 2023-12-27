@@ -181,4 +181,45 @@ pub mod generic_tests {
 
         assert!(!task.create_tests());
     }
+
+    #[test]
+    fn test_times_out() {
+        initialize_test();
+
+        let task_name = "times_out";
+        let task_path = PathBuf::from(TESTS_DIR).join(task_name);
+        let mut task = Task::new(task_name, &task_path);
+
+        // create directory
+        std::fs::create_dir_all(task_path.clone()).unwrap();
+
+        // create solution file
+        let solution_contents = r#"
+        #include<iostream>
+        using namespace std;
+
+        int fib(int a){
+                if(a<=2)
+                        return 1;
+                return fib(a-1)+fib(a-2);
+        }
+
+        int main() {
+            cout<<fib(1000)<<"\n";
+            return 0;
+        }
+
+        
+        "#;
+
+        std::fs::write(task_path.join("solution.cpp"), solution_contents).unwrap();
+
+        let mut subtask1 = Subtask::new(20);
+        subtask1.add_test_str("1\n");
+
+        // create subtasks
+        task.add_subtask(subtask1);
+
+        assert!(!task.create_tests());
+    }
 }
