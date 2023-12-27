@@ -51,7 +51,9 @@ mod dependencies_tests {
         task.add_subtask_dependency(subtask3, subtask1);
         task.add_subtask_dependency(subtask3, subtask2);
 
-        assert!(task.create_tests());
+        for _ in 0..10 {
+            assert!(task.create_tests());
+        }
     }
 
     #[test]
@@ -118,6 +120,8 @@ mod dependencies_tests {
         task.add_subtask_dependency(subtask5, subtask3);
         task.add_subtask_dependency(subtask5, subtask4);
 
-        assert!(task.create_tests());
+        for _ in 0..10 {
+            assert!(task.create_tests());
+        }
     }
 }

@@ -67,7 +67,9 @@ mod generator_tests {
 
         task.add_subtask(subtask1);
 
-        assert!(task.create_tests());
+        for _ in 0..10 {
+            assert!(task.create_tests());
+        }
     }
 
     #[test]
@@ -131,7 +133,9 @@ mod generator_tests {
 
         task.add_subtask(subtask1);
 
-        assert!(!task.create_tests());
+        for _ in 0..10 {
+            assert!(!task.create_tests());
+        }
     }
 
     #[test]
@@ -183,7 +187,9 @@ mod generator_tests {
 
         task.add_subtask(subtask1);
 
-        assert!(task.create_tests());
+        for _ in 0..10 {
+            assert!(task.create_tests());
+        }
     }
 
     #[test]
@@ -235,7 +241,9 @@ mod generator_tests {
 
         task.add_subtask(subtask1);
 
-        assert!(!task.create_tests());
+        for _ in 0..10 {
+            assert!(!task.create_tests());
+        }
     }
 
     #[test]
@@ -288,7 +296,9 @@ mod generator_tests {
 
         task.add_subtask(subtask1);
 
-        assert!(!task.create_tests());
+        for _ in 0..10 {
+            assert!(!task.create_tests());
+        }
     }
 
     #[test]
@@ -341,7 +351,9 @@ mod generator_tests {
 
         task.add_subtask(subtask1);
 
-        assert!(!task.create_tests());
+        for _ in 0..10 {
+            assert!(!task.create_tests());
+        }
     }
 
     #[test]
@@ -438,7 +450,9 @@ mod generator_tests {
 
         task.add_subtask_dependency(subtask2, subtask1);
 
-        assert!(task.create_tests());
+        for _ in 0..10 {
+            assert!(task.create_tests());
+        }
     }
 
     #[test]
@@ -533,10 +547,14 @@ mod generator_tests {
         let subtask2 = task.add_subtask(subtask2);
         let subtask3 = task.add_subtask(subtask3);
 
-        assert!(task.create_tests());
+        for _ in 0..10 {
+            assert!(task.create_tests());
+        }
 
         task.add_subtask_dependency(subtask3, subtask2);
 
-        assert!(!task.create_tests());
+        for _ in 0..10 {
+            assert!(!task.create_tests());
+        }
     }
 }

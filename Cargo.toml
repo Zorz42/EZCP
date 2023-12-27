@@ -5,7 +5,7 @@ edition = "2021"
 description = "A simple tool to automatically generate test cases for competitive programming problems."
 license-file = "LICENSE"
 repository = "https://github.com/Zorz42/EZCP"
-keywords = ["competitive_programming", "test_data", "framework", "generator"]
+keywords = ["cp", "test_data", "framework", "generator"]
 categories = ["development-tools"]
 readme = "README.md"
 
@@ -17,3 +17,10 @@ rand = "0.8"
 termsize = "0.1"
 fs_extra = "1.3"
 anyhow = "1.0"
+
+[dev-dependencies]
+criterion = { version = "0.5", features = ["html_reports"] }
+
+[[bench]]
+name = "my_benchmark"
+harness = false

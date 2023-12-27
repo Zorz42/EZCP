@@ -32,7 +32,9 @@ pub mod generic_tests {
         let solution_contents = "int main() { return 0; }";
         std::fs::write(task_path.join("solution.cpp"), solution_contents).unwrap();
 
-        assert!(task.create_tests());
+        for _ in 0..10 {
+            assert!(task.create_tests());
+        }
     }
 
     #[test]
@@ -69,7 +71,9 @@ pub mod generic_tests {
         task.add_subtask(subtask2);
         task.add_subtask(subtask3);
 
-        assert!(task.create_tests());
+        for _ in 0..10 {
+            assert!(task.create_tests());
+        }
     }
 
     #[test]
@@ -114,7 +118,9 @@ pub mod generic_tests {
         task.add_subtask(subtask2);
         task.add_subtask(subtask3);
 
-        assert!(task.create_tests());
+        for _ in 0..10 {
+            assert!(task.create_tests());
+        }
     }
 
     #[test]
@@ -163,7 +169,7 @@ pub mod generic_tests {
         task.add_subtask_dependency(subtask3, subtask1);
         task.add_subtask_dependency(subtask3, subtask2);
 
-        for _ in 0..10 {
+        for _ in 0..100 {
             assert!(task.create_tests());
         }
     }
@@ -179,7 +185,9 @@ pub mod generic_tests {
         // create directory
         std::fs::create_dir_all(task_path).unwrap();
 
-        assert!(!task.create_tests());
+        for _ in 0..10 {
+            assert!(!task.create_tests());
+        }
     }
 
     #[test]
@@ -220,7 +228,9 @@ pub mod generic_tests {
         // create subtasks
         task.add_subtask(subtask1);
 
-        assert!(!task.create_tests());
+        for _ in 0..3 {
+            assert!(!task.create_tests());
+        }
     }
 
     #[test]
@@ -250,6 +260,8 @@ pub mod generic_tests {
         // create subtasks
         task.add_subtask(subtask1);
 
-        assert!(!task.create_tests());
+        for _ in 0..10 {
+            assert!(!task.create_tests());
+        }
     }
 }
