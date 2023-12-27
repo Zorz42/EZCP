@@ -3,6 +3,7 @@ use std::path::PathBuf;
 
 pub fn build_solution(source_file: &PathBuf, executable_file: &PathBuf) -> Result<bool> {
     // if solution executable exists, check if it's up to date
+    println!("{:?} {:?}", source_file, executable_file);
     if executable_file.exists() {
         let solution_last_modified = std::fs::metadata(source_file)?.modified()?;
         let solution_exe_last_modified = std::fs::metadata(executable_file)?.modified()?;
@@ -18,13 +19,17 @@ pub fn build_solution(source_file: &PathBuf, executable_file: &PathBuf) -> Resul
     }
 
     // invoke g++ to build solution
-    std::process::Command::new("g++")
+    let process = std::process::Command::new("g++")
         .arg("-std=c++20")
         .arg("-O2")
         .arg("-o")
         .arg(executable_file)
         .arg(source_file)
         .output()?;
+
+    if !process.status.success() {
+        bail!("Failed to build solution");
+    }
 
     Ok(true)
 }
@@ -34,7 +39,7 @@ pub fn run_solution(executable_file: &PathBuf, input_file: &PathBuf, output_file
     let start_time = std::time::Instant::now();
 
     // spawn the solution process
-    let mut solution_process = std::process::Command::new(&executable_file)
+    let mut solution_process = std::process::Command::new(executable_file)
         .stdin(std::fs::File::open(input_file)?)
         .stdout(std::fs::File::create(output_file)?)
         .spawn()?;
@@ -55,4 +60,15 @@ pub fn run_solution(executable_file: &PathBuf, input_file: &PathBuf, output_file
     }
 
     Ok(elapsed_time)
+}
+
+// ignores whitespace
+pub fn are_files_equal(file1: &PathBuf, file2: &PathBuf) -> Result<bool> {
+    let file1 = std::fs::read_to_string(file1)?;
+    let file2 = std::fs::read_to_string(file2)?;
+
+    let file1 = file1.split_whitespace().collect::<String>();
+    let file2 = file2.split_whitespace().collect::<String>();
+
+    Ok(file1 == file2)
 }

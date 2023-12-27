@@ -1,18 +1,21 @@
-use crate::solution_runner::{build_solution, run_solution};
+use crate::solution_runner::{are_files_equal, build_solution, run_solution};
 use crate::subtask::Subtask;
 use crate::Input;
 use anyhow::{anyhow, bail, Result};
+use std::collections::HashSet;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
 pub struct Task {
     name: String,
+    path: PathBuf,
     pub tests_path: PathBuf,
     pub solution_path: PathBuf,
     pub time_limit: f32,
     solution_exe_path: PathBuf,
     build_folder_path: PathBuf,
     subtasks: Vec<Subtask>,
+    partial_solutions: Vec<(PathBuf, HashSet<usize>)>,
 }
 
 fn print_progress_bar(progress: f32) {
@@ -55,6 +58,7 @@ impl Task {
     pub fn new(name: &str, path: &Path) -> Self {
         let build_folder_path = path.join("build");
         Self {
+            path: path.to_owned(),
             name: name.to_owned(),
             tests_path: path.join("tests"),
             solution_path: path.join("solution.cpp"),
@@ -62,6 +66,7 @@ impl Task {
             build_folder_path,
             time_limit: 1.0,
             subtasks: Vec::new(),
+            partial_solutions: Vec::new(),
         }
     }
 
@@ -95,6 +100,11 @@ impl Task {
         }
         println!("\x1b[36;1mElapsed time: {:.2}s\n\x1b[0m", start_time.elapsed().as_secs_f32());
         is_ok
+    }
+
+    pub fn add_partial_solution(&mut self, solution_path: &str, passes_subtasks: &[usize]) {
+        let set = passes_subtasks.iter().copied().collect::<HashSet<_>>();
+        self.partial_solutions.push((self.path.join(solution_path), set));
     }
 
     fn create_tests_inner(&mut self) -> Result<()> {
@@ -138,11 +148,20 @@ impl Task {
             println!("Skipping solution compilation as it is up to date.");
         }
 
+        for (i, partial_solution) in self.partial_solutions.iter().enumerate() {
+            println!("Building partial solution...");
+            let has_built = build_solution(&partial_solution.0, &self.build_folder_path.join(format!("partial_solution_{i}")))?;
+            if !has_built {
+                println!("Skipping partial solution {i} compilation as it is up to date.");
+            }
+        }
+
         self.generate_tests()?;
 
         Ok(())
     }
 
+    #[allow(clippy::too_many_lines)]
     fn generate_tests(&mut self) -> Result<()> {
         // create tests directory if it doesn't exist and clear it
         std::fs::create_dir_all(&self.tests_path)?;
@@ -161,7 +180,7 @@ impl Task {
 
         // calculate how many steps there are in total for the progress bar. If checkers are missing, it is less steps.
         let loading_progress_max = {
-            let mut result = 2 * num_tests; // 2 generating input and producing output
+            let mut result = 2 * num_tests + self.partial_solutions.len() as i32 * num_tests; // 2 generating input and producing output and num_tests for every partial solution
             for subtask in &self.subtasks {
                 if subtask.checker.is_some() {
                     // and for each check
@@ -229,6 +248,55 @@ impl Task {
         }
         clear_progress_bar();
         let tests_size = fs_extra::dir::get_size(&self.tests_path)? as f32 / 1_000_000.0;
+
+        for (partial_id, partial_solution) in self.partial_solutions.iter().enumerate() {
+            println!("Checking partial solution {partial_id}...");
+
+            let mut passed_subtasks = HashSet::new();
+
+            let mut curr_test_id = 0;
+            for subtask in &self.subtasks {
+                let mut subtask_failed = false;
+                let num_tests = self.get_total_tests(subtask)?;
+                for _ in 0..num_tests {
+                    if !subtask_failed {
+                        let exe_path = self.build_folder_path.join(format!("partial_solution_{partial_id}"));
+                        let input_file = self.get_input_file_path(curr_test_id);
+                        let output_file = self.build_folder_path.join("temp_output");
+
+                        let result = run_solution(&exe_path, &input_file, &output_file, self.time_limit, curr_test_id);
+
+                        if result.is_err() {
+                            subtask_failed = true;
+                            continue;
+                        }
+
+                        if !are_files_equal(&output_file, &self.get_output_file_path(curr_test_id))? {
+                            subtask_failed = true;
+                            continue;
+                        }
+                    }
+
+                    curr_test_id += 1;
+                }
+
+                if !subtask_failed {
+                    passed_subtasks.insert(subtask.number);
+                }
+            }
+
+            for should_pass in &partial_solution.1 {
+                if !passed_subtasks.contains(should_pass) {
+                    bail!("Partial solution {partial_id} doesn't pass subtask {should_pass}");
+                }
+            }
+
+            for has_passed in &passed_subtasks {
+                if !partial_solution.1.contains(has_passed) {
+                    bail!("Partial solution {partial_id} passes subtask {has_passed} which it shouldn't");
+                }
+            }
+        }
 
         println!("\x1b[36;1mMax solution time: {max_elapsed_time:.2}s, tests size: {tests_size:.2}MB\x1b[0m");
 
