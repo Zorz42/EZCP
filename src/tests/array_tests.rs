@@ -1,6 +1,6 @@
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
-mod generator_tests {
+mod array_tests {
     use crate::tests::generic_tests::generic_tests::{initialize_test, TESTS_DIR};
     use crate::{array_generator, Subtask, Task};
     use anyhow::bail;
