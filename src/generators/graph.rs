@@ -11,6 +11,7 @@ pub struct Graph {
 }
 
 impl Graph {
+    #[must_use]
     pub fn new_empty(n: i32) -> Self {
         Self {
             nodes: vec![Vec::new(); n as usize],
@@ -18,6 +19,7 @@ impl Graph {
         }
     }
 
+    #[must_use]
     pub fn new_full(n: i32) -> Self {
         let mut result = Self::new_empty(n);
         for u in 0..n {
@@ -28,6 +30,7 @@ impl Graph {
         result
     }
 
+    #[must_use]
     pub fn new_random(n: i32, m: i32) -> Self {
         let mut result = Self::new_empty(n);
         let mut rng = rand::thread_rng();
@@ -39,6 +42,7 @@ impl Graph {
         result
     }
 
+    #[must_use]
     pub fn new_random_tree(n: i32) -> Self {
         let mut result = Self::new_empty(n);
         let mut rng = rand::thread_rng();
@@ -52,6 +56,7 @@ impl Graph {
         result
     }
 
+    #[must_use]
     pub fn new_random_connected(n: i32, m: i32) -> Self {
         let mut result = Self::new_random_tree(n);
         let mut rng = rand::thread_rng();
@@ -63,13 +68,18 @@ impl Graph {
         result
     }
 
+    #[must_use]
     pub fn new_random_bipartite(n: i32, m: i32) -> Self {
         let mut result = Self::new_empty(n);
         let mut rng = rand::thread_rng();
         let mut nodes = (0..n).collect::<Vec<_>>();
         nodes.shuffle(&mut rng);
-        let size1 = rng.gen_range(1..n);
-        let size2 = n - size1;
+        let size1 = loop {
+            let size1 = rng.gen_range(1..n);
+            if size1 * (n - size1) >= m {
+                break size1;
+            }
+        };
         while result.get_num_edges() < m {
             let u = nodes[rng.gen_range(0..size1) as usize];
             let v = nodes[rng.gen_range(size1..n) as usize];
@@ -91,14 +101,17 @@ impl Graph {
         Ok(result)
     }
 
+    #[must_use]
     pub fn has_edge(&self, u: usize, v: usize) -> bool {
         self.edges.contains(&(u, v))
     }
 
+    #[must_use]
     pub fn get_num_edges(&self) -> i32 {
         self.edges.len() as i32 / 2
     }
 
+    #[must_use]
     pub fn get_num_nodes(&self) -> i32 {
         self.nodes.len() as i32
     }
@@ -116,6 +129,7 @@ impl Graph {
         self.edges.iter()
     }
 
+    #[must_use]
     pub fn create_output(&self) -> String {
         let mut result = String::new();
         writeln!(result, "{} {}", self.get_num_nodes(), self.get_num_edges()).ok();
@@ -123,6 +137,9 @@ impl Graph {
         let mut rng = rand::thread_rng();
         edges.shuffle(&mut rng);
         for (u, v) in edges {
+            if u > v {
+                continue;
+            }
             if rng.gen_bool(0.5) {
                 writeln!(result, "{} {}", u + 1, v + 1).ok();
             } else {
@@ -132,6 +149,7 @@ impl Graph {
         result
     }
 
+    #[must_use]
     pub fn get_connected_components(&self) -> Vec<Vec<usize>> {
         let mut result = Vec::new();
         let mut visited = vec![false; self.get_num_nodes() as usize];
@@ -155,18 +173,22 @@ impl Graph {
         result
     }
 
+    #[must_use]
     pub fn is_connected(&self) -> bool {
         self.get_connected_components().len() == 1
     }
 
+    #[must_use]
     pub fn is_tree(&self) -> bool {
         self.get_num_edges() == self.get_num_nodes() - 1 && self.is_connected()
     }
 
+    #[must_use]
     pub fn is_full(&self) -> bool {
         self.get_num_edges() == self.get_num_nodes() * (self.get_num_nodes() - 1) / 2
     }
 
+    #[must_use]
     pub fn is_bipartite(&self) -> bool {
         let mut visited = vec![false; self.get_num_nodes() as usize];
         let mut colors = vec![0; self.get_num_nodes() as usize];
