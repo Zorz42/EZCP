@@ -7,6 +7,9 @@ use std::collections::HashSet;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
+/// This struct represents a an entire task.
+/// You can add subtasks, partial solutions and set the time limit.
+/// Once you are done, you can create tests for the task.
 pub struct Task {
     name: String,
     path: PathBuf,
@@ -55,6 +58,9 @@ fn clear_progress_bar(logger: &Logger) {
 }
 
 impl Task {
+    /// This function creates a new task with the given name and path.
+    /// The path should be a relative path to the task folder in which the tests will be generated.
+    /// The solution should be at `solution_path` which is `path`/solution.cpp by default but can be changed.
     #[must_use]
     pub fn new(name: &str, path: &Path) -> Self {
         let build_folder_path = path.join("build");
@@ -78,27 +84,42 @@ impl Task {
     fn get_output_file_path(&self, test_id: i32) -> PathBuf {
         self.tests_path.join(format!("output.{test_id:0>3}"))
     }
-
+    
+    /// This function adds a subtask to the task.
+    /// The subtask must be ready as it cannot be modified after it is added to the task.
+    /// The function returns the index of the subtask.
     pub fn add_subtask(&mut self, subtask: Subtask) -> usize {
         self.subtasks.push(subtask);
         self.subtasks.len() - 1
     }
-
+    
+    /// This function adds a dependency between two subtasks.
+    /// A dependency means, that the first subtask must be solved before the second subtask.
+    /// In practice that means that all the tests from the dependency subtask will be added before the tests from the subtask.
+    /// Dependencies apply recursively but do not duplicate tests.
+    /// The subtask must be added to the task before this function is called.
     pub fn add_subtask_dependency(&mut self, subtask: usize, dependency: usize) {
         assert!(subtask < self.subtasks.len());
         assert!(dependency < subtask);
         self.subtasks[subtask].dependencies.push(dependency);
     }
-
+    
+    /// This function adds a partial solution to the task.
+    /// A partial solution is a solution that only solves a subset of subtasks.
+    /// When the task is generated, the partial solution will be run on all tests of the subtasks it solves.
+    /// If the partial solution does not solve the exact subtasks it should, an error will be thrown.
     pub fn add_partial_solution(&mut self, solution_path: &str, passes_subtasks: &[usize]) {
         let set = passes_subtasks.iter().copied().collect::<HashSet<_>>();
         self.partial_solutions.push((self.path.join(solution_path), set));
     }
-
+    
+    /// This function does all the work. 
+    /// It builds the solution and all partial solutions, generates tests and checks them.
     pub fn create_tests(&mut self) -> bool {
         self.create_tests_inner1(true)
     }
-
+    
+    /// This is the same as `create_tests` but it doesn't print anything.
     pub fn create_tests_no_print(&mut self) -> bool {
         self.create_tests_inner1(false)
     }

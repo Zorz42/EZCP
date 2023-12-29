@@ -5,12 +5,15 @@ use rand::Rng;
 use std::collections::HashSet;
 use std::fmt::Write;
 
+/// This struct represents a combinatorial undirected graph.
+/// It is used to generate the input for test cases and to check the output of solutions.
 pub struct Graph {
     nodes: Vec<Vec<usize>>,
     edges: HashSet<(usize, usize)>,
 }
 
 impl Graph {
+    /// This function creates a new empty graph with `n` nodes and no edges.
     #[must_use]
     pub fn new_empty(n: i32) -> Self {
         Self {
@@ -19,6 +22,7 @@ impl Graph {
         }
     }
 
+    /// This function creates a new full graph with `n` nodes and all possible edges.
     #[must_use]
     pub fn new_full(n: i32) -> Self {
         let mut result = Self::new_empty(n);
@@ -30,6 +34,8 @@ impl Graph {
         result
     }
 
+    /// This function creates a new random graph with `n` nodes and `m` edges.
+    /// The edges are chosen randomly.
     #[must_use]
     pub fn new_random(n: i32, m: i32) -> Self {
         let mut result = Self::new_empty(n);
@@ -42,6 +48,8 @@ impl Graph {
         result
     }
 
+    /// This function creates a new random tree with `n` nodes and 'n' - 1 edges by the definition of a tree.
+    /// The edges are chosen randomly.
     #[must_use]
     pub fn new_random_tree(n: i32) -> Self {
         let mut result = Self::new_empty(n);
@@ -56,6 +64,9 @@ impl Graph {
         result
     }
 
+    /// This function creates a new random connected graph with `n` nodes and `m` edges.
+    /// The edges are chosen randomly and the graph is guaranteed to be connected.
+    /// If m <= n - 1, the graph will be a tree.
     #[must_use]
     pub fn new_random_connected(n: i32, m: i32) -> Self {
         let mut result = Self::new_random_tree(n);
@@ -68,6 +79,8 @@ impl Graph {
         result
     }
 
+    /// This function creates a new random bipartite graph with `n` nodes and `m` edges.
+    /// The edges are chosen randomly and the graph is guaranteed to be bipartite.
     #[must_use]
     pub fn new_random_bipartite(n: i32, m: i32) -> Self {
         let mut result = Self::new_empty(n);
@@ -88,6 +101,11 @@ impl Graph {
         result
     }
 
+    /// This function creates a new graph from an input string.
+    /// The input string should be formatted as follows:
+    /// The first line should contain two integers n and m, the number of nodes and edges respectively.
+    /// The next m lines should contain two integers u and v, representing an edge between nodes u and v.
+    /// The nodes are 1-indexed.
     pub fn new_from_input(input: &str) -> Result<Self> {
         let mut input = Input::new(input);
         let n = input.get_int()?;
@@ -101,21 +119,27 @@ impl Graph {
         Ok(result)
     }
 
+    /// This function returns true if there is an edge between nodes u and v.
+    /// If u == v, this function will return false.
+    /// Also for every `u`, `v`: `has_edge(u, v) == has_edge(v, u)`
     #[must_use]
     pub fn has_edge(&self, u: usize, v: usize) -> bool {
         self.edges.contains(&(u, v))
     }
 
+    /// This function returns the count of edges between nodes u and v.
     #[must_use]
     pub fn get_num_edges(&self) -> i32 {
         self.edges.len() as i32 / 2
     }
 
+    /// This function returns the count of nodes in the graph.
     #[must_use]
     pub fn get_num_nodes(&self) -> i32 {
         self.nodes.len() as i32
     }
 
+    /// This function adds an edge between nodes u and v.
     pub fn add_edge(&mut self, u: usize, v: usize) {
         if !self.has_edge(u, v) && u != v {
             self.edges.insert((u, v));
@@ -125,10 +149,17 @@ impl Graph {
         }
     }
 
+    /// This function returns an iterator over the edges in the graph.
     pub fn edges_iter(&self) -> impl Iterator<Item = &(usize, usize)> {
         self.edges.iter()
     }
 
+    /// This function converts the graph to an input string.
+    /// The input string will be formatted as follows:
+    /// The first line will contain two integers n and m, the number of nodes and edges respectively.
+    /// The next m lines will contain two integers u and v, representing an edge between nodes u and v.
+    /// The nodes are 1-indexed.
+    /// The edges will be randomly shuffled and pair may be swapped.
     #[must_use]
     pub fn create_output(&self) -> String {
         let mut result = String::new();
@@ -149,6 +180,9 @@ impl Graph {
         result
     }
 
+    /// This function returns the array of connected components in the graph.
+    /// Each connected component is represented by an array of node indices.
+    /// The nodes are 0-indexed and the arrays are in undefined order.
     #[must_use]
     pub fn get_connected_components(&self) -> Vec<Vec<usize>> {
         let mut result = Vec::new();
@@ -172,22 +206,26 @@ impl Graph {
         }
         result
     }
-
+    
+    /// This function returns true if the graph is connected.
     #[must_use]
     pub fn is_connected(&self) -> bool {
         self.get_connected_components().len() == 1
     }
-
+    
+    /// This function returns true if the graph is a tree.
     #[must_use]
     pub fn is_tree(&self) -> bool {
         self.get_num_edges() == self.get_num_nodes() - 1 && self.is_connected()
     }
-
+    
+    /// This function returns true if the graph has every possible edge.
     #[must_use]
     pub fn is_full(&self) -> bool {
         self.get_num_edges() == self.get_num_nodes() * (self.get_num_nodes() - 1) / 2
     }
-
+    
+    /// This function returns true if the graph is bipartite.
     #[must_use]
     pub fn is_bipartite(&self) -> bool {
         let mut visited = vec![false; self.get_num_nodes() as usize];
