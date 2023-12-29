@@ -14,6 +14,7 @@ Features:
 - Add partial solutions and specify which subtasks it should pass.
 
 Suggestions and bug reports: jakob@zorz.si
+You can also open a pull request.
 
 Minimal example: (see examples/ for more complete examples)
 ```rust
