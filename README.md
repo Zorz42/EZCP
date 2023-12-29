@@ -17,7 +17,6 @@ Suggestions and bug reports: jakob@zorz.si
 
 Minimal example: (see examples/ for more complete examples)
 ```rust
-use anyhow::bail;
 use rand::Rng;
 use std::path::PathBuf;
 
@@ -25,7 +24,7 @@ fn main() {
     // The first task you get an array of integers. You need to find the sum of all elements in the array minus the half of the maximum element.
     // Also all elements in the array are even.
 
-    let mut task = ezcp::Task::new("Coupon", &PathBuf::from("task1"));
+    let mut task = ezcp::Task::new("Coupon", &PathBuf::from("coupon"));
 
     // Constraint: n = 1
     let mut subtask1 = ezcp::Subtask::new(20);
