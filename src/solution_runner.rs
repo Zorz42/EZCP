@@ -1,6 +1,25 @@
 use anyhow::{bail, Result};
 use std::path::PathBuf;
 
+#[cfg(windows)]
+fn get_gcc_path() -> Result<PathBuf> {
+    if let Ok(gcc_path) = std::env::var("GCC_PATH") {
+        return Ok(PathBuf::from(gcc_path));
+    }
+    
+    let possible_paths = [
+        "C:\\MinGW\\bin\\c++.exe",
+    ];
+    
+    for path in possible_paths.iter() {
+        if PathBuf::from(path).exists() {
+            return Ok(PathBuf::from(path));
+        }
+    }
+    
+    bail!("g++ is not installed, specify the path to g++ with the GCC_PATH environment variable");
+}
+
 pub fn build_solution(source_file: &PathBuf, executable_file: &PathBuf) -> Result<bool> {
     // if solution executable exists, check if it's up to date
     if executable_file.exists() {
@@ -12,22 +31,54 @@ pub fn build_solution(source_file: &PathBuf, executable_file: &PathBuf) -> Resul
         }
     }
 
-    // check if g++ is installed
-    if std::process::Command::new("g++").arg("--version").output().is_err() {
-        bail!("g++ is not installed");
+    #[cfg(windows)] {
+        let gcc_path = get_gcc_path()?;
+        let prev_working_dir = std::env::current_dir()?;
+        let working_dir = std::path::Path::new(&gcc_path).parent().unwrap().to_path_buf();
+        std::env::set_current_dir(&working_dir)?;
+        
+        // check if g++ is installed
+        if std::process::Command::new(gcc_path.clone()).arg("--version").output().is_err() {
+            bail!("g++ is not installed");
+        }
+        
+        let executable_file = prev_working_dir.join(executable_file);
+        let source_file = prev_working_dir.join(source_file);
+        
+        // invoke g++ to build solution
+        let process = std::process::Command::new(gcc_path)
+            .arg("-std=c++03")
+            .arg("-O2")
+            .arg("-o")
+            .arg(executable_file)
+            .arg(source_file)
+            .output()?;
+
+        if !process.status.success() {
+            bail!("Failed to build solution:\nstderr:\n{}\nstdout:\n{}\n", String::from_utf8_lossy(&process.stderr), String::from_utf8_lossy(&process.stdout));
+        }
+        
+        std::env::set_current_dir(&prev_working_dir)?;
     }
 
-    // invoke g++ to build solution
-    let process = std::process::Command::new("g++")
-        .arg("-std=c++20")
-        .arg("-O2")
-        .arg("-o")
-        .arg(executable_file)
-        .arg(source_file)
-        .output()?;
+    #[cfg(unix)] {
+        // check if g++ is installed
+        if std::process::Command::new("g++").arg("--version").output().is_err() {
+            bail!("g++ is not installed");
+        }
 
-    if !process.status.success() {
-        bail!("Failed to build solution");
+        // invoke g++ to build solution
+        let process = std::process::Command::new("g++")
+            .arg("-std=c++20")
+            .arg("-O2")
+            .arg("-o")
+            .arg(executable_file)
+            .arg(source_file)
+            .output()?;
+
+        if !process.status.success() {
+            bail!("Failed to build solution:\nstderr:\n{}\nstdout:\n{}\n", String::from_utf8_lossy(&process.stderr), String::from_utf8_lossy(&process.stdout));
+        }
     }
 
     Ok(true)
@@ -37,6 +88,19 @@ pub fn run_solution(executable_file: &PathBuf, input_file: &PathBuf, output_file
     // also time the solution
     let start_time = std::time::Instant::now();
 
+    let prev_working_dir = std::env::current_dir()?;
+    
+    #[cfg(windows)]
+    let gcc_path = get_gcc_path()?;
+    #[cfg(windows)]
+    let working_dir = std::path::Path::new(&gcc_path).parent().unwrap().to_path_buf();
+    #[cfg(windows)]
+    std::env::set_current_dir(&working_dir)?;
+    
+    let input_file = prev_working_dir.join(input_file);
+    let output_file = prev_working_dir.join(output_file);
+    let executable_file = prev_working_dir.join(executable_file);
+    
     // spawn the solution process
     let mut solution_process = std::process::Command::new(executable_file)
         .stdin(std::fs::File::open(input_file)?)
@@ -53,10 +117,14 @@ pub fn run_solution(executable_file: &PathBuf, input_file: &PathBuf, output_file
 
     let solution_status = solution_process.wait()?;
     let elapsed_time = start_time.elapsed().as_secs_f32();
-
+    
+    println!("{}", solution_status);
     if !solution_status.success() {
         bail!("Solution failed on test {}", test_id);
     }
+    
+    #[cfg(windows)]
+    std::env::set_current_dir(&prev_working_dir)?;
 
     Ok(elapsed_time)
 }
