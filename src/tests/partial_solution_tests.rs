@@ -342,9 +342,6 @@ mod partial_solution_tests {
 
         // create partial solution file (it crashes)
         let partial_solution_contents = "
-        #include <iostream>
-        using namespace std;
-        
         int main() {
             int*n=nullptr;
             while(true){

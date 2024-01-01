@@ -11,8 +11,8 @@ enum WindowsCompiler {
 impl WindowsCompiler {
     pub fn get_path(&self) -> PathBuf {
         match self {
-            WindowsCompiler::FullPath(path) => path.clone(),
-            WindowsCompiler::Command(command) => command.clone(),
+            Self::FullPath(path) => path.clone(),
+            Self::Command(command) => command.clone(),
         }
     }
 }
@@ -28,7 +28,7 @@ fn get_gcc_path() -> Result<WindowsCompiler> {
         "c++",
     ];
     
-    for command in possible_commands.iter() {
+    for command in possible_commands {
         if let Ok(gcc_path) = std::process::Command::new(command).arg("--version").output() {
             if gcc_path.status.success() {
                 return Ok(WindowsCompiler::Command(PathBuf::from(command)));
@@ -36,7 +36,7 @@ fn get_gcc_path() -> Result<WindowsCompiler> {
         }
     }
     
-    let possible_paths = [
+    /*let possible_paths = [
         "C:\\MinGW\\bin\\c++.exe",
     ];
     
@@ -44,7 +44,7 @@ fn get_gcc_path() -> Result<WindowsCompiler> {
         if PathBuf::from(path).exists() {
             return Ok(WindowsCompiler::FullPath(PathBuf::from(path)));
         }
-    }
+    }*/
     
     bail!("g++ is not installed, specify the path to g++ with the GCC_PATH environment variable");
 }
@@ -64,12 +64,12 @@ pub fn build_solution(source_file: &PathBuf, executable_file: &PathBuf) -> Resul
         let gcc_path = get_gcc_path()?;
         let prev_working_dir = std::env::current_dir()?;
         if let WindowsCompiler::FullPath(gcc_path) = &gcc_path {
-            let working_dir = std::path::Path::new(gcc_path).parent().unwrap().to_path_buf();
-            std::env::set_current_dir(&working_dir)?;
+            let working_dir = std::path::Path::new(gcc_path).parent().ok_or_else(|| anyhow::anyhow!("Failed to get working directory"))?.to_path_buf();
+            std::env::set_current_dir(working_dir)?;
         }
         
         // check if g++ is installed
-        if std::process::Command::new(&gcc_path.get_path()).arg("--version").output().is_err() {
+        if std::process::Command::new(gcc_path.get_path()).arg("--version").output().is_err() {
             bail!("g++ is not installed");
         }
         
@@ -124,10 +124,10 @@ pub fn run_solution(executable_file: &PathBuf, input_file: &PathBuf, output_file
     #[cfg(windows)]
     let gcc_path = get_gcc_path()?;
     #[cfg(windows)]
-    let working_dir = std::path::Path::new(&gcc_path.get_path()).parent().unwrap().to_path_buf();
+    let working_dir = std::path::Path::new(&gcc_path.get_path()).parent().ok_or_else(|| anyhow::anyhow!("Failed to get working directory"))?.to_path_buf();
     #[cfg(windows)]
     if let WindowsCompiler::FullPath(_) = gcc_path {
-        std::env::set_current_dir(&working_dir)?;
+        std::env::set_current_dir(working_dir)?;
     }
     
     let input_file = prev_working_dir.join(input_file);
