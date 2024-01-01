@@ -132,6 +132,11 @@ impl Task {
         let is_ok = res.is_ok();
         if let Err(err) = res {
             logger.logln(format!("\n\x1b[31;1mError: {err}\x1b[0m"));
+            // print backtrace if not in release mode
+            if cfg!(debug_assertions) {
+                logger.logln(format!("\x1b[31;1mBacktrace: {backtrace}\x1b[0m", backtrace = err.backtrace()));
+            }
+            
         } else {
             logger.logln("\n\x1b[32;1mSuccess!\x1b[0m");
         }
