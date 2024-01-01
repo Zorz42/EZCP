@@ -19,14 +19,6 @@ impl WindowsCompiler {
 
 #[cfg(windows)]
 fn get_gcc_path() -> Result<WindowsCompiler> {
-    let prev_working_dir = std::env::current_dir()?;
-    let result = get_gcc_path_inner();
-    std::env::set_current_dir(prev_working_dir)?;
-    result
-}
-
-#[cfg(windows)]
-fn get_gcc_path_inner() -> Result<WindowsCompiler> {
     if let Ok(gcc_path) = std::env::var("GCC_PATH") {
         return Ok(WindowsCompiler::FullPath(PathBuf::from(gcc_path)));
     }
@@ -55,13 +47,6 @@ fn get_gcc_path_inner() -> Result<WindowsCompiler> {
 }
 
 pub fn build_solution(source_file: &PathBuf, executable_file: &PathBuf) -> Result<bool> {
-    let prev_working_dir = std::env::current_dir()?;
-    let result = build_solution_inner(source_file, executable_file);
-    std::env::set_current_dir(prev_working_dir)?;
-    result
-}
-
-fn build_solution_inner(source_file: &PathBuf, executable_file: &PathBuf) -> Result<bool> {
     // if solution executable exists, check if it's up to date
     if executable_file.exists() {
         let solution_last_modified = std::fs::metadata(source_file)?.modified()?;
@@ -75,9 +60,12 @@ fn build_solution_inner(source_file: &PathBuf, executable_file: &PathBuf) -> Res
     #[cfg(windows)] {
         let gcc_path = get_gcc_path()?;
         let prev_working_dir = std::env::current_dir()?;
+
+        let mut process = std::process::Command::new(gcc_path.get_path());
+        
         if let WindowsCompiler::FullPath(gcc_path) = &gcc_path {
             let working_dir = std::path::Path::new(gcc_path).parent().ok_or_else(|| anyhow::anyhow!("Failed to get working directory"))?.to_path_buf();
-            std::env::set_current_dir(working_dir)?;
+            process.current_dir(working_dir);
         }
         
         // check if g++ is installed
@@ -89,7 +77,7 @@ fn build_solution_inner(source_file: &PathBuf, executable_file: &PathBuf) -> Res
         let source_file = prev_working_dir.join(source_file);
         
         // invoke g++ to build solution
-        let process = std::process::Command::new(gcc_path.get_path())
+        let process = process
             .arg("-std=c++17")
             .arg("-O2")
             .arg("-o")
@@ -126,33 +114,27 @@ fn build_solution_inner(source_file: &PathBuf, executable_file: &PathBuf) -> Res
 }
 
 pub fn run_solution(executable_file: &PathBuf, input_file: &PathBuf, output_file: &PathBuf, time_limit: f32, test_id: i32) -> Result<f32> {
-    let prev_working_dir = std::env::current_dir()?;
-    let result = run_solution_inner(executable_file, input_file, output_file, time_limit, test_id);
-    std::env::set_current_dir(prev_working_dir)?;
-    result
-}
-
-fn run_solution_inner(executable_file: &PathBuf, input_file: &PathBuf, output_file: &PathBuf, time_limit: f32, test_id: i32) -> Result<f32> {
     // also time the solution
     let start_time = std::time::Instant::now();
 
-    let prev_working_dir = std::env::current_dir()?;
+    let working_dir = std::env::current_dir()?;
+
+    let executable_file = working_dir.join(executable_file);
+    let mut solution_process = std::process::Command::new(executable_file);
     
-    #[cfg(windows)]
-    let gcc_path = get_gcc_path()?;
-    #[cfg(windows)]
-    let working_dir = std::path::Path::new(&gcc_path.get_path()).parent().ok_or_else(|| anyhow::anyhow!("Failed to get working directory"))?.to_path_buf();
-    #[cfg(windows)]
-    if let WindowsCompiler::FullPath(_) = gcc_path {
-        std::env::set_current_dir(working_dir)?;
+    #[cfg(windows)] {
+        let gcc_path = get_gcc_path()?;
+        if let WindowsCompiler::FullPath(gcc_path) = &gcc_path {
+            let working_dir = std::path::Path::new(gcc_path).parent().ok_or_else(|| anyhow::anyhow!("Failed to get working directory"))?.to_path_buf();
+            solution_process.current_dir(working_dir);
+        }
     }
     
-    let input_file = prev_working_dir.join(input_file);
-    let output_file = prev_working_dir.join(output_file);
-    let executable_file = prev_working_dir.join(executable_file);
+    let input_file = working_dir.join(input_file);
+    let output_file = working_dir.join(output_file);
     
     // spawn the solution process
-    let mut solution_process = std::process::Command::new(executable_file)
+    let mut solution_process = solution_process
         .stdin(std::fs::File::open(input_file)?)
         .stdout(std::fs::File::create(output_file)?)
         .spawn()?;
