@@ -343,7 +343,7 @@ mod partial_solution_tests {
         // create partial solution file (it crashes)
         let partial_solution_contents = "
         int main() {
-            int*n=0;
+            int*n=nullptr;
             while(true){
                 *n=1;
                 n++;

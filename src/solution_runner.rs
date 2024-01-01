@@ -36,15 +36,15 @@ fn get_gcc_path() -> Result<WindowsCompiler> {
         }
     }
     
-    /*let possible_paths = [
+    let possible_paths = [
         "C:\\MinGW\\bin\\c++.exe",
     ];
     
-    for path in possible_paths.iter() {
+    for path in possible_paths {
         if PathBuf::from(path).exists() {
             return Ok(WindowsCompiler::FullPath(PathBuf::from(path)));
         }
-    }*/
+    }
     
     bail!("g++ is not installed, specify the path to g++ with the GCC_PATH environment variable");
 }
@@ -78,7 +78,7 @@ pub fn build_solution(source_file: &PathBuf, executable_file: &PathBuf) -> Resul
         
         // invoke g++ to build solution
         let process = std::process::Command::new(gcc_path.get_path())
-            .arg("-std=c++03")
+            .arg("-std=c++17")
             .arg("-O2")
             .arg("-o")
             .arg(executable_file)
