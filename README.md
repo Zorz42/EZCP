@@ -53,6 +53,24 @@ fn main() {
     // finally create the tests
     task.create_tests();
 }
+```
 
+And `coupon/solution.cpp`:
+```cpp
+#include<iostream>
+using namespace std;
 
+int main(){
+    int n;
+    cin>>n;
+    long long sum=0;
+    int big=0;
+    while(n--){
+        int a;
+        cin>>a;
+        big=max(big,a);
+        sum+=a;
+    }
+    cout<<sum-big/2<<"\n";
+}
 ```
