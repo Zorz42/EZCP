@@ -2,9 +2,37 @@ use anyhow::{bail, Result};
 use std::path::PathBuf;
 
 #[cfg(windows)]
-fn get_gcc_path() -> Result<PathBuf> {
+enum WindowsCompiler {
+    FullPath(PathBuf),
+    Command(PathBuf),
+}
+
+impl WindowsCompiler {
+    pub fn get_path(&self) -> PathBuf {
+        match self {
+            WindowsCompiler::FullPath(path) => path.clone(),
+            WindowsCompiler::Command(command) => command.clone(),
+        }
+    }
+}
+
+#[cfg(windows)]
+fn get_gcc_path() -> Result<WindowsCompiler> {
     if let Ok(gcc_path) = std::env::var("GCC_PATH") {
-        return Ok(PathBuf::from(gcc_path));
+        return Ok(WindowsCompiler::FullPath(PathBuf::from(gcc_path)));
+    }
+    
+    let possible_commands = [
+        "g++",
+        "c++",
+    ];
+    
+    for command in possible_commands.iter() {
+        if let Ok(gcc_path) = std::process::Command::new(command).arg("--version").output() {
+            if gcc_path.status.success() {
+                return Ok(WindowsCompiler::Command(PathBuf::from(command)));
+            }
+        }
     }
     
     let possible_paths = [
@@ -13,7 +41,7 @@ fn get_gcc_path() -> Result<PathBuf> {
     
     for path in possible_paths.iter() {
         if PathBuf::from(path).exists() {
-            return Ok(PathBuf::from(path));
+            return Ok(WindowsCompiler::FullPath(PathBuf::from(path)));
         }
     }
     
@@ -34,11 +62,13 @@ pub fn build_solution(source_file: &PathBuf, executable_file: &PathBuf) -> Resul
     #[cfg(windows)] {
         let gcc_path = get_gcc_path()?;
         let prev_working_dir = std::env::current_dir()?;
-        let working_dir = std::path::Path::new(&gcc_path).parent().unwrap().to_path_buf();
-        std::env::set_current_dir(&working_dir)?;
+        if let WindowsCompiler::FullPath(gcc_path) = &gcc_path {
+            let working_dir = std::path::Path::new(gcc_path).parent().unwrap().to_path_buf();
+            std::env::set_current_dir(&working_dir)?;
+        }
         
         // check if g++ is installed
-        if std::process::Command::new(gcc_path.clone()).arg("--version").output().is_err() {
+        if std::process::Command::new(&gcc_path.get_path()).arg("--version").output().is_err() {
             bail!("g++ is not installed");
         }
         
@@ -46,7 +76,7 @@ pub fn build_solution(source_file: &PathBuf, executable_file: &PathBuf) -> Resul
         let source_file = prev_working_dir.join(source_file);
         
         // invoke g++ to build solution
-        let process = std::process::Command::new(gcc_path)
+        let process = std::process::Command::new(gcc_path.get_path())
             .arg("-std=c++03")
             .arg("-O2")
             .arg("-o")
@@ -93,9 +123,11 @@ pub fn run_solution(executable_file: &PathBuf, input_file: &PathBuf, output_file
     #[cfg(windows)]
     let gcc_path = get_gcc_path()?;
     #[cfg(windows)]
-    let working_dir = std::path::Path::new(&gcc_path).parent().unwrap().to_path_buf();
+    let working_dir = std::path::Path::new(&gcc_path.get_path()).parent().unwrap().to_path_buf();
     #[cfg(windows)]
-    std::env::set_current_dir(&working_dir)?;
+    if let WindowsCompiler::FullPath(_) = gcc_path {
+        std::env::set_current_dir(&working_dir)?;
+    }
     
     let input_file = prev_working_dir.join(input_file);
     let output_file = prev_working_dir.join(output_file);
@@ -118,7 +150,6 @@ pub fn run_solution(executable_file: &PathBuf, input_file: &PathBuf, output_file
     let solution_status = solution_process.wait()?;
     let elapsed_time = start_time.elapsed().as_secs_f32();
     
-    println!("{}", solution_status);
     if !solution_status.success() {
         bail!("Solution failed on test {}", test_id);
     }
