@@ -17,6 +17,7 @@ impl WindowsCompiler {
     }
 }
 
+#[cfg(windows)]
 fn get_gcc_path() -> Result<WindowsCompiler> {
     let prev_working_dir = std::env::current_dir()?;
     let result = get_gcc_path_inner();
