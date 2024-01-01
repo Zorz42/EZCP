@@ -7,6 +7,7 @@ enum WindowsCompiler {
     Command(PathBuf),
 }
 
+#[cfg(windows)]
 impl WindowsCompiler {
     pub fn get_path(&self) -> PathBuf {
         match self {
