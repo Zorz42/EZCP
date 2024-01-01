@@ -50,6 +50,13 @@ fn get_gcc_path() -> Result<WindowsCompiler> {
 }
 
 pub fn build_solution(source_file: &PathBuf, executable_file: &PathBuf) -> Result<bool> {
+    let prev_working_dir = std::env::current_dir()?;
+    let result = build_solution_inner(source_file, executable_file);
+    std::env::set_current_dir(prev_working_dir)?;
+    result
+}
+
+fn build_solution_inner(source_file: &PathBuf, executable_file: &PathBuf) -> Result<bool> {
     // if solution executable exists, check if it's up to date
     if executable_file.exists() {
         let solution_last_modified = std::fs::metadata(source_file)?.modified()?;
@@ -88,8 +95,6 @@ pub fn build_solution(source_file: &PathBuf, executable_file: &PathBuf) -> Resul
         if !process.status.success() {
             bail!("Failed to build solution:\nstderr:\n{}\nstdout:\n{}\n", String::from_utf8_lossy(&process.stderr), String::from_utf8_lossy(&process.stdout));
         }
-        
-        std::env::set_current_dir(&prev_working_dir)?;
     }
 
     #[cfg(unix)] {
@@ -116,6 +121,13 @@ pub fn build_solution(source_file: &PathBuf, executable_file: &PathBuf) -> Resul
 }
 
 pub fn run_solution(executable_file: &PathBuf, input_file: &PathBuf, output_file: &PathBuf, time_limit: f32, test_id: i32) -> Result<f32> {
+    let prev_working_dir = std::env::current_dir()?;
+    let result = run_solution_inner(executable_file, input_file, output_file, time_limit, test_id);
+    std::env::set_current_dir(prev_working_dir)?;
+    result
+}
+
+fn run_solution_inner(executable_file: &PathBuf, input_file: &PathBuf, output_file: &PathBuf, time_limit: f32, test_id: i32) -> Result<f32> {
     // also time the solution
     let start_time = std::time::Instant::now();
 
@@ -154,9 +166,6 @@ pub fn run_solution(executable_file: &PathBuf, input_file: &PathBuf, output_file
     if !solution_status.success() {
         bail!("Solution failed on test {}", test_id);
     }
-    
-    #[cfg(windows)]
-    std::env::set_current_dir(&prev_working_dir)?;
 
     Ok(elapsed_time)
 }
