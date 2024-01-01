@@ -17,17 +17,22 @@ impl WindowsCompiler {
     }
 }
 
-#[cfg(windows)]
 fn get_gcc_path() -> Result<WindowsCompiler> {
+    let prev_working_dir = std::env::current_dir()?;
+    let result = get_gcc_path_inner();
+    std::env::set_current_dir(prev_working_dir)?;
+    result
+}
+
+#[cfg(windows)]
+fn get_gcc_path_inner() -> Result<WindowsCompiler> {
     if let Ok(gcc_path) = std::env::var("GCC_PATH") {
         return Ok(WindowsCompiler::FullPath(PathBuf::from(gcc_path)));
     }
-    
     let possible_commands = [
         "g++",
         "c++",
     ];
-    
     for command in possible_commands {
         if let Ok(gcc_path) = std::process::Command::new(command).arg("--version").output() {
             if gcc_path.status.success() {
@@ -39,7 +44,6 @@ fn get_gcc_path() -> Result<WindowsCompiler> {
     let possible_paths = [
         "C:\\MinGW\\bin\\c++.exe",
     ];
-    
     for path in possible_paths {
         if PathBuf::from(path).exists() {
             return Ok(WindowsCompiler::FullPath(PathBuf::from(path)));
@@ -93,7 +97,7 @@ fn build_solution_inner(source_file: &PathBuf, executable_file: &PathBuf) -> Res
             .output()?;
 
         if !process.status.success() {
-            bail!("Failed to build solution:\nstderr:\n{}\nstdout:\n{}\n", String::from_utf8_lossy(&process.stderr), String::from_utf8_lossy(&process.stdout));
+            bail!("Failed to build solution:\nstderr:\n{}\nstdout:\n{}\nstatus:{}\n", String::from_utf8_lossy(&process.stderr), String::from_utf8_lossy(&process.stdout), process.status);
         }
     }
 
@@ -113,7 +117,7 @@ fn build_solution_inner(source_file: &PathBuf, executable_file: &PathBuf) -> Res
             .output()?;
 
         if !process.status.success() {
-            bail!("Failed to build solution:\nstderr:\n{}\nstdout:\n{}\n", String::from_utf8_lossy(&process.stderr), String::from_utf8_lossy(&process.stdout));
+            bail!("Failed to build solution:\nstderr:\n{}\nstdout:\n{}\nstatus:{}\n", String::from_utf8_lossy(&process.stderr), String::from_utf8_lossy(&process.stdout), process.status);
         }
     }
 
