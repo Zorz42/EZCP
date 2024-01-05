@@ -48,7 +48,7 @@ impl Graph {
         result
     }
 
-    /// This function creates a new random tree with `n` nodes and 'n' - 1 edges by the definition of a tree.
+    /// This function creates a new random tree with `n` nodes and `n - 1` edges by the definition of a tree.
     /// The edges are chosen randomly.
     #[must_use]
     pub fn new_random_tree(n: i32) -> Self {
@@ -121,7 +121,7 @@ impl Graph {
 
     /// This function returns true if there is an edge between nodes u and v.
     /// If u == v, this function will return false.
-    /// Also for every `u`, `v`: `has_edge(u, v) == has_edge(v, u)`
+    /// Also for every pair of nodes `u`, `v`, the following holds: `has_edge(u, v) == has_edge(v, u)`
     #[must_use]
     pub fn has_edge(&self, u: usize, v: usize) -> bool {
         self.edges.contains(&(usize::max(u, v), usize::min(u, v)))
@@ -163,6 +163,18 @@ impl Graph {
     pub fn create_output(&self) -> String {
         let mut result = String::new();
         writeln!(result, "{} {}", self.get_num_nodes(), self.get_num_edges()).ok();
+        let edges_str = self.create_output_edges();
+        write!(result, "{edges_str}").ok();
+        result
+    }
+
+    /// This function only converts edges to an input string.
+    /// The input string will be formatted as follows:
+    /// M lines will contain two integers u and v, representing an edge between nodes u and v.
+    /// The nodes are 1-indexed.
+    #[must_use]
+    pub fn create_output_edges(&self) -> String {
+        let mut result = String::new();
         let mut edges = self.edges_iter().collect::<Vec<_>>();
         let mut rng = rand::thread_rng();
         edges.shuffle(&mut rng);
