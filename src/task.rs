@@ -13,10 +13,18 @@ use std::path::{Path, PathBuf};
 pub struct Task {
     name: String,
     path: PathBuf,
+    // path to the folder with tests
     pub tests_path: PathBuf,
+    // path to cpp file with solution
     pub solution_path: PathBuf,
+    // time limit in seconds
     pub time_limit: f32,
+    // path to the zip file with tests
     pub tests_archive_path: PathBuf,
+    // two closures that tells what should the input/output file be named for a given test
+    // input to the closure is (test_id, subtask_id, test_id_in_subtask)
+    pub get_input_file_name: Box<dyn Fn(i32, i32, i32) -> String>,
+    pub get_output_file_name: Box<dyn Fn(i32, i32, i32) -> String>,
     solution_exe_path: PathBuf,
     build_folder_path: PathBuf,
     subtasks: Vec<Subtask>,
@@ -72,6 +80,8 @@ impl Task {
             solution_path: path.join("solution.cpp"),
             solution_exe_path: build_folder_path.join("solution"),
             tests_archive_path: path.join("tests.zip"),
+            get_input_file_name: Box::new(|test_id, _subtask_id, _test_id_in_subtask| format!("input.{test_id:0>3}", test_id = test_id)),
+            get_output_file_name: Box::new(|test_id, _subtask_id, _test_id_in_subtask| format!("output.{test_id:0>3}", test_id = test_id)),
             build_folder_path,
             time_limit: 1.0,
             subtasks: Vec::new(),
@@ -79,20 +89,12 @@ impl Task {
         }
     }
 
-    fn get_input_file_name(&self, test_id: i32) -> String {
-        format!("input.{test_id:0>3}")
+    fn get_input_file_path(&self, test_id: i32, subtask_id: i32, test_id_in_subtask: i32) -> PathBuf {
+        self.tests_path.join((self.get_input_file_name)(test_id, subtask_id, test_id_in_subtask))
     }
 
-    fn get_input_file_path(&self, test_id: i32) -> PathBuf {
-        self.tests_path.join(self.get_input_file_name(test_id))
-    }
-
-    fn get_output_file_name(&self, test_id: i32) -> String {
-        format!("output.{test_id:0>3}")
-    }
-
-    fn get_output_file_path(&self, test_id: i32) -> PathBuf {
-        self.tests_path.join(self.get_output_file_name(test_id))
+    fn get_output_file_path(&self, test_id: i32, subtask_id: i32, test_id_in_subtask: i32) -> PathBuf {
+        self.tests_path.join((self.get_output_file_name)(test_id, subtask_id, test_id_in_subtask))
     }
 
     /// This function adds a subtask to the task.
@@ -241,9 +243,21 @@ impl Task {
         // Generate and write tests for each subtask
         let mut curr_test_id = 0;
         print_progress_bar(0.0, logger);
+        let mut test_files = Vec::new();
         for subtask_number in 0..self.subtasks.len() {
+            let mut curr_local_test_id = 0;
             let mut subtask_visited = vec![false; self.subtasks.len()];
-            self.write_tests_for_subtask(subtask_number, &mut curr_test_id, &mut subtask_visited, loading_progress_max, logger)?;
+            let mut tests_written = Vec::new();
+            self.write_tests_for_subtask(
+                subtask_number,
+                &mut curr_test_id,
+                &mut curr_local_test_id,
+                &mut subtask_visited,
+                loading_progress_max,
+                logger,
+                &mut tests_written,
+            )?;
+            test_files.push(tests_written);
         }
 
         // loading progress at this point is exactly num_tests
@@ -279,18 +293,16 @@ impl Task {
 
         // invoke solution on each test
         let mut max_elapsed_time: f32 = 0.0;
-        for test_id in 0..num_tests {
-            print_progress_bar((loading_progress as f32) / (loading_progress_max as f32), logger);
+        let mut curr_test_id = 0;
+        for subtask in &test_files {
+            for (input_file, output_file) in subtask {
+                print_progress_bar((loading_progress as f32) / (loading_progress_max as f32), logger);
 
-            loading_progress += 1;
-            let elapsed_time = run_solution(
-                &self.solution_exe_path,
-                &self.get_input_file_path(test_id),
-                &self.get_output_file_path(test_id),
-                self.time_limit,
-                test_id,
-            )?;
-            max_elapsed_time = max_elapsed_time.max(elapsed_time);
+                loading_progress += 1;
+                let elapsed_time = run_solution(&self.solution_exe_path, &input_file, &output_file, self.time_limit, curr_test_id)?;
+                curr_test_id += 1;
+                max_elapsed_time = max_elapsed_time.max(elapsed_time);
+            }
         }
         clear_progress_bar(logger);
         let tests_size = fs_extra::dir::get_size(&self.tests_path)? as f32 / 1_000_000.0;
@@ -301,23 +313,21 @@ impl Task {
             let mut passed_subtasks = HashSet::new();
 
             let mut curr_test_id = 0;
-            for subtask in &self.subtasks {
+            for (subtask, subtask_tests) in self.subtasks.iter().zip(&test_files) {
                 let mut subtask_failed = false;
-                let num_tests = self.get_total_tests(subtask)?;
-                for _ in 0..num_tests {
+                for (input_file, output_file) in subtask_tests {
                     if !subtask_failed {
                         let exe_path = self.build_folder_path.join(format!("partial_solution_{partial_id}"));
-                        let input_file = self.get_input_file_path(curr_test_id);
-                        let output_file = self.build_folder_path.join("temp_output");
+                        let temp_output_file = self.build_folder_path.join("temp_output");
 
-                        let result = run_solution(&exe_path, &input_file, &output_file, self.time_limit, curr_test_id);
+                        let result = run_solution(&exe_path, &input_file, &temp_output_file, self.time_limit, curr_test_id);
 
                         if result.is_err() {
                             subtask_failed = true;
                             continue;
                         }
 
-                        if !are_files_equal(&output_file, &self.get_output_file_path(curr_test_id))? {
+                        if !are_files_equal(&temp_output_file, &output_file)? {
                             subtask_failed = true;
                             continue;
                         }
@@ -345,14 +355,23 @@ impl Task {
         }
 
         println!("Archiving tests...");
-        self.archive_tests(num_tests)?;
+        self.archive_tests(&test_files)?;
 
         logger.logln(format!("\x1b[36;1mMax solution time: {max_elapsed_time:.2}s, tests size: {tests_size:.2}MB\x1b[0m"));
 
         Ok(())
     }
 
-    fn write_tests_for_subtask(&mut self, subtask_number: usize, curr_test_id: &mut i32, subtask_visited: &mut Vec<bool>, loading_progress_max: i32, logger: &Logger) -> Result<()> {
+    fn write_tests_for_subtask(
+        &mut self,
+        subtask_number: usize,
+        curr_test_id: &mut i32,
+        curr_local_test_id: &mut i32,
+        subtask_visited: &mut Vec<bool>,
+        loading_progress_max: i32,
+        logger: &Logger,
+        tests_written: &mut Vec<(PathBuf, PathBuf)>,
+    ) -> Result<()> {
         // check if subtask has already been visited
         if subtask_visited[subtask_number] {
             return Ok(());
@@ -362,7 +381,7 @@ impl Task {
         // first, write tests for dependencies
         let dependencies = self.subtasks[subtask_number].dependencies.clone();
         for dependency in dependencies {
-            self.write_tests_for_subtask(dependency, curr_test_id, subtask_visited, loading_progress_max, logger)?;
+            self.write_tests_for_subtask(dependency, curr_test_id, curr_local_test_id, subtask_visited, loading_progress_max, logger, tests_written)?;
         }
 
         // generate input files paths for all tests because of rust borrow checker
@@ -370,9 +389,12 @@ impl Task {
         let num_tests = self.subtasks[subtask_number].tests.len();
         let initial_progress = *curr_test_id;
         for _ in 0..num_tests {
-            let test_id = *curr_test_id;
+            let input_path = self.get_input_file_path(*curr_test_id, subtask_number as i32, *curr_local_test_id);
+            let output_path = self.get_output_file_path(*curr_test_id, subtask_number as i32, *curr_local_test_id);
+            tests_input_files.push(input_path.clone());
+            tests_written.push((input_path, output_path));
             *curr_test_id += 1;
-            tests_input_files.push(self.get_input_file_path(test_id));
+            *curr_local_test_id += 1;
         }
 
         // generate input files for all tests
@@ -407,19 +429,18 @@ impl Task {
         Ok(result)
     }
 
-    fn archive_tests(&self, num_tests: i32) -> Result<()> {
+    fn archive_tests(&self, test_files: &Vec<Vec<(PathBuf, PathBuf)>>) -> Result<()> {
         let mut zipper = zip::ZipWriter::new(std::fs::File::create(&self.tests_archive_path)?);
         let options = zip::write::FileOptions::default().compression_method(zip::CompressionMethod::Deflated);
 
-        for test_id in 0..num_tests {
-            let input_file = self.get_input_file_path(test_id);
-            let output_file = self.get_output_file_path(test_id);
+        for subtask in test_files {
+            for (input_file, output_file) in subtask {
+                zipper.start_file(input_file.to_str().unwrap_or(""), options)?;
+                zipper.write_all(&std::fs::read(input_file)?)?;
 
-            zipper.start_file(self.get_input_file_name(test_id), options)?;
-            zipper.write_all(&std::fs::read(input_file)?)?;
-
-            zipper.start_file(self.get_output_file_name(test_id), options)?;
-            zipper.write_all(&std::fs::read(output_file)?)?;
+                zipper.start_file(output_file.to_str().unwrap_or(""), options)?;
+                zipper.write_all(&std::fs::read(output_file)?)?;
+            }
         }
 
         Ok(())
