@@ -124,13 +124,13 @@ impl Graph {
     /// Also for every `u`, `v`: `has_edge(u, v) == has_edge(v, u)`
     #[must_use]
     pub fn has_edge(&self, u: usize, v: usize) -> bool {
-        self.edges.contains(&(u, v))
+        self.edges.contains(&(usize::max(u, v), usize::min(u, v)))
     }
 
     /// This function returns the count of edges between nodes u and v.
     #[must_use]
     pub fn get_num_edges(&self) -> i32 {
-        self.edges.len() as i32 / 2
+        self.edges.len() as i32
     }
 
     /// This function returns the count of nodes in the graph.
@@ -142,8 +142,7 @@ impl Graph {
     /// This function adds an edge between nodes u and v.
     pub fn add_edge(&mut self, u: usize, v: usize) {
         if !self.has_edge(u, v) && u != v {
-            self.edges.insert((u, v));
-            self.edges.insert((v, u));
+            self.edges.insert((usize::max(u, v), usize::min(u, v)));
             self.nodes[u].push(v);
             self.nodes[v].push(u);
         }
@@ -168,9 +167,6 @@ impl Graph {
         let mut rng = rand::thread_rng();
         edges.shuffle(&mut rng);
         for (u, v) in edges {
-            if u > v {
-                continue;
-            }
             if rng.gen_bool(0.5) {
                 writeln!(result, "{} {}", u + 1, v + 1).ok();
             } else {
@@ -206,25 +202,25 @@ impl Graph {
         }
         result
     }
-    
+
     /// This function returns true if the graph is connected.
     #[must_use]
     pub fn is_connected(&self) -> bool {
         self.get_connected_components().len() == 1
     }
-    
+
     /// This function returns true if the graph is a tree.
     #[must_use]
     pub fn is_tree(&self) -> bool {
         self.get_num_edges() == self.get_num_nodes() - 1 && self.is_connected()
     }
-    
+
     /// This function returns true if the graph has every possible edge.
     #[must_use]
     pub fn is_full(&self) -> bool {
         self.get_num_edges() == self.get_num_nodes() * (self.get_num_nodes() - 1) / 2
     }
-    
+
     /// This function returns true if the graph is bipartite.
     #[must_use]
     pub fn is_bipartite(&self) -> bool {
