@@ -11,6 +11,7 @@ Features:
 - Array generator.
 - [TODO] Automatically generate some parts of the statement (time/memory limit, subtasks, samples...) and save it to latex.
 - Add a partial solution and specify which subtasks it should pass.
+- Automatically archive all test files into a zip.
 
 Suggestions and bug reports: jakob@zorz.si
 You can also open a pull request.

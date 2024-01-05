@@ -16,6 +16,7 @@ pub struct Task {
     pub tests_path: PathBuf,
     pub solution_path: PathBuf,
     pub time_limit: f32,
+    pub tests_archive_path: PathBuf,
     solution_exe_path: PathBuf,
     build_folder_path: PathBuf,
     subtasks: Vec<Subtask>,
@@ -70,6 +71,7 @@ impl Task {
             tests_path: path.join("tests"),
             solution_path: path.join("solution.cpp"),
             solution_exe_path: build_folder_path.join("solution"),
+            tests_archive_path: path.join("tests.zip"),
             build_folder_path,
             time_limit: 1.0,
             subtasks: Vec::new(),
@@ -77,14 +79,22 @@ impl Task {
         }
     }
 
+    fn get_input_file_name(&self, test_id: i32) -> String {
+        format!("input.{test_id:0>3}")
+    }
+
     fn get_input_file_path(&self, test_id: i32) -> PathBuf {
-        self.tests_path.join(format!("input.{test_id:0>3}"))
+        self.tests_path.join(self.get_input_file_name(test_id))
+    }
+
+    fn get_output_file_name(&self, test_id: i32) -> String {
+        format!("output.{test_id:0>3}")
     }
 
     fn get_output_file_path(&self, test_id: i32) -> PathBuf {
-        self.tests_path.join(format!("output.{test_id:0>3}"))
+        self.tests_path.join(self.get_output_file_name(test_id))
     }
-    
+
     /// This function adds a subtask to the task.
     /// The subtask must be ready as it cannot be modified after it is added to the task.
     /// The function returns the index of the subtask.
@@ -92,7 +102,7 @@ impl Task {
         self.subtasks.push(subtask);
         self.subtasks.len() - 1
     }
-    
+
     /// This function adds a dependency between two subtasks.
     /// A dependency means, that the first subtask must be solved before the second subtask.
     /// In practice that means that all the tests from the dependency subtask will be added before the tests from the subtask.
@@ -103,7 +113,7 @@ impl Task {
         assert!(dependency < subtask);
         self.subtasks[subtask].dependencies.push(dependency);
     }
-    
+
     /// This function adds a partial solution to the task.
     /// A partial solution is a solution that only solves a subset of subtasks.
     /// When the task is generated, the partial solution will be run on all tests of the subtasks it solves.
@@ -112,13 +122,13 @@ impl Task {
         let set = passes_subtasks.iter().copied().collect::<HashSet<_>>();
         self.partial_solutions.push((self.path.join(solution_path), set));
     }
-    
-    /// This function does all the work. 
+
+    /// This function does all the work.
     /// It builds the solution and all partial solutions, generates tests and checks them.
     pub fn create_tests(&mut self) -> bool {
         self.create_tests_inner1(true)
     }
-    
+
     /// This is the same as `create_tests` but it doesn't print anything.
     pub fn create_tests_no_print(&mut self) -> bool {
         self.create_tests_inner1(false)
@@ -136,7 +146,6 @@ impl Task {
             if cfg!(debug_assertions) {
                 logger.logln(format!("\x1b[31;1mBacktrace: {backtrace}\x1b[0m", backtrace = err.backtrace()));
             }
-            
         } else {
             logger.logln("\n\x1b[32;1mSuccess!\x1b[0m");
         }
@@ -335,6 +344,9 @@ impl Task {
             }
         }
 
+        println!("Archiving tests...");
+        self.archive_tests(num_tests)?;
+
         logger.logln(format!("\x1b[36;1mMax solution time: {max_elapsed_time:.2}s, tests size: {tests_size:.2}MB\x1b[0m"));
 
         Ok(())
@@ -393,6 +405,24 @@ impl Task {
         result += self.subtasks[subtask_number].tests.len() as i32;
 
         Ok(result)
+    }
+
+    fn archive_tests(&self, num_tests: i32) -> Result<()> {
+        let mut zipper = zip::ZipWriter::new(std::fs::File::create(&self.tests_archive_path)?);
+        let options = zip::write::FileOptions::default().compression_method(zip::CompressionMethod::Deflated);
+
+        for test_id in 0..num_tests {
+            let input_file = self.get_input_file_path(test_id);
+            let output_file = self.get_output_file_path(test_id);
+
+            zipper.start_file(self.get_input_file_name(test_id), options)?;
+            zipper.write_all(&std::fs::read(input_file)?)?;
+
+            zipper.start_file(self.get_output_file_name(test_id), options)?;
+            zipper.write_all(&std::fs::read(output_file)?)?;
+        }
+
+        Ok(())
     }
 
     /*pub fn generate_task_pdf(&self) {
