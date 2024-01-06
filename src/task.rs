@@ -435,10 +435,10 @@ impl Task {
 
         for subtask in test_files {
             for (input_file, output_file) in subtask {
-                zipper.start_file(input_file.to_str().unwrap_or(""), options)?;
+                zipper.start_file(input_file.file_name().map_or("", |a| a.to_str().unwrap_or("")), options)?;
                 zipper.write_all(&std::fs::read(input_file)?)?;
 
-                zipper.start_file(output_file.to_str().unwrap_or(""), options)?;
+                zipper.start_file(output_file.file_name().map_or("", |a| a.to_str().unwrap_or("")), options)?;
                 zipper.write_all(&std::fs::read(output_file)?)?;
             }
         }
