@@ -34,22 +34,21 @@ pub struct Task {
 fn print_progress_bar(progress: f32, logger: &Logger) {
     let size = termsize::get();
     logger.log(format!("\r {:.2}% [", progress * 100.0));
-    if let Some(size) = size {
-        let bar_length = (size.cols as usize - 10).max(0);
-        let num_filled = (progress * bar_length as f32) as usize;
-        let num_empty = (bar_length - num_filled - 1).max(0);
 
-        for _ in 0..num_filled {
-            logger.log("=");
-        }
-        if num_filled > 0 {
-            logger.log(">");
-        }
-        for _ in 0..num_empty {
-            logger.log(" ");
-        }
-        logger.log("]");
+    let bar_length = size.map_or(10, |size| (size.cols as usize - 10).max(0));
+    let num_filled = (progress * bar_length as f32) as usize;
+    let num_empty = (bar_length - num_filled - 1).max(0);
+
+    for _ in 0..num_filled {
+        logger.log("=");
     }
+    if num_filled > 0 {
+        logger.log(">");
+    }
+    for _ in 0..num_empty {
+        logger.log(" ");
+    }
+    logger.log("]");
 
     std::io::stdout().flush().ok();
 }
