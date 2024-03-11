@@ -7,6 +7,7 @@ use std::collections::HashSet;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
+#[derive(serde::Serialize)]
 pub struct CPSTests {
     pub tests: Vec<(String, String)>,
     pub subtask_tests: Vec<Vec<usize>>,
@@ -27,6 +28,7 @@ pub struct Task {
     pub time_limit: f32,
     // path to the zip file with tests
     pub tests_archive_path: PathBuf,
+    pub cps_tests_archive_path: PathBuf,
     // two closures that tells what should the input/output file be named for a given test
     // input to the closure is (test_id, subtask_id, test_id_in_subtask)
     pub get_input_file_name: Box<dyn Fn(i32, i32, i32) -> String>,
@@ -85,6 +87,7 @@ impl Task {
             solution_path: path.join("solution.cpp"),
             solution_exe_path: build_folder_path.join("solution"),
             tests_archive_path: path.join("tests.zip"),
+            cps_tests_archive_path: path.join("tests.cpt"),
             get_input_file_name: Box::new(|test_id, _subtask_id, _test_id_in_subtask| format!("input.{test_id:0>3}")),
             get_output_file_name: Box::new(|test_id, _subtask_id, _test_id_in_subtask| format!("output.{test_id:0>3}")),
             build_folder_path,
@@ -472,21 +475,37 @@ impl Task {
     }
 
     fn generate_cps_file(&self) -> Result<()> {
-        /*let mut cps_tests = CPSTests {
+        let mut cps_tests = CPSTests {
             tests: Vec::new(),
-            subtask_tests: Vec::new(),
-            subtask_points: Vec::new(),
+            subtask_tests: vec![Vec::new(); self.subtasks.len()],
+            subtask_points: vec![0; self.subtasks.len()],
         };
 
         for subtask in &self.subtasks {
+            cps_tests.subtask_points[subtask.number] = subtask.points;
+
             let mut subtask_tests = Vec::new();
             for dependency in &subtask.dependencies {
                 subtask_tests.extend_from_slice(&cps_tests.subtask_tests[*dependency]);
             }
-            for test in &subtask.tests {
+            for _test in &subtask.tests {
+                let input_file = self.get_input_file_path(cps_tests.tests.len() as i32, subtask.number as i32, subtask_tests.len() as i32);
+                let output_file = self.get_output_file_path(cps_tests.tests.len() as i32, subtask.number as i32, subtask_tests.len() as i32);
+
+                let input = std::fs::read_to_string(&input_file)?;
+                let output = std::fs::read_to_string(&output_file)?;
+
                 subtask_tests.push(cps_tests.tests.len());
+
+                cps_tests.tests.push((input, output));
             }
-        }*/
+            cps_tests.subtask_tests[subtask.number] = subtask_tests;
+        }
+
+        let mut buffer = Vec::new();
+        bincode::serialize_into(&mut buffer, &cps_tests)?;
+        let data = snap::raw::Encoder::new().compress_vec(&buffer)?;
+        std::fs::write(&self.cps_tests_archive_path, data)?;
 
         Ok(())
     }

@@ -8,7 +8,7 @@ use std::rc::Rc;
 /// Once you are done, you can add the subtask to a task.
 pub struct Subtask {
     pub(super) number: usize,
-    pub(super) _points: i32,
+    pub(super) points: i32,
     pub(super) tests: Vec<Test>,
     pub(super) dependencies: Vec<usize>,
     pub(super) checker: Option<Box<dyn Fn(Input) -> Result<()>>>,
@@ -20,7 +20,7 @@ impl Subtask {
     pub fn new(points: i32) -> Self {
         Self {
             number: 0,
-            _points: points,
+            points,
             tests: Vec::new(),
             dependencies: Vec::new(),
             checker: None,
