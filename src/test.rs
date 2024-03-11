@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{bail, Result};
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
@@ -28,6 +28,10 @@ impl Test {
     }
 
     pub fn generate_input(&mut self, file_path: &Path) -> Result<()> {
+        if file_path.exists() {
+            bail!("File already exists: {:?}", file_path);
+        }
+
         if let Some(input_file) = &self.input_file {
             // copy input file to file_path
             std::fs::copy(input_file, file_path)?;

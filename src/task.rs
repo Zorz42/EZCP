@@ -7,7 +7,13 @@ use std::collections::HashSet;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
-/// This struct represents a an entire task.
+pub struct CPSTests {
+    pub tests: Vec<(String, String)>,
+    pub subtask_tests: Vec<Vec<usize>>,
+    pub subtask_points: Vec<i32>,
+}
+
+/// This struct represents an entire task.
 /// You can add subtasks, partial solutions and set the time limit.
 /// Once you are done, you can create tests for the task.
 pub struct Task {
@@ -79,8 +85,8 @@ impl Task {
             solution_path: path.join("solution.cpp"),
             solution_exe_path: build_folder_path.join("solution"),
             tests_archive_path: path.join("tests.zip"),
-            get_input_file_name: Box::new(|test_id, _subtask_id, _test_id_in_subtask| format!("input.{test_id:0>3}", test_id = test_id)),
-            get_output_file_name: Box::new(|test_id, _subtask_id, _test_id_in_subtask| format!("output.{test_id:0>3}", test_id = test_id)),
+            get_input_file_name: Box::new(|test_id, _subtask_id, _test_id_in_subtask| format!("input.{test_id:0>3}")),
+            get_output_file_name: Box::new(|test_id, _subtask_id, _test_id_in_subtask| format!("output.{test_id:0>3}")),
             build_folder_path,
             time_limit: 1.0,
             subtasks: Vec::new(),
@@ -127,19 +133,23 @@ impl Task {
     /// This function does all the work.
     /// It builds the solution and all partial solutions, generates tests and checks them.
     pub fn create_tests(&mut self) -> bool {
-        self.create_tests_inner1(true)
+        self.create_tests_inner1(true, false)
     }
 
     /// This is the same as `create_tests` but it doesn't print anything.
     pub fn create_tests_no_print(&mut self) -> bool {
-        self.create_tests_inner1(false)
+        self.create_tests_inner1(false, false)
     }
 
-    fn create_tests_inner1(&mut self, print_output: bool) -> bool {
+    pub fn create_tests_for_cps(&mut self) -> bool {
+        self.create_tests_inner1(true, true)
+    }
+
+    fn create_tests_inner1(&mut self, print_output: bool, generate_cps: bool) -> bool {
         let logger = Logger::new(print_output);
 
         let start_time = std::time::Instant::now();
-        let res = self.create_tests_inner2(&logger);
+        let res = self.create_tests_inner2(&logger, generate_cps);
         let is_ok = res.is_ok();
         if let Err(err) = res {
             logger.logln(format!("\n\x1b[31;1mError: {err}\x1b[0m"));
@@ -154,7 +164,7 @@ impl Task {
         is_ok
     }
 
-    fn create_tests_inner2(&mut self, logger: &Logger) -> Result<()> {
+    fn create_tests_inner2(&mut self, logger: &Logger, generate_cps: bool) -> Result<()> {
         logger.logln("");
         let text = format!("Creating tests for task \"{}\"", self.name);
         // print = before and after text
@@ -203,13 +213,13 @@ impl Task {
             }
         }
 
-        self.generate_tests(logger)?;
+        self.generate_tests(logger, generate_cps)?;
 
         Ok(())
     }
 
     #[allow(clippy::too_many_lines)]
-    fn generate_tests(&mut self, logger: &Logger) -> Result<()> {
+    fn generate_tests(&mut self, logger: &Logger, generate_cps: bool) -> Result<()> {
         // create tests directory if it doesn't exist and clear it
         std::fs::create_dir_all(&self.tests_path)?;
         for entry in std::fs::read_dir(&self.tests_path)? {
@@ -249,6 +259,7 @@ impl Task {
             let mut tests_written = Vec::new();
             self.write_tests_for_subtask(
                 subtask_number,
+                subtask_number,
                 &mut curr_test_id,
                 &mut curr_local_test_id,
                 &mut subtask_visited,
@@ -268,11 +279,11 @@ impl Task {
 
         // check all tests
         curr_test_id = 0;
-        for subtask in &self.subtasks {
+        for (subtask_id, subtask) in self.subtasks.iter().enumerate() {
             let checker = &subtask.checker;
             if let Some(checker) = checker {
-                for _ in 0..self.get_total_tests(subtask)? {
-                    let input_str = std::fs::read_to_string(self.tests_path.join(format!("input.{curr_test_id:0>3}")))?;
+                for test_id_in_subtask in 0..self.get_total_tests(subtask)? {
+                    let input_str = std::fs::read_to_string(self.get_input_file_path(curr_test_id, subtask_id as i32, test_id_in_subtask))?;
                     checker(Input::new(&input_str))?;
                     curr_test_id += 1;
                     loading_progress += 1;
@@ -298,7 +309,7 @@ impl Task {
                 print_progress_bar((loading_progress as f32) / (loading_progress_max as f32), logger);
 
                 loading_progress += 1;
-                let elapsed_time = run_solution(&self.solution_exe_path, &input_file, &output_file, self.time_limit, curr_test_id)?;
+                let elapsed_time = run_solution(&self.solution_exe_path, input_file, output_file, self.time_limit, curr_test_id)?;
                 curr_test_id += 1;
                 max_elapsed_time = max_elapsed_time.max(elapsed_time);
             }
@@ -319,14 +330,14 @@ impl Task {
                         let exe_path = self.build_folder_path.join(format!("partial_solution_{partial_id}"));
                         let temp_output_file = self.build_folder_path.join("temp_output");
 
-                        let result = run_solution(&exe_path, &input_file, &temp_output_file, self.time_limit, curr_test_id);
+                        let result = run_solution(&exe_path, input_file, &temp_output_file, self.time_limit, curr_test_id);
 
                         if result.is_err() {
                             subtask_failed = true;
                             continue;
                         }
 
-                        if !are_files_equal(&temp_output_file, &output_file)? {
+                        if !are_files_equal(&temp_output_file, output_file)? {
                             subtask_failed = true;
                             continue;
                         }
@@ -353,8 +364,13 @@ impl Task {
             }
         }
 
-        println!("Archiving tests...");
-        self.archive_tests(&test_files)?;
+        if generate_cps {
+            println!("Generating CPS file...");
+            self.generate_cps_file()?;
+        } else {
+            println!("Archiving tests...");
+            self.archive_tests(&test_files)?;
+        }
 
         logger.logln(format!("\x1b[36;1mMax solution time: {max_elapsed_time:.2}s, tests size: {tests_size:.2}MB\x1b[0m"));
 
@@ -364,6 +380,7 @@ impl Task {
     fn write_tests_for_subtask(
         &mut self,
         subtask_number: usize,
+        master_subtask: usize,
         curr_test_id: &mut i32,
         curr_local_test_id: &mut i32,
         subtask_visited: &mut Vec<bool>,
@@ -380,7 +397,16 @@ impl Task {
         // first, write tests for dependencies
         let dependencies = self.subtasks[subtask_number].dependencies.clone();
         for dependency in dependencies {
-            self.write_tests_for_subtask(dependency, curr_test_id, curr_local_test_id, subtask_visited, loading_progress_max, logger, tests_written)?;
+            self.write_tests_for_subtask(
+                dependency,
+                master_subtask,
+                curr_test_id,
+                curr_local_test_id,
+                subtask_visited,
+                loading_progress_max,
+                logger,
+                tests_written,
+            )?;
         }
 
         // generate input files paths for all tests because of rust borrow checker
@@ -388,8 +414,8 @@ impl Task {
         let num_tests = self.subtasks[subtask_number].tests.len();
         let initial_progress = *curr_test_id;
         for _ in 0..num_tests {
-            let input_path = self.get_input_file_path(*curr_test_id, subtask_number as i32, *curr_local_test_id);
-            let output_path = self.get_output_file_path(*curr_test_id, subtask_number as i32, *curr_local_test_id);
+            let input_path = self.get_input_file_path(*curr_test_id, master_subtask as i32, *curr_local_test_id);
+            let output_path = self.get_output_file_path(*curr_test_id, master_subtask as i32, *curr_local_test_id);
             tests_input_files.push(input_path.clone());
             tests_written.push((input_path, output_path));
             *curr_test_id += 1;
@@ -445,14 +471,23 @@ impl Task {
         Ok(())
     }
 
-    /*pub fn generate_task_pdf(&self) {
-        let res = self.generate_task_pdf_inner();
-        if let Err(err) = res {
-            println!("\x1b[31;1mError: {err}\x1b[0m");
-        }
-    }
+    fn generate_cps_file(&self) -> Result<()> {
+        /*let mut cps_tests = CPSTests {
+            tests: Vec::new(),
+            subtask_tests: Vec::new(),
+            subtask_points: Vec::new(),
+        };
 
-    pub fn generate_task_pdf_inner(&self) -> Result<()> {
+        for subtask in &self.subtasks {
+            let mut subtask_tests = Vec::new();
+            for dependency in &subtask.dependencies {
+                subtask_tests.extend_from_slice(&cps_tests.subtask_tests[*dependency]);
+            }
+            for test in &subtask.tests {
+                subtask_tests.push(cps_tests.tests.len());
+            }
+        }*/
+
         Ok(())
-    }*/
+    }
 }

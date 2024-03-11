@@ -34,6 +34,7 @@ pub mod generic_tests {
 
         for _ in 0..10 {
             assert!(task.create_tests());
+            assert!(task.create_tests_for_cps());
         }
     }
 
@@ -73,6 +74,7 @@ pub mod generic_tests {
 
         for _ in 0..10 {
             assert!(task.create_tests());
+            assert!(task.create_tests_for_cps());
         }
     }
 
@@ -120,6 +122,7 @@ pub mod generic_tests {
 
         for _ in 0..10 {
             assert!(task.create_tests());
+            assert!(task.create_tests_for_cps());
         }
     }
 
@@ -136,6 +139,7 @@ pub mod generic_tests {
 
         for _ in 0..10 {
             assert!(!task.create_tests());
+            assert!(!task.create_tests_for_cps());
         }
     }
 
@@ -179,6 +183,7 @@ pub mod generic_tests {
 
         for _ in 0..3 {
             assert!(!task.create_tests());
+            assert!(!task.create_tests_for_cps());
         }
     }
 
@@ -211,6 +216,160 @@ pub mod generic_tests {
 
         for _ in 0..10 {
             assert!(!task.create_tests());
+            assert!(!task.create_tests_for_cps());
+        }
+    }
+
+    #[test]
+    fn create_with_custom_names() {
+        initialize_test();
+
+        let task_name = "tests_with_custom_names";
+        let task_path = PathBuf::from(TESTS_DIR).join(task_name);
+        let mut task = Task::new(task_name, &task_path);
+
+        task.get_input_file_name = Box::new(|test_id: i32, subtask_id: i32, test_id_in_subtask: i32| format!("in_{subtask_id}_{test_id_in_subtask}_{test_id}.txt"));
+        task.get_output_file_name = Box::new(|test_id: i32, subtask_id: i32, test_id_in_subtask: i32| format!("out_{subtask_id}_{test_id_in_subtask}_{test_id}.txt"));
+
+        // create directory
+        std::fs::create_dir_all(task_path.clone()).unwrap();
+
+        // create solution file
+        let solution_contents = r#"
+        #include <iostream>
+        using namespace std;
+        
+        int main() {
+            cout<<"1\n";
+            return 0; 
+        }
+        
+        "#;
+
+        std::fs::write(task_path.join("solution.cpp"), solution_contents).unwrap();
+
+        let mut subtask1 = Subtask::new(20);
+        subtask1.add_test_str("1\n");
+        subtask1.add_test_str("2\n");
+        subtask1.add_test_str("3\n");
+        let mut subtask2 = Subtask::new(30);
+        subtask2.add_test_str("1\n");
+        subtask2.add_test_str("2\n");
+        subtask2.add_test_str("3\n");
+        let mut subtask3 = Subtask::new(50);
+        subtask3.add_test_str("1\n");
+        subtask3.add_test_str("2\n");
+
+        // create subtasks
+        task.add_subtask(subtask1);
+        task.add_subtask(subtask2);
+        task.add_subtask(subtask3);
+
+        for _ in 0..10 {
+            assert!(task.create_tests());
+            assert!(task.create_tests_for_cps());
+        }
+    }
+
+    #[test]
+    fn create_with_custom_names2() {
+        initialize_test();
+
+        let task_name = "tests_with_custom_names2";
+        let task_path = PathBuf::from(TESTS_DIR).join(task_name);
+        let mut task = Task::new(task_name, &task_path);
+
+        task.get_input_file_name = Box::new(|_test_id: i32, subtask_id: i32, test_id_in_subtask: i32| format!("in_{subtask_id}_{test_id_in_subtask}.txt"));
+        task.get_output_file_name = Box::new(|_test_id: i32, subtask_id: i32, test_id_in_subtask: i32| format!("out_{subtask_id}_{test_id_in_subtask}.txt"));
+
+        // create directory
+        std::fs::create_dir_all(task_path.clone()).unwrap();
+
+        // create solution file
+        let solution_contents = r#"
+        #include <iostream>
+        using namespace std;
+        
+        int main() {
+            cout<<"1\n";
+            return 0; 
+        }
+        
+        "#;
+
+        std::fs::write(task_path.join("solution.cpp"), solution_contents).unwrap();
+
+        let mut subtask1 = Subtask::new(20);
+        subtask1.add_test_str("1\n");
+        subtask1.add_test_str("2\n");
+        subtask1.add_test_str("3\n");
+        let mut subtask2 = Subtask::new(30);
+        subtask2.add_test_str("1\n");
+        subtask2.add_test_str("2\n");
+        subtask2.add_test_str("3\n");
+        let mut subtask3 = Subtask::new(50);
+        subtask3.add_test_str("1\n");
+        subtask3.add_test_str("2\n");
+
+        // create subtasks
+        task.add_subtask(subtask1);
+        task.add_subtask(subtask2);
+        task.add_subtask(subtask3);
+
+        for _ in 0..10 {
+            assert!(task.create_tests());
+            assert!(task.create_tests_for_cps());
+        }
+    }
+
+    #[test]
+    fn create_with_custom_names3() {
+        initialize_test();
+
+        let task_name = "tests_with_custom_names3";
+        let task_path = PathBuf::from(TESTS_DIR).join(task_name);
+        let mut task = Task::new(task_name, &task_path);
+
+        task.get_input_file_name = Box::new(|test_id: i32, _subtask_id: i32, _test_id_in_subtask: i32| format!("in_{test_id}.txt"));
+        task.get_output_file_name = Box::new(|test_id: i32, _subtask_id: i32, _test_id_in_subtask: i32| format!("out_{test_id}.txt"));
+
+        // create directory
+        std::fs::create_dir_all(task_path.clone()).unwrap();
+
+        // create solution file
+        let solution_contents = r#"
+        #include <iostream>
+        using namespace std;
+        
+        int main() {
+            cout<<"1\n";
+            return 0; 
+        }
+        
+        "#;
+
+        std::fs::write(task_path.join("solution.cpp"), solution_contents).unwrap();
+
+        let mut subtask1 = Subtask::new(20);
+        subtask1.add_test_str("1\n");
+        subtask1.add_test_str("2\n");
+        subtask1.add_test_str("3\n");
+        let mut subtask2 = Subtask::new(30);
+        subtask2.add_test_str("1\n");
+        subtask2.add_test_str("2\n");
+        subtask2.add_test_str("3\n");
+        let mut subtask3 = Subtask::new(50);
+        subtask3.add_test_str("1\n");
+        subtask3.add_test_str("2\n");
+
+        // create subtasks
+        task.add_subtask(subtask1);
+        task.add_subtask(subtask2);
+        task.add_subtask(subtask3);
+
+        for _ in 0..10 {
+            assert!(task.create_tests());
+            assert!(task.create_tests_for_cps());
         }
     }
 }
