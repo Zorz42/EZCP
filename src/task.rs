@@ -6,6 +6,7 @@ use anyhow::{anyhow, bail, Result};
 use std::collections::HashSet;
 use std::io::Write;
 use std::path::{Path, PathBuf};
+use zip::write::SimpleFileOptions;
 
 #[derive(serde::Serialize)]
 pub struct CPSTests {
@@ -464,7 +465,7 @@ impl Task {
 
     fn archive_tests(&self, test_files: &Vec<Vec<(PathBuf, PathBuf)>>) -> Result<()> {
         let mut zipper = zip::ZipWriter::new(std::fs::File::create(&self.tests_archive_path)?);
-        let options = zip::write::FileOptions::default().compression_method(zip::CompressionMethod::Deflated);
+        let options = SimpleFileOptions::default().compression_method(zip::CompressionMethod::Deflated);
 
         for subtask in test_files {
             for (input_file, output_file) in subtask {
