@@ -5,7 +5,7 @@ Features:
 - Generate test inputs and save them into files.
 - Generate correct outputs.
 - Optionally have a test input checker.
-- [TODO] Make a solution checker if there are multiple valid solutions.
+- Make a solution checker if there are multiple valid solutions.
 - Subtask dependencies.
 - Graph generator.
 - Array generator.

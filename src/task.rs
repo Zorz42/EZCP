@@ -180,6 +180,11 @@ impl Task {
         }
         logger.logln("");
 
+        if self.subtasks.is_empty() {
+            // if there are no subtasks, print a warning in bold yellow
+            logger.logln("\x1b[33;1mWarning: no subtasks\x1b[0m");
+        }
+
         // create build directory if it doesn't exist
         if !self.build_folder_path.exists() {
             std::fs::create_dir_all(&self.build_folder_path)?;
