@@ -1,6 +1,7 @@
 use crate::test::{Test, TestGenerator};
 use crate::Input;
 use std::rc::Rc;
+use crate::error::Result;
 
 /// This struct represents a subtask.
 /// You can add tests, test generators and set a checker function.
@@ -10,7 +11,7 @@ pub struct Subtask {
     pub(super) points: i32,
     pub(super) tests: Vec<Test>,
     pub(super) dependencies: Vec<usize>,
-    pub(super) checker: Option<Box<dyn Fn(Input) -> anyhow::Result<()>>>,
+    pub(super) checker: Option<Box<dyn Fn(Input) -> Result<()>>>,
 }
 
 impl Subtask {
@@ -48,7 +49,7 @@ impl Subtask {
     /// The checker function receives the input and returns an error if the input is invalid.
     /// If the input is valid, it should return `Ok(())`.
     /// If the checker function is not set, the default checker will be used although it is not recommended.
-    pub fn set_checker<F: Fn(Input) -> anyhow::Result<()> + 'static>(&mut self, function: F) {
+    pub fn set_checker<F: Fn(Input) -> Result<()> + 'static>(&mut self, function: F) {
         self.checker = Some(Box::new(function));
     }
 }

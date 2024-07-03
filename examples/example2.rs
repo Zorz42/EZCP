@@ -1,4 +1,3 @@
-use anyhow::bail;
 use rand::Rng;
 use std::path::PathBuf;
 
@@ -16,11 +15,11 @@ fn main() {
         input.expect_end()?;
         let n = array.len();
         if n != 1 {
-            bail!("n should be 1");
+            ezcp::bail!("n should be 1");
         }
         let x = array[0];
         if !(1..=1_000_000_000).contains(&x) {
-            bail!("all array values should be in range [1, 1_000_000_000]");
+            ezcp::bail!("all array values should be in range [1, 1_000_000_000]");
         }
         Ok(())
     });
@@ -36,11 +35,11 @@ fn main() {
         input.expect_end()?;
         let n = array.len();
         if !(1..=30).contains(&n) {
-            bail!("n should be in range [1, 30]");
+            ezcp::bail!("n should be in range [1, 30]");
         }
         for (i, x) in array.iter().enumerate() {
             if *x != 1 << i {
-                bail!("all array values should be powers of 2");
+                ezcp::bail!("all array values should be powers of 2");
             }
         }
         Ok(())
@@ -64,11 +63,11 @@ fn main() {
         input.expect_end()?;
         let n = array.len();
         if !(1..=1000).contains(&n) {
-            bail!("n should be in range [1, 1000]");
+            ezcp::bail!("n should be in range [1, 1000]");
         }
         for x in array {
             if !(1..=1_000_000_000).contains(&x) {
-                bail!("all array values should be in range [1, 1_000_000_000]");
+                ezcp::bail!("all array values should be in range [1, 1_000_000_000]");
             }
         }
         Ok(())
@@ -89,11 +88,11 @@ fn main() {
         input.expect_end()?;
         let n = array.len();
         if !(1..=200_000).contains(&n) {
-            bail!("n should be in range [1, 200_000]");
+            ezcp::bail!("n should be in range [1, 200_000]");
         }
         for x in array {
             if !(1..=1_000_000_000).contains(&x) {
-                bail!("all array values should be in range [1, 1_000_000_000]");
+                ezcp::bail!("all array values should be in range [1, 1_000_000_000]");
             }
         }
         Ok(())

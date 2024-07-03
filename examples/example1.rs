@@ -1,4 +1,3 @@
-use anyhow::bail;
 use rand::Rng;
 use std::path::PathBuf;
 
@@ -19,15 +18,15 @@ fn main() {
         input.expect_end()?;
         let n = array.len();
         if n != 1 {
-            bail!("n should be 1");
+            ezcp::bail!("n should be 1");
         }
         // check if the only value is even
         if array[0] % 2 != 0 {
-            bail!("all array values should be even");
+            ezcp::bail!("all array values should be even");
         }
         // check if the only value is in range
         if !(0..=1_000_000_000).contains(&array[0]) {
-            bail!("all array values should be in range [0, 1_000_000_000]");
+            ezcp::bail!("all array values should be in range [0, 1_000_000_000]");
         }
         Ok(())
     });
@@ -45,18 +44,18 @@ fn main() {
         input.expect_end()?;
         let n = array.len();
         if !(1..=200_000).contains(&n) {
-            bail!("n should be in range [1, 200_000]");
+            ezcp::bail!("n should be in range [1, 200_000]");
         }
         let x = array[0];
         for i in array {
             if i != x {
-                bail!("all array values should be the same");
+                ezcp::bail!("all array values should be the same");
             }
             if i % 2 != 0 {
-                bail!("all array values should be even");
+                ezcp::bail!("all array values should be even");
             }
             if !(0..=1_000_000_000).contains(&i) {
-                bail!("all array values should be in range [0, 1_000_000_000]");
+                ezcp::bail!("all array values should be in range [0, 1_000_000_000]");
             }
         }
         Ok(())
@@ -89,14 +88,14 @@ fn main() {
         input.expect_end()?;
         let n = array.len();
         if !(1..=200_000).contains(&n) {
-            bail!("n should be in range [1, 200_000]");
+            ezcp::bail!("n should be in range [1, 200_000]");
         }
         for i in array {
             if i % 2 != 0 {
-                bail!("all array values should be even");
+                ezcp::bail!("all array values should be even");
             }
             if !(0..=1_000_000_000).contains(&i) {
-                bail!("all array values should be in range [0, 1_000_000_000]");
+                ezcp::bail!("all array values should be in range [0, 1_000_000_000]");
             }
         }
         Ok(())

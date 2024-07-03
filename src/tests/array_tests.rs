@@ -3,7 +3,6 @@
 mod array_tests {
     use crate::tests::generic_tests::generic_tests::{initialize_test, TESTS_DIR};
     use crate::{array_generator, Subtask, Task};
-    use anyhow::bail;
     use std::path::PathBuf;
 
     #[test]
@@ -45,11 +44,11 @@ mod array_tests {
             input.expect_end()?;
             let n = array.len();
             if !(1..=100).contains(&n) {
-                bail!("n should be in range [1, 100]");
+                crate::bail!("n should be in range [1, 100]");
             }
             for x in array {
                 if !(1..=100).contains(&x) {
-                    bail!("all array values should be in range [1, 100]");
+                    crate::bail!("all array values should be in range [1, 100]");
                 }
             }
             Ok(())
@@ -69,11 +68,11 @@ mod array_tests {
             input.expect_end()?;
             let n = array.len();
             if n != 42 {
-                bail!("n should be 42");
+                crate::bail!("n should be 42");
             }
             for x in array {
                 if !(1..=100).contains(&x) {
-                    bail!("all array values should be in range [1, 100]");
+                    crate::bail!("all array values should be in range [1, 100]");
                 }
             }
             Ok(())
@@ -91,11 +90,11 @@ mod array_tests {
             input.expect_end()?;
             let n = array.len();
             if !(1..=100).contains(&n) {
-                bail!("n should be in range [1, 100]");
+                crate::bail!("n should be in range [1, 100]");
             }
             for x in array {
                 if x != 47 {
-                    bail!("all array values should be 47");
+                    crate::bail!("all array values should be 47");
                 }
             }
             Ok(())

@@ -3,7 +3,6 @@
 mod generator_tests {
     use crate::tests::generic_tests::generic_tests::{initialize_test, TESTS_DIR};
     use crate::{array_generator, Subtask, Task};
-    use anyhow::bail;
     use std::path::PathBuf;
 
     #[test]
@@ -45,11 +44,11 @@ mod generator_tests {
             input.expect_end()?;
             let n = array.len();
             if !(1..=100).contains(&n) {
-                bail!("n should be in range [1, 100]");
+                crate::bail!("n should be in range [1, 100]");
             }
             for x in array {
                 if !(1..=100).contains(&x) {
-                    bail!("all array values should be in range [1, 100]");
+                    crate::bail!("all array values should be in range [1, 100]");
                 }
             }
             Ok(())
@@ -111,11 +110,11 @@ mod generator_tests {
             input.expect_end()?;
             let n = array.len();
             if !(1..=100).contains(&n) {
-                bail!("n should be in range [1, 100]");
+                crate::bail!("n should be in range [1, 100]");
             }
             for x in array {
                 if !(1..=99).contains(&x) {
-                    bail!("all array values should be in range [1, 99]");
+                    crate::bail!("all array values should be in range [1, 99]");
                 }
             }
             Ok(())
@@ -173,10 +172,10 @@ mod generator_tests {
             let b = input.get_int()?;
             input.expect_end()?;
             if a != b {
-                bail!("a should be equal to b");
+                crate::bail!("a should be equal to b");
             }
             if !(1..=100).contains(&a) {
-                bail!("a and b should be in range [1, 100]");
+                crate::bail!("a and b should be in range [1, 100]");
             }
             Ok(())
         });
@@ -227,10 +226,10 @@ mod generator_tests {
             let b = input.get_int()?;
             input.expect_end()?;
             if a != b {
-                bail!("a should be equal to b");
+                crate::bail!("a should be equal to b");
             }
             if !(1..=100).contains(&a) {
-                bail!("a and b should be in range [1, 100]");
+                crate::bail!("a and b should be in range [1, 100]");
             }
             Ok(())
         });
@@ -281,10 +280,10 @@ mod generator_tests {
             let b = input.get_int()?;
             input.expect_end()?;
             if a != b {
-                bail!("a should be equal to b");
+                crate::bail!("a should be equal to b");
             }
             if !(1..=100).contains(&a) {
-                bail!("a and b should be in range [1, 100]");
+                crate::bail!("a and b should be in range [1, 100]");
             }
             Ok(())
         });
@@ -336,10 +335,10 @@ mod generator_tests {
             let b = input.get_int()?;
             input.expect_end()?;
             if a != b {
-                bail!("a should be equal to b");
+                crate::bail!("a should be equal to b");
             }
             if !(1..=100).contains(&a) {
-                bail!("a and b should be in range [1, 100]");
+                crate::bail!("a and b should be in range [1, 100]");
             }
             Ok(())
         });
@@ -391,10 +390,10 @@ mod generator_tests {
             let b = input.get_int()?;
             input.expect_end()?;
             if a != b {
-                bail!("a should be equal to b");
+                crate::bail!("a should be equal to b");
             }
             if !(1..=100).contains(&a) {
-                bail!("a and b should be in range [1, 100]");
+                crate::bail!("a and b should be in range [1, 100]");
             }
             Ok(())
         });
@@ -409,10 +408,10 @@ mod generator_tests {
             let b = input.get_int()?;
             input.expect_end()?;
             if !(1..=100).contains(&a) {
-                bail!("a should be in range [1, 100]");
+                crate::bail!("a should be in range [1, 100]");
             }
             if !(1..=100).contains(&b) {
-                bail!("b should be in range [1, 100]");
+                crate::bail!("b should be in range [1, 100]");
             }
             Ok(())
         });
@@ -430,10 +429,10 @@ mod generator_tests {
             let b = input.get_int()?;
             input.expect_end()?;
             if b != 1 {
-                bail!("b should be equal to 1");
+                crate::bail!("b should be equal to 1");
             }
             if !(1..=100).contains(&a) {
-                bail!("a should be in range [1, 100]");
+                crate::bail!("a should be in range [1, 100]");
             }
             Ok(())
         });
@@ -490,10 +489,10 @@ mod generator_tests {
             let b = input.get_int()?;
             input.expect_end()?;
             if a != b {
-                bail!("a should be equal to b");
+                crate::bail!("a should be equal to b");
             }
             if !(1..=100).contains(&a) {
-                bail!("a and b should be in range [1, 100]");
+                crate::bail!("a and b should be in range [1, 100]");
             }
             Ok(())
         });
@@ -508,10 +507,10 @@ mod generator_tests {
             let b = input.get_int()?;
             input.expect_end()?;
             if !(1..=100).contains(&a) {
-                bail!("a should be in range [1, 100]");
+                crate::bail!("a should be in range [1, 100]");
             }
             if !(1..=100).contains(&b) {
-                bail!("b should be in range [1, 100]");
+                crate::bail!("b should be in range [1, 100]");
             }
             Ok(())
         });
@@ -529,10 +528,10 @@ mod generator_tests {
             let b = input.get_int()?;
             input.expect_end()?;
             if b != 1 {
-                bail!("b should be equal to 1");
+                crate::bail!("b should be equal to 1");
             }
             if !(1..=100).contains(&a) {
-                bail!("a should be in range [1, 100]");
+                crate::bail!("a should be in range [1, 100]");
             }
             Ok(())
         });

@@ -59,7 +59,7 @@ impl Task {
             get_input_file_name: Box::new(|test_id, _subtask_id, _test_id_in_subtask| format!("test{test_id:0>3}.in")),
             get_output_file_name: Box::new(|test_id, _subtask_id, _test_id_in_subtask| format!("test{test_id:0>3}.out")),
             build_folder_path,
-            time_limit: 1.0,
+            time_limit: 5.0,
             subtasks: Vec::new(),
             partial_solutions: Vec::new(),
         }

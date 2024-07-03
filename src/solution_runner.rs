@@ -1,4 +1,3 @@
-use anyhow::{bail, Result};
 use std::path::PathBuf;
 
 #[cfg(windows)]
@@ -18,7 +17,7 @@ impl WindowsCompiler {
 }
 
 #[cfg(windows)]
-fn get_gcc_path() -> Result<WindowsCompiler> {
+fn get_gcc_path() -> anyhow::Result<WindowsCompiler> {
     if let Ok(gcc_path) = std::env::var("GCC_PATH") {
         return Ok(WindowsCompiler::FullPath(PathBuf::from(gcc_path)));
     }
@@ -38,10 +37,10 @@ fn get_gcc_path() -> Result<WindowsCompiler> {
         }
     }
 
-    bail!("g++ is not installed, specify the path to g++ with the GCC_PATH environment variable");
+    anyhow::bail!("g++ is not installed, specify the path to g++ with the GCC_PATH environment variable");
 }
 
-pub fn build_solution(source_file: &PathBuf, executable_file: &PathBuf) -> Result<bool> {
+pub fn build_solution(source_file: &PathBuf, executable_file: &PathBuf) -> anyhow::Result<bool> {
     // if solution executable exists, check if it's up to date
     if executable_file.exists() {
         let solution_last_modified = std::fs::metadata(source_file)?.modified()?;
@@ -66,7 +65,7 @@ pub fn build_solution(source_file: &PathBuf, executable_file: &PathBuf) -> Resul
 
         // check if g++ is installed
         if std::process::Command::new(gcc_path.get_path()).arg("--version").output().is_err() {
-            bail!("g++ is not installed");
+            anyhow::bail!("g++ is not installed");
         }
 
         let executable_file = prev_working_dir.join(executable_file);
@@ -76,7 +75,7 @@ pub fn build_solution(source_file: &PathBuf, executable_file: &PathBuf) -> Resul
         let process = process.arg("-std=c++17").arg("-O2").arg("-o").arg(executable_file).arg(source_file).output()?;
 
         if !process.status.success() {
-            bail!(
+            anyhow::bail!(
                 "Failed to build solution:\nstderr:\n{}\nstdout:\n{}\nstatus:{}\n",
                 String::from_utf8_lossy(&process.stderr),
                 String::from_utf8_lossy(&process.stdout),
@@ -89,7 +88,7 @@ pub fn build_solution(source_file: &PathBuf, executable_file: &PathBuf) -> Resul
     {
         // check if g++ is installed
         if std::process::Command::new("g++").arg("--version").output().is_err() {
-            bail!("g++ is not installed");
+            anyhow::bail!("g++ is not installed");
         }
 
         // invoke g++ to build solution
@@ -102,7 +101,7 @@ pub fn build_solution(source_file: &PathBuf, executable_file: &PathBuf) -> Resul
             .output()?;
 
         if !process.status.success() {
-            bail!(
+            anyhow::bail!(
                 "Failed to build solution:\nstderr:\n{}\nstdout:\n{}\nstatus:{}\n",
                 String::from_utf8_lossy(&process.stderr),
                 String::from_utf8_lossy(&process.stdout),
@@ -114,7 +113,7 @@ pub fn build_solution(source_file: &PathBuf, executable_file: &PathBuf) -> Resul
     Ok(true)
 }
 
-pub fn run_solution(executable_file: &PathBuf, input_file: &PathBuf, output_file: &PathBuf, time_limit: f32, test_id: i32) -> Result<f32> {
+pub fn run_solution(executable_file: &PathBuf, input_file: &PathBuf, output_file: &PathBuf, time_limit: f32, test_id: i32) -> anyhow::Result<f32> {
     // also time the solution
     let start_time = std::time::Instant::now();
 
@@ -142,7 +141,7 @@ pub fn run_solution(executable_file: &PathBuf, input_file: &PathBuf, output_file
         std::thread::sleep(std::time::Duration::from_millis(1));
         if start_time.elapsed().as_secs_f32() > time_limit {
             solution_process.kill()?;
-            bail!("Solution timed out on test {}", test_id);
+            anyhow::bail!("Solution timed out on test {}", test_id);
         }
     }
 
@@ -150,14 +149,14 @@ pub fn run_solution(executable_file: &PathBuf, input_file: &PathBuf, output_file
     let elapsed_time = start_time.elapsed().as_secs_f32();
 
     if !solution_status.success() {
-        bail!("Solution failed on test {}", test_id);
+        anyhow::bail!("Solution failed on test {}", test_id);
     }
 
     Ok(elapsed_time)
 }
 
 // ignores whitespace
-pub fn are_files_equal(file1: &PathBuf, file2: &PathBuf) -> Result<bool> {
+pub fn are_files_equal(file1: &PathBuf, file2: &PathBuf) -> anyhow::Result<bool> {
     let file1 = std::fs::read_to_string(file1)?;
     let file2 = std::fs::read_to_string(file2)?;
 
