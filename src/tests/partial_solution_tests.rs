@@ -429,7 +429,7 @@ mod partial_solution_tests {
         }
         "#;
 
-        std::fs::write( task_path.join("solution1.cpp"), partial_solution_contents).unwrap();
+        std::fs::write(task_path.join("solution1.cpp"), partial_solution_contents).unwrap();
 
         // subtask 1, the sum is less than 10^6
         let mut subtask1 = crate::Subtask::new(50);
