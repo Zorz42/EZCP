@@ -1,6 +1,7 @@
 use std::io::Write;
 use crate::logger::Logger;
 
+/// Prints a progress bar to stdout.
 pub fn print_progress_bar(progress: f32, logger: &Logger) {
     let size = termsize::get();
     logger.log(format!("\r {:.2}% [", progress * 100.0));
@@ -23,6 +24,7 @@ pub fn print_progress_bar(progress: f32, logger: &Logger) {
     std::io::stdout().flush().ok();
 }
 
+/// Clears the progress bar from stdout.
 pub fn clear_progress_bar(logger: &Logger) {
     let size = termsize::get();
     let bar_length = size.map_or(10, |size| size.cols as usize);

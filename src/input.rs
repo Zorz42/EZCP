@@ -1,4 +1,4 @@
-use anyhow::{anyhow, bail, Result};
+use crate::error::{Result,Error};
 
 /// Input is a helper struct for parsing input.
 /// It is used by the generators to parse the input string.
@@ -19,8 +19,8 @@ impl Input {
     pub fn get_int(&mut self) -> Result<i32> {
         self.iter
             .next()
-            .ok_or_else(|| anyhow!("Expected integer"))
-            .and_then(|s| s.parse().map_err(|_err| anyhow!("Expected integer")))
+            .ok_or_else(|| Error::InputExpectedInteger)
+            .and_then(|s| s.parse().map_err(|_err| Error::InputExpectedInteger))
     }
 
     /// This function returns the next float in the input.
@@ -28,20 +28,20 @@ impl Input {
     pub fn get_float(&mut self) -> Result<f32> {
         self.iter
             .next()
-            .ok_or_else(|| anyhow!("Expected float"))
-            .and_then(|s| s.parse().map_err(|_err| anyhow!("Expected float")))
+            .ok_or_else(|| Error::InputExpectedFloat)
+            .and_then(|s| s.parse().map_err(|_err| Error::InputExpectedFloat))
     }
 
     /// This function returns the next string in the input.
     /// If there is no next string, it returns an error.
     pub fn get_string(&mut self) -> Result<String> {
-        self.iter.next().ok_or_else(|| anyhow!("Expected string"))
+        self.iter.next().ok_or_else(|| Error::InputExpectedString)
     }
 
     /// This function expects the end of the input.
     /// If the input didn't end yet it returns an error.
     pub fn expect_end(&mut self) -> Result<()> {
-        self.iter.clone().peekable().peek().is_none().then_some(()).ok_or_else(|| anyhow!("Expected end of input"))
+        self.iter.clone().peekable().peek().is_none().then_some(()).ok_or_else(|| Error::InputExpectedEnd)
     }
 
     /// This function returns the next n integers in the input.
@@ -53,7 +53,7 @@ impl Input {
             if let Ok(next) = next {
                 result.push(next);
             } else {
-                bail!("Expected {} integers", n);
+                return Err(Error::ExpectedIntegers { n });
             }
         }
         Ok(result)

@@ -2,6 +2,7 @@ pub struct Logger {
     print_to_console: bool,
 }
 
+/// A simple println wrapper that can be turned off.
 impl Logger {
     pub const fn new(print_to_console: bool) -> Self {
         Self { print_to_console }
