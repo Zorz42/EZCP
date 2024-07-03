@@ -295,6 +295,7 @@ dependencies = [
  "serde",
  "snap",
  "termsize",
+ "thiserror",
  "zip",
 ]
 

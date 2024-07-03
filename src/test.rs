@@ -1,7 +1,23 @@
-use anyhow::{bail, Result};
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
+use thiserror::Error;
 
+#[derive(Error, Debug)]
+pub enum Error {
+    #[error("Test file already exists: {}", path.display())]
+    FileAlreadyExists { path: PathBuf },
+
+    #[error("Test file failed to copy: {} -> {} Error: {}", src.display(), dst.display(), err)]
+    FileCopy { src: PathBuf, dst: PathBuf, err: std::io::Error },
+
+    #[error("Failed to write test file: {} Error: {}", path.display(), err)]
+    FileWrite { path: PathBuf, err: std::io::Error },
+}
+
+type Result<T, E = Error> = std::result::Result<T, E>;
+
+/// A struct that represents a test generator.
+/// It contains a function that generates a test.
 pub struct TestGenerator {
     function: Box<dyn Fn() -> String>,
 }
@@ -16,7 +32,10 @@ impl TestGenerator {
     }
 }
 
-/// It takes a generator instead of a test
+/// A struct that represents a test.
+/// It contains a test generator.
+/// If you write the test to multiple files, it will be
+/// the same test even if the generator is non-deterministic.
 pub struct Test {
     input_generator: Rc<TestGenerator>,
     input_file: Option<PathBuf>,
@@ -27,24 +46,27 @@ impl Test {
         Self { input_generator, input_file: None }
     }
 
+    /// Generates input and writes it to file_path.
+    /// If input_file is already set, it will copy the file to file_path.
     pub fn generate_input(&mut self, file_path: &Path) -> Result<()> {
         if file_path.exists() {
-            bail!("File already exists: {:?}", file_path);
+            return Err(Error::FileAlreadyExists { path: file_path.to_path_buf() })
         }
 
         if let Some(input_file) = &self.input_file {
             // copy input file to file_path
-            std::fs::copy(input_file, file_path)?;
+            std::fs::copy(input_file, file_path).map_err(|err| Error::FileCopy { src: input_file.to_path_buf(), dst: file_path.to_path_buf(), err })?;
         } else {
             // generate input and write it to file_path
             let input = self.input_generator.generate();
             self.input_file = Some(file_path.to_path_buf());
-            std::fs::write(file_path, input)?;
+            std::fs::write(file_path, input).map_err(|err| Error::FileWrite { path: file_path.to_path_buf(), err })?;
         }
 
         Ok(())
     }
 
+    /// Resets the input file so that it will be generated again
     pub fn reset_input_file(&mut self) {
         self.input_file = None;
     }
