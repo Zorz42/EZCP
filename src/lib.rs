@@ -7,6 +7,7 @@ mod task;
 mod test;
 mod tests;
 mod progress_bar;
+mod error;
 
 pub use generators::{array_generator, array_generator_custom, array_to_string, Graph};
 pub use input::Input;
