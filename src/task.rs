@@ -1,8 +1,7 @@
 use crate::logger::Logger;
 use crate::solution_runner::{are_files_equal, build_solution, run_solution};
 use crate::subtask::Subtask;
-use crate::Input;
-use anyhow::{anyhow, bail, Result};
+use crate::{Error, Input, Result};
 use std::collections::HashSet;
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -136,7 +135,7 @@ impl Task {
         is_ok
     }
 
-    fn create_tests_inner2(&mut self, logger: &Logger, generate_cps: bool) -> Result<()> {
+    fn create_tests_inner2(&mut self, logger: &Logger, generate_cps: bool) -> anyhow::Result<()> {
         logger.logln("");
         let text = format!("Creating tests for task \"{}\"", self.name);
         // print = before and after text
@@ -161,7 +160,7 @@ impl Task {
 
         // check if solution file exists
         if !self.solution_path.exists() {
-            bail!("Solution file \"{}\" doesn't exist", self.solution_path.to_str().unwrap_or("path error"));
+            anyhow::bail!("Solution file \"{}\" doesn't exist", self.solution_path.to_str().unwrap_or("path error"));
         }
 
         // assign numbers to subtasks
@@ -196,7 +195,7 @@ impl Task {
     }
 
     #[allow(clippy::too_many_lines)]
-    fn generate_tests(&mut self, logger: &Logger, generate_cps: bool) -> Result<()> {
+    fn generate_tests(&mut self, logger: &Logger, generate_cps: bool) -> anyhow::Result<()> {
         // create tests directory if it doesn't exist and clear it
         std::fs::create_dir_all(&self.tests_path)?;
         for entry in std::fs::read_dir(&self.tests_path)? {
@@ -330,13 +329,13 @@ impl Task {
 
             for should_pass in &partial_solution.1 {
                 if !passed_subtasks.contains(should_pass) {
-                    bail!("Partial solution {partial_id} doesn't pass subtask {should_pass}");
+                    anyhow::bail!("Partial solution {partial_id} doesn't pass subtask {should_pass}");
                 }
             }
 
             for has_passed in &passed_subtasks {
                 if !partial_solution.1.contains(has_passed) {
-                    bail!("Partial solution {partial_id} passes subtask {has_passed} which it shouldn't");
+                    anyhow::bail!("Partial solution {partial_id} passes subtask {has_passed} which it shouldn't");
                 }
             }
         }
@@ -364,7 +363,7 @@ impl Task {
         loading_progress_max: i32,
         logger: &Logger,
         tests_written: &mut Vec<(PathBuf, PathBuf)>,
-    ) -> Result<()> {
+    ) -> anyhow::Result<()> {
         // check if subtask has already been visited
         if subtask_visited[subtask_number] {
             return Ok(());
@@ -409,17 +408,17 @@ impl Task {
         Ok(())
     }
 
-    fn get_total_tests(&self, subtask: &Subtask) -> Result<i32> {
+    fn get_total_tests(&self, subtask: &Subtask) -> anyhow::Result<i32> {
         let mut subtask_visited = vec![false; self.subtasks.len()];
         self.get_total_tests_inner(subtask.number, &mut subtask_visited)
     }
 
-    fn get_total_tests_inner(&self, subtask_number: usize, subtask_visited: &mut Vec<bool>) -> Result<i32> {
+    fn get_total_tests_inner(&self, subtask_number: usize, subtask_visited: &mut Vec<bool>) -> anyhow::Result<i32> {
         // check if subtask has already been visited
         if subtask_visited[subtask_number] {
             return Ok(0);
         }
-        *subtask_visited.get_mut(subtask_number).ok_or_else(|| anyhow!("Subtask number out of bounds"))? = true;
+        *subtask_visited.get_mut(subtask_number).ok_or_else(|| anyhow::anyhow!("Subtask number out of bounds"))? = true;
 
         let mut result = 0;
         for dependency in &self.subtasks[subtask_number].dependencies {
@@ -432,16 +431,18 @@ impl Task {
     }
 
     fn archive_tests(&self, test_files: &Vec<Vec<(PathBuf, PathBuf)>>) -> Result<()> {
-        let mut zipper = zip::ZipWriter::new(std::fs::File::create(&self.tests_archive_path)?);
+        let mut zipper = zip::ZipWriter::new(std::fs::File::create(&self.tests_archive_path).map_err(|err| Error::FileSystemError { err })?);
         let options = SimpleFileOptions::default().compression_method(zip::CompressionMethod::Deflated);
 
         for subtask in test_files {
             for (input_file, output_file) in subtask {
-                zipper.start_file(input_file.file_name().map_or("", |a| a.to_str().unwrap_or("")), options)?;
-                zipper.write_all(&std::fs::read(input_file)?)?;
+                zipper.start_file(input_file.file_name().map_or("", |a| a.to_str().unwrap_or("")), options).map_err(|err| Error::ZipError { err })?;
+                let input_file = std::fs::read(input_file).map_err(|err| Error::FileSystemError { err })?;
+                zipper.write_all(&input_file).map_err(|err| Error::FileSystemError { err })?;
 
-                zipper.start_file(output_file.file_name().map_or("", |a| a.to_str().unwrap_or("")), options)?;
-                zipper.write_all(&std::fs::read(output_file)?)?;
+                zipper.start_file(output_file.file_name().map_or("", |a| a.to_str().unwrap_or("")), options).map_err(|err| Error::ZipError { err })?;
+                let output_file = std::fs::read(output_file).map_err(|err| Error::FileSystemError { err })?;
+                zipper.write_all(&output_file).map_err(|err| Error::FileSystemError { err })?;
             }
         }
 
@@ -466,8 +467,8 @@ impl Task {
                 let input_file = self.get_input_file_path(cps_tests.tests.len() as i32, subtask.number as i32, subtask_tests.len() as i32);
                 let output_file = self.get_output_file_path(cps_tests.tests.len() as i32, subtask.number as i32, subtask_tests.len() as i32);
 
-                let input = std::fs::read_to_string(&input_file)?;
-                let output = std::fs::read_to_string(&output_file)?;
+                let input = std::fs::read_to_string(&input_file).map_err(|err| Error::FileSystemError { err })?;
+                let output = std::fs::read_to_string(&output_file).map_err(|err| Error::FileSystemError { err })?;
 
                 subtask_tests.push(cps_tests.tests.len());
 
@@ -477,9 +478,9 @@ impl Task {
         }
 
         let mut buffer = Vec::new();
-        bincode::serialize_into(&mut buffer, &cps_tests)?;
-        let data = snap::raw::Encoder::new().compress_vec(&buffer)?;
-        std::fs::write(&self.cps_tests_archive_path, data)?;
+        bincode::serialize_into(&mut buffer, &cps_tests).map_err(|err| Error::BincodeError { err })?;
+        let data = snap::raw::Encoder::new().compress_vec(&buffer).map_err(|err| Error::SnapError { err })?;
+        std::fs::write(&self.cps_tests_archive_path, data).map_err(|err| Error::FileSystemError { err })?;
 
         Ok(())
     }

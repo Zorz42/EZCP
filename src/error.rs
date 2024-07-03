@@ -6,14 +6,20 @@ pub enum Error {
     #[error("{message}")]
     CustomError { message: String },
 
-    #[error("Test file already exists: {path}")]
-    TestFileAlreadyExists { path: PathBuf },
+    #[error("File System Error: {err}")]
+    FileSystemError { err: std::io::Error },
 
-    #[error("Test file failed to copy: {src} -> {dst} Error: {err}")]
-    TestFileCopy { src: PathBuf, dst: PathBuf, err: std::io::Error },
+    #[error("Snap Error: {err}")]
+    SnapError { err: snap::Error },
 
-    #[error("Failed to write test file: {path} Error: {err}")]
-    TestFileWrite { path: PathBuf, err: std::io::Error },
+    #[error("Bincode Error: {err}")]
+    BincodeError { err: bincode::Error },
+
+    #[error("Zip Error: {err}")]
+    ZipError { err: zip::result::ZipError },
+
+    #[error("Test file {path} already exists")]
+    TestAlreadyExists { path: PathBuf },
 
     #[error("Expected integer in input")]
     InputExpectedInteger,

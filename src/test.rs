@@ -36,17 +36,17 @@ impl Test {
     /// If input_file is already set, it will copy the file to file_path.
     pub fn generate_input(&mut self, file_path: &Path) -> Result<()> {
         if file_path.exists() {
-            return Err(Error::TestFileAlreadyExists { path: file_path.to_path_buf() })
+            return Err(Error::TestAlreadyExists { path: file_path.to_path_buf() });
         }
 
         if let Some(input_file) = &self.input_file {
             // copy input file to file_path
-            std::fs::copy(input_file, file_path).map_err(|err| Error::TestFileCopy { src: input_file.to_path_buf(), dst: file_path.to_path_buf(), err })?;
+            std::fs::copy(input_file, file_path).map_err(|err| Error::FileSystemError { err })?;
         } else {
             // generate input and write it to file_path
             let input = self.input_generator.generate();
             self.input_file = Some(file_path.to_path_buf());
-            std::fs::write(file_path, input).map_err(|err| Error::TestFileWrite { path: file_path.to_path_buf(), err })?;
+            std::fs::write(file_path, input).map_err(|err| Error::FileSystemError { err })?;
         }
 
         Ok(())
