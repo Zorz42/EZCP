@@ -32,8 +32,8 @@ impl Test {
         Self { input_generator, input_file: None }
     }
 
-    /// Generates input and writes it to file_path.
-    /// If input_file is already set, it will copy the file to file_path.
+    /// Generates input and writes it to `file_path`.
+    /// If `input_file` is already set, it will copy the file to `file_path`.
     pub fn generate_input(&mut self, file_path: &Path) -> Result<()> {
         if file_path.exists() {
             return Err(Error::TestAlreadyExists { path: file_path.to_path_buf() });

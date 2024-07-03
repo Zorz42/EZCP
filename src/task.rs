@@ -206,7 +206,7 @@ impl Task {
         let num_tests = {
             let mut result = 0;
             for subtask in &self.subtasks {
-                result += self.get_total_tests(subtask)?;
+                result += self.get_total_tests(subtask);
             }
             result
         };
@@ -217,7 +217,7 @@ impl Task {
             for subtask in &self.subtasks {
                 if subtask.checker.is_some() {
                     // and for each check
-                    result += self.get_total_tests(subtask)?;
+                    result += self.get_total_tests(subtask);
                 }
             }
             result
@@ -258,7 +258,7 @@ impl Task {
         for (subtask_id, subtask) in self.subtasks.iter().enumerate() {
             let checker = &subtask.checker;
             if let Some(checker) = checker {
-                for test_id_in_subtask in 0..self.get_total_tests(subtask)? {
+                for test_id_in_subtask in 0..self.get_total_tests(subtask) {
                     let input_str = std::fs::read_to_string(self.get_input_file_path(curr_test_id, subtask_id as i32, test_id_in_subtask))?;
                     checker(Input::new(&input_str))?;
                     curr_test_id += 1;
@@ -269,7 +269,7 @@ impl Task {
                 clear_progress_bar(logger);
                 logger.logln(format!("\x1b[33mWarning: no checker for subtask {}\x1b[0m", subtask.number));
                 print_progress_bar((loading_progress as f32) / (loading_progress_max as f32), logger);
-                curr_test_id += self.get_total_tests(subtask)?;
+                curr_test_id += self.get_total_tests(subtask);
             }
         }
 
@@ -408,26 +408,26 @@ impl Task {
         Ok(())
     }
 
-    fn get_total_tests(&self, subtask: &Subtask) -> anyhow::Result<i32> {
+    fn get_total_tests(&self, subtask: &Subtask) -> i32 {
         let mut subtask_visited = vec![false; self.subtasks.len()];
         self.get_total_tests_inner(subtask.number, &mut subtask_visited)
     }
 
-    fn get_total_tests_inner(&self, subtask_number: usize, subtask_visited: &mut Vec<bool>) -> anyhow::Result<i32> {
+    fn get_total_tests_inner(&self, subtask_number: usize, subtask_visited: &mut Vec<bool>) -> i32 {
         // check if subtask has already been visited
         if subtask_visited[subtask_number] {
-            return Ok(0);
+            return 0;
         }
-        *subtask_visited.get_mut(subtask_number).ok_or_else(|| anyhow::anyhow!("Subtask number out of bounds"))? = true;
+        subtask_visited[subtask_number] = true;
 
         let mut result = 0;
         for dependency in &self.subtasks[subtask_number].dependencies {
-            result += self.get_total_tests_inner(*dependency, subtask_visited)?;
+            result += self.get_total_tests_inner(*dependency, subtask_visited);
         }
 
         result += self.subtasks[subtask_number].tests.len() as i32;
 
-        Ok(result)
+        result
     }
 
     fn archive_tests(&self, test_files: &Vec<Vec<(PathBuf, PathBuf)>>) -> Result<()> {
