@@ -1,7 +1,7 @@
+use crate::error::Result;
 use crate::test::{Test, TestGenerator};
 use crate::Input;
 use std::rc::Rc;
-use crate::error::Result;
 
 /// This struct represents a subtask.
 /// You can add tests, test generators and set a checker function.

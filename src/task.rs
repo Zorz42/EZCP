@@ -1,4 +1,5 @@
 use crate::logger::Logger;
+use crate::progress_bar::{clear_progress_bar, print_progress_bar};
 use crate::solution_runner::{are_files_equal, build_solution, run_solution};
 use crate::subtask::Subtask;
 use crate::{Error, Input, Result};
@@ -6,7 +7,6 @@ use std::collections::HashSet;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use zip::write::SimpleFileOptions;
-use crate::progress_bar::{clear_progress_bar, print_progress_bar};
 
 #[derive(serde::Serialize)]
 pub struct CPSTests {
@@ -210,7 +210,7 @@ impl Task {
         // calculate how many steps there are in total for the progress bar. If checkers are missing, it is less steps.
         let loading_progress_max = {
             // 2 generating input and producing output and num_tests for every partial solution
-            let mut result= 2 * num_tests + self.partial_solutions.len() as i32 * num_tests;
+            let mut result = 2 * num_tests + self.partial_solutions.len() as i32 * num_tests;
             for subtask in &self.subtasks {
                 if subtask.checker.is_some() {
                     // and for each check
@@ -223,7 +223,7 @@ impl Task {
         logger.logln("Generating tests...");
 
         let mut loading_progress = 0;
-        
+
         // Generate and write tests for each subtask
         let mut curr_test_id = 0;
         print_progress_bar(0.0, logger);
@@ -319,23 +319,30 @@ impl Task {
                             err_message = err.to_string();
                             subtask_failed = true;
                         }
-                        
+
                         if !are_files_equal(&temp_output_file, output_file)? {
-                            err_message = "Wrong answer".to_owned();
+                            "Wrong answer".clone_into(&mut err_message);
                             subtask_failed = true;
                         }
                     }
-                    
+
                     loading_progress += 1;
                     curr_test_id += 1;
                 }
 
                 if subtask_failed && partial_solution.1.contains(&subtask_id) {
-                    return Err(Error::PartialSolutionFailsSubtask { partial_number: partial_id + 1, subtask_number: subtask_id, message: err_message });
+                    return Err(Error::PartialSolutionFailsSubtask {
+                        partial_number: partial_id + 1,
+                        subtask_number: subtask_id,
+                        message: err_message,
+                    });
                 }
-                
+
                 if !subtask_failed && !partial_solution.1.contains(&subtask_id) {
-                    return Err(Error::PartialSolutionPassesExtraSubtask { partial_number: partial_id + 1, subtask_number: subtask_id });
+                    return Err(Error::PartialSolutionPassesExtraSubtask {
+                        partial_number: partial_id + 1,
+                        subtask_number: subtask_id,
+                    });
                 }
             }
         }
@@ -392,11 +399,15 @@ impl Task {
 
         for subtask in test_files {
             for (input_file, output_file) in subtask {
-                zipper.start_file(input_file.file_name().map_or("", |a| a.to_str().unwrap_or("")), options).map_err(|err| Error::ZipError { err })?;
+                zipper
+                    .start_file(input_file.file_name().map_or("", |a| a.to_str().unwrap_or("")), options)
+                    .map_err(|err| Error::ZipError { err })?;
                 let input_file = std::fs::read(input_file).map_err(|err| Error::IOError { err })?;
                 zipper.write_all(&input_file).map_err(|err| Error::IOError { err })?;
 
-                zipper.start_file(output_file.file_name().map_or("", |a| a.to_str().unwrap_or("")), options).map_err(|err| Error::ZipError { err })?;
+                zipper
+                    .start_file(output_file.file_name().map_or("", |a| a.to_str().unwrap_or("")), options)
+                    .map_err(|err| Error::ZipError { err })?;
                 let output_file = std::fs::read(output_file).map_err(|err| Error::IOError { err })?;
                 zipper.write_all(&output_file).map_err(|err| Error::IOError { err })?;
             }

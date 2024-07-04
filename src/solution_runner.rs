@@ -1,5 +1,5 @@
+use crate::{Error, Result};
 use std::path::PathBuf;
-use crate::{Result, Error};
 
 #[cfg(windows)]
 enum WindowsCompiler {
@@ -45,7 +45,10 @@ pub fn build_solution(source_file: &PathBuf, executable_file: &PathBuf) -> Resul
     // if solution executable exists, check if it's up to date
     if executable_file.exists() {
         let solution_last_modified = std::fs::metadata(source_file).map_err(|err| Error::IOError { err })?.modified().map_err(|err| Error::IOError { err })?;
-        let solution_exe_last_modified = std::fs::metadata(executable_file).map_err(|err| Error::IOError { err })?.modified().map_err(|err| Error::IOError { err })?;
+        let solution_exe_last_modified = std::fs::metadata(executable_file)
+            .map_err(|err| Error::IOError { err })?
+            .modified()
+            .map_err(|err| Error::IOError { err })?;
 
         if solution_exe_last_modified > solution_last_modified {
             return Ok(false);
@@ -73,11 +76,20 @@ pub fn build_solution(source_file: &PathBuf, executable_file: &PathBuf) -> Resul
         let source_file = prev_working_dir.join(source_file);
 
         // invoke g++ to build solution
-        let process = process.arg("-std=c++17").arg("-O2").arg("-o").arg(executable_file).arg(source_file).output().map_err(|err| Error::IOError { err })?;
+        let process = process
+            .arg("-std=c++17")
+            .arg("-O2")
+            .arg("-o")
+            .arg(executable_file)
+            .arg(source_file)
+            .output()
+            .map_err(|err| Error::IOError { err })?;
 
         if !process.status.success() {
-            return Err(Error::CompilerError { stderr: String::from_utf8_lossy(&process.stderr).to_string(),
-                stdout: String::from_utf8_lossy(&process.stdout).to_string() })
+            return Err(Error::CompilerError {
+                stderr: String::from_utf8_lossy(&process.stderr).to_string(),
+                stdout: String::from_utf8_lossy(&process.stdout).to_string(),
+            });
         }
     }
 
@@ -95,11 +107,14 @@ pub fn build_solution(source_file: &PathBuf, executable_file: &PathBuf) -> Resul
             .arg("-o")
             .arg(executable_file)
             .arg(source_file)
-            .output().map_err(|err| Error::IOError { err })?;
+            .output()
+            .map_err(|err| Error::IOError { err })?;
 
         if !process.status.success() {
-            return Err(Error::CompilerError { stderr: String::from_utf8_lossy(&process.stderr).to_string(),
-                stdout: String::from_utf8_lossy(&process.stdout).to_string() })
+            return Err(Error::CompilerError {
+                stderr: String::from_utf8_lossy(&process.stderr).to_string(),
+                stdout: String::from_utf8_lossy(&process.stdout).to_string(),
+            });
         }
     }
 
@@ -131,7 +146,8 @@ pub fn run_solution(executable_file: &PathBuf, input_file: &PathBuf, output_file
     let mut solution_process = solution_process
         .stdin(std::fs::File::open(input_file).map_err(|err| Error::IOError { err })?)
         .stdout(std::fs::File::create(output_file).map_err(|err| Error::IOError { err })?)
-        .spawn().map_err(|err| Error::IOError { err })?;
+        .spawn()
+        .map_err(|err| Error::IOError { err })?;
 
     while solution_process.try_wait().map_err(|err| Error::IOError { err })?.is_none() {
         std::thread::sleep(std::time::Duration::from_millis(1));
@@ -145,7 +161,7 @@ pub fn run_solution(executable_file: &PathBuf, input_file: &PathBuf, output_file
     let elapsed_time = start_time.elapsed().as_secs_f32();
 
     if !solution_status.success() {
-        return Err(Error::SolutionFailed { test_number: test_id  });
+        return Err(Error::SolutionFailed { test_number: test_id });
     }
 
     Ok(elapsed_time)

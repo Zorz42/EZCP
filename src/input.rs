@@ -1,4 +1,4 @@
-use crate::error::{Result,Error};
+use crate::error::{Error, Result};
 
 /// Input is a helper struct for parsing input.
 /// It is used by the generators to parse the input string.

@@ -1,6 +1,6 @@
+use crate::error::{Error, Result};
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
-use crate::error::{Error, Result};
 
 /// A struct that represents a test generator.
 /// It contains a function that generates a test.

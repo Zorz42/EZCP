@@ -4,7 +4,7 @@ mod array_tests {
     use crate::tests::generic_tests::generic_tests::{initialize_test, TESTS_DIR};
     use crate::{array_generator, Error, Subtask, Task};
     use std::path::PathBuf;
-    
+
     #[test]
     fn test_array_generator() {
         initialize_test();
@@ -115,7 +115,7 @@ mod array_tests {
         task.add_subtask_dependency(subtask2, subtask1);
 
         for _ in 0..10 {
-            assert!(matches!(task.create_tests().unwrap_err(), Error::CustomError{..}));
+            assert!(matches!(task.create_tests().unwrap_err(), Error::CustomError { .. }));
         }
     }
 }

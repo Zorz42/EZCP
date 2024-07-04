@@ -1,8 +1,8 @@
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod partial_solution_tests {
-    use crate::{array_generator, Error};
     use crate::tests::generic_tests::generic_tests::TESTS_DIR;
+    use crate::{array_generator, Error};
     use std::path::PathBuf;
 
     #[test]

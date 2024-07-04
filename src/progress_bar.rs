@@ -1,5 +1,5 @@
-use std::io::Write;
 use crate::logger::Logger;
+use std::io::Write;
 
 /// Prints a progress bar to stdout.
 pub fn print_progress_bar(progress: f32, logger: &Logger) {
