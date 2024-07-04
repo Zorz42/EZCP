@@ -183,7 +183,7 @@ impl Task {
 
         for (i, partial_solution) in self.partial_solutions.iter().enumerate() {
             logger.logln("Building partial solution...");
-            let has_built = build_solution(&partial_solution.0, &self.build_folder_path.join(format!("partial_solution_{i}")))?;
+            let has_built = build_solution(&partial_solution.0, &self.build_folder_path.join(format!("partial_solution_{}", i + 1)))?;
             if !has_built {
                 logger.logln(format!("Skipping partial solution {i} compilation as it is up to date."));
             }
@@ -202,7 +202,7 @@ impl Task {
             std::fs::remove_file(entry?.path())?;
         }
 
-        // count how many tests there are in total (if one subtask is a dependency of another, its tests are counted twice)
+        // count how many tests there are in total (if one subtask is a dependency of another, its tests are counted multiple times)
         let num_tests = {
             let mut result = 0;
             for subtask in &self.subtasks {
@@ -213,7 +213,8 @@ impl Task {
 
         // calculate how many steps there are in total for the progress bar. If checkers are missing, it is less steps.
         let loading_progress_max = {
-            let mut result = 2 * num_tests + self.partial_solutions.len() as i32 * num_tests; // 2 generating input and producing output and num_tests for every partial solution
+            // 2 generating input and producing output and num_tests for every partial solution
+            let mut result= 2 * num_tests + self.partial_solutions.len() as i32 * num_tests;
             for subtask in &self.subtasks {
                 if subtask.checker.is_some() {
                     // and for each check
@@ -225,29 +226,40 @@ impl Task {
 
         logger.logln("Generating tests...");
 
+        let mut loading_progress = 0;
+        
         // Generate and write tests for each subtask
         let mut curr_test_id = 0;
         print_progress_bar(0.0, logger);
         let mut test_files = Vec::new();
-        for subtask_number in 0..self.subtasks.len() {
+        for master_subtask in 0..self.subtasks.len() {
             let mut curr_local_test_id = 0;
-            let mut subtask_visited = vec![false; self.subtasks.len()];
             let mut tests_written = Vec::new();
-            self.write_tests_for_subtask(
-                subtask_number,
-                subtask_number,
-                &mut curr_test_id,
-                &mut curr_local_test_id,
-                &mut subtask_visited,
-                loading_progress_max,
-                logger,
-                &mut tests_written,
-            )?;
+
+            let dependencies = self.get_all_dependencies(&self.subtasks[master_subtask]);
+            for subtask_number in dependencies {
+                // generate input files paths for all tests because of rust borrow checker
+                let mut tests_input_files = Vec::new();
+                let num_tests = self.subtasks[subtask_number].tests.len();
+                for _ in 0..num_tests {
+                    let input_path = self.get_input_file_path(curr_test_id, master_subtask as i32, curr_local_test_id);
+                    let output_path = self.get_output_file_path(curr_test_id, master_subtask as i32, curr_local_test_id);
+                    tests_input_files.push(input_path.clone());
+                    tests_written.push((input_path, output_path));
+                    curr_test_id += 1;
+                    curr_local_test_id += 1;
+                }
+
+                // generate input files for all tests
+                for (test, input_file) in &mut self.subtasks[subtask_number].tests.iter_mut().zip(tests_input_files) {
+                    test.generate_input(&input_file)?;
+                    loading_progress += 1;
+                    print_progress_bar((loading_progress as f32) / (loading_progress_max as f32), logger);
+                }
+            }
+
             test_files.push(tests_written);
         }
-
-        // loading progress at this point is exactly num_tests
-        let mut loading_progress = num_tests;
 
         clear_progress_bar(logger);
         logger.logln("Checking tests...");
@@ -294,7 +306,7 @@ impl Task {
         let tests_size = fs_extra::dir::get_size(&self.tests_path)? as f32 / 1_000_000.0;
 
         for (partial_id, partial_solution) in self.partial_solutions.iter().enumerate() {
-            logger.logln(format!("Checking partial solution {partial_id}..."));
+            logger.logln(format!("Checking partial solution {}...", partial_id + 1));
 
             let mut passed_subtasks = HashSet::new();
 
@@ -303,22 +315,17 @@ impl Task {
                 let mut subtask_failed = false;
                 for (input_file, output_file) in subtask_tests {
                     if !subtask_failed {
-                        let exe_path = self.build_folder_path.join(format!("partial_solution_{partial_id}"));
+                        let exe_path = self.build_folder_path.join(format!("partial_solution_{}", partial_id + 1));
                         let temp_output_file = self.build_folder_path.join("temp_output");
 
                         let result = run_solution(&exe_path, input_file, &temp_output_file, self.time_limit, curr_test_id);
 
-                        if result.is_err() {
+                        if result.is_err() || !are_files_equal(&temp_output_file, output_file)? {
                             subtask_failed = true;
-                            continue;
-                        }
-
-                        if !are_files_equal(&temp_output_file, output_file)? {
-                            subtask_failed = true;
-                            continue;
                         }
                     }
-
+                    
+                    loading_progress += 1;
                     curr_test_id += 1;
                 }
 
@@ -350,63 +357,8 @@ impl Task {
 
         logger.logln(format!("\x1b[36;1mMax solution time: {max_elapsed_time:.2}s, tests size: {tests_size:.2}MB\x1b[0m"));
 
-        //debug_assert_eq!(loading_progress, loading_progress_max);
+        debug_assert_eq!(loading_progress, loading_progress_max);
 
-        Ok(())
-    }
-
-    fn write_tests_for_subtask(
-        &mut self,
-        subtask_number: usize,
-        master_subtask: usize,
-        curr_test_id: &mut i32,
-        curr_local_test_id: &mut i32,
-        subtask_visited: &mut Vec<bool>,
-        loading_progress_max: i32,
-        logger: &Logger,
-        tests_written: &mut Vec<(PathBuf, PathBuf)>,
-    ) -> Result<()> {
-        // check if subtask has already been visited
-        if subtask_visited[subtask_number] {
-            return Ok(());
-        }
-        subtask_visited[subtask_number] = true;
-
-        // first, write tests for dependencies
-        let dependencies = self.subtasks[subtask_number].dependencies.clone();
-        for dependency in dependencies {
-            self.write_tests_for_subtask(
-                dependency,
-                master_subtask,
-                curr_test_id,
-                curr_local_test_id,
-                subtask_visited,
-                loading_progress_max,
-                logger,
-                tests_written,
-            )?;
-        }
-
-        // generate input files paths for all tests because of rust borrow checker
-        let mut tests_input_files = Vec::new();
-        let num_tests = self.subtasks[subtask_number].tests.len();
-        let initial_progress = *curr_test_id;
-        for _ in 0..num_tests {
-            let input_path = self.get_input_file_path(*curr_test_id, master_subtask as i32, *curr_local_test_id);
-            let output_path = self.get_output_file_path(*curr_test_id, master_subtask as i32, *curr_local_test_id);
-            tests_input_files.push(input_path.clone());
-            tests_written.push((input_path, output_path));
-            *curr_test_id += 1;
-            *curr_local_test_id += 1;
-        }
-
-        // generate input files for all tests
-        let mut progress = initial_progress;
-        for (test, input_file) in &mut self.subtasks[subtask_number].tests.iter_mut().zip(tests_input_files) {
-            progress += 1;
-            test.generate_input(&input_file)?;
-            print_progress_bar((progress as f32) / (loading_progress_max as f32), logger);
-        }
         Ok(())
     }
 
