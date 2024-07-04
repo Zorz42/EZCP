@@ -120,5 +120,5 @@ fn main() {
     task.add_partial_solution("solution1.cpp", &[subtask1]);
 
     // finally create the tests
-    task.create_tests();
+    task.create_tests().ok();
 }

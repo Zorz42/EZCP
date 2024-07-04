@@ -33,8 +33,8 @@ pub mod generic_tests {
         std::fs::write(task_path.join("solution.cpp"), solution_contents).unwrap();
 
         for _ in 0..10 {
-            assert!(task.create_tests());
-            assert!(task.create_tests_for_cps());
+            assert!(task.create_tests().is_ok());
+            assert!(task.create_tests_for_cps().is_ok());
         }
     }
 
@@ -73,8 +73,8 @@ pub mod generic_tests {
         task.add_subtask(subtask3);
 
         for _ in 0..10 {
-            assert!(task.create_tests());
-            assert!(task.create_tests_for_cps());
+            assert!(task.create_tests().is_ok());
+            assert!(task.create_tests_for_cps().is_ok());
         }
     }
 
@@ -121,8 +121,8 @@ pub mod generic_tests {
         task.add_subtask(subtask3);
 
         for _ in 0..10 {
-            assert!(task.create_tests());
-            assert!(task.create_tests_for_cps());
+            assert!(task.create_tests().is_ok());
+            assert!(task.create_tests_for_cps().is_ok());
         }
     }
 
@@ -138,8 +138,8 @@ pub mod generic_tests {
         std::fs::create_dir_all(task_path).unwrap();
 
         for _ in 0..10 {
-            assert!(!task.create_tests());
-            assert!(!task.create_tests_for_cps());
+            assert!(!task.create_tests().is_ok());
+            assert!(!task.create_tests_for_cps().is_ok());
         }
     }
 
@@ -183,8 +183,8 @@ pub mod generic_tests {
         task.add_subtask(subtask1);
 
         for _ in 0..3 {
-            assert!(!task.create_tests());
-            assert!(!task.create_tests_for_cps());
+            assert!(!task.create_tests().is_ok());
+            assert!(!task.create_tests_for_cps().is_ok());
         }
     }
 
@@ -216,8 +216,8 @@ pub mod generic_tests {
         task.add_subtask(subtask1);
 
         for _ in 0..10 {
-            assert!(!task.create_tests());
-            assert!(!task.create_tests_for_cps());
+            assert!(!task.create_tests().is_ok());
+            assert!(!task.create_tests_for_cps().is_ok());
         }
     }
 
@@ -267,8 +267,8 @@ pub mod generic_tests {
         task.add_subtask(subtask3);
 
         for _ in 0..10 {
-            assert!(task.create_tests());
-            assert!(task.create_tests_for_cps());
+            assert!(task.create_tests().is_ok());
+            assert!(task.create_tests_for_cps().is_ok());
         }
     }
 
@@ -318,8 +318,8 @@ pub mod generic_tests {
         task.add_subtask(subtask3);
 
         for _ in 0..10 {
-            assert!(task.create_tests());
-            assert!(task.create_tests_for_cps());
+            assert!(task.create_tests().is_ok());
+            assert!(task.create_tests_for_cps().is_ok());
         }
     }
 
@@ -369,8 +369,8 @@ pub mod generic_tests {
         task.add_subtask(subtask3);
 
         for _ in 0..10 {
-            assert!(task.create_tests());
-            assert!(task.create_tests_for_cps());
+            assert!(task.create_tests().is_ok());
+            assert!(task.create_tests_for_cps().is_ok());
         }
     }
 }

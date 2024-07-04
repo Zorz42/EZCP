@@ -109,13 +109,13 @@ mod array_tests {
         task.add_subtask(subtask3);
 
         for _ in 0..10 {
-            assert!(task.create_tests());
+            assert!(task.create_tests().is_ok());
         }
 
         task.add_subtask_dependency(subtask2, subtask1);
 
         for _ in 0..10 {
-            assert!(!task.create_tests());
+            assert!(!task.create_tests().is_ok());
         }
     }
 }

@@ -116,5 +116,5 @@ fn main() {
     task.add_subtask_dependency(subtask3, subtask2);
     task.add_subtask_dependency(subtask4, subtask3);
 
-    task.create_tests();
+    task.create_tests().ok();
 }

@@ -102,40 +102,36 @@ impl Task {
 
     /// This function does all the work.
     /// It builds the solution and all partial solutions, generates tests and checks them.
-    pub fn create_tests(&mut self) -> bool {
+    pub fn create_tests(&mut self) -> Result<()> {
         self.create_tests_inner1(true, false)
     }
 
     /// This is the same as `create_tests` but it doesn't print anything.
-    pub fn create_tests_no_print(&mut self) -> bool {
+    pub fn create_tests_no_print(&mut self) -> Result<()> {
         self.create_tests_inner1(false, false)
     }
 
     /// This also generates a CPS file.
-    pub fn create_tests_for_cps(&mut self) -> bool {
+    pub fn create_tests_for_cps(&mut self) -> Result<()> {
         self.create_tests_inner1(true, true)
     }
 
-    fn create_tests_inner1(&mut self, print_output: bool, generate_cps: bool) -> bool {
+    fn create_tests_inner1(&mut self, print_output: bool, generate_cps: bool) -> Result<()> {
         let logger = Logger::new(print_output);
 
         let start_time = std::time::Instant::now();
         let res = self.create_tests_inner2(&logger, generate_cps);
-        let is_ok = res.is_ok();
         if let Err(err) = res {
             logger.logln(format!("\n\x1b[31;1mError: {err}\x1b[0m"));
-            // print backtrace if not in release mode
-            if cfg!(debug_assertions) {
-                logger.logln(format!("\x1b[31;1mBacktrace: {backtrace}\x1b[0m", backtrace = err.backtrace()));
-            }
+            Err(err)
         } else {
             logger.logln("\n\x1b[32;1mSuccess!\x1b[0m");
+            logger.logln(format!("\x1b[36;1mElapsed time: {:.2}s\n\x1b[0m", start_time.elapsed().as_secs_f32()));
+            Ok(())
         }
-        logger.logln(format!("\x1b[36;1mElapsed time: {:.2}s\n\x1b[0m", start_time.elapsed().as_secs_f32()));
-        is_ok
     }
 
-    fn create_tests_inner2(&mut self, logger: &Logger, generate_cps: bool) -> anyhow::Result<()> {
+    fn create_tests_inner2(&mut self, logger: &Logger, generate_cps: bool) -> Result<()> {
         logger.logln("");
         let text = format!("Creating tests for task \"{}\"", self.name);
         // print = before and after text
@@ -155,12 +151,12 @@ impl Task {
 
         // create build directory if it doesn't exist
         if !self.build_folder_path.exists() {
-            std::fs::create_dir_all(&self.build_folder_path)?;
+            std::fs::create_dir_all(&self.build_folder_path).map_err(|err| Error::IOError { err })?;
         }
 
         // check if solution file exists
         if !self.solution_path.exists() {
-            anyhow::bail!("Solution file \"{}\" doesn't exist", self.solution_path.to_str().unwrap_or("path error"));
+            return Err(Error::MissingSolutionFile { path: self.solution_path.clone() });
         }
 
         // assign numbers to subtasks
@@ -195,11 +191,11 @@ impl Task {
     }
 
     #[allow(clippy::too_many_lines)]
-    fn generate_tests(&mut self, logger: &Logger, generate_cps: bool) -> anyhow::Result<()> {
+    fn generate_tests(&mut self, logger: &Logger, generate_cps: bool) -> Result<()> {
         // create tests directory if it doesn't exist and clear it
-        std::fs::create_dir_all(&self.tests_path)?;
-        for entry in std::fs::read_dir(&self.tests_path)? {
-            std::fs::remove_file(entry?.path())?;
+        std::fs::create_dir_all(&self.tests_path).map_err(|err| Error::IOError { err })?;
+        for entry in std::fs::read_dir(&self.tests_path).map_err(|err| Error::IOError { err })? {
+            std::fs::remove_file(entry.map_err(|err| Error::IOError { err })?.path()).map_err(|err| Error::IOError { err })?;
         }
 
         // count how many tests there are in total (if one subtask is a dependency of another, its tests are counted multiple times)
@@ -271,7 +267,7 @@ impl Task {
             let checker = &subtask.checker;
             if let Some(checker) = checker {
                 for test_id_in_subtask in 0..self.get_total_tests(subtask) {
-                    let input_str = std::fs::read_to_string(self.get_input_file_path(curr_test_id, subtask_id as i32, test_id_in_subtask))?;
+                    let input_str = std::fs::read_to_string(self.get_input_file_path(curr_test_id, subtask_id as i32, test_id_in_subtask)).map_err(|err| Error::IOError { err })?;
                     checker(Input::new(&input_str))?;
                     curr_test_id += 1;
                     loading_progress += 1;
@@ -303,7 +299,7 @@ impl Task {
             }
         }
         clear_progress_bar(logger);
-        let tests_size = fs_extra::dir::get_size(&self.tests_path)? as f32 / 1_000_000.0;
+        let tests_size = fs_extra::dir::get_size(&self.tests_path).unwrap_or(0) as f32 / 1_000_000.0;
 
         for (partial_id, partial_solution) in self.partial_solutions.iter().enumerate() {
             logger.logln(format!("Checking partial solution {}...", partial_id + 1));
@@ -336,13 +332,13 @@ impl Task {
 
             for should_pass in &partial_solution.1 {
                 if !passed_subtasks.contains(should_pass) {
-                    anyhow::bail!("Partial solution {partial_id} doesn't pass subtask {should_pass}");
+                    return Err(Error::PartialSolutionFailsSubtask { partial_number: partial_id, subtask_number: *should_pass })
                 }
             }
 
             for has_passed in &passed_subtasks {
                 if !partial_solution.1.contains(has_passed) {
-                    anyhow::bail!("Partial solution {partial_id} passes subtask {has_passed} which it shouldn't");
+                    return Err(Error::PartialSolutionPassesExtraSubtask { partial_number: partial_id, subtask_number: *has_passed })
                 }
             }
         }

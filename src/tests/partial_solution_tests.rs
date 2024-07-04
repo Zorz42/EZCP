@@ -77,7 +77,7 @@ mod partial_solution_tests {
         task.add_partial_solution("solution1.cpp", &[subtask1]);
 
         for _ in 0..10 {
-            assert!(task.create_tests());
+            assert!(task.create_tests().is_ok());
         }
     }
 
@@ -153,7 +153,7 @@ mod partial_solution_tests {
         task.add_partial_solution("solution1.cpp", &[subtask2]);
 
         for _ in 0..10 {
-            assert!(!task.create_tests());
+            assert!(!task.create_tests().is_ok());
         }
     }
 
@@ -229,7 +229,7 @@ mod partial_solution_tests {
         task.add_partial_solution("solution1.cpp", &[subtask1]);
 
         for _ in 0..10 {
-            assert!(!task.create_tests());
+            assert!(!task.create_tests().is_ok());
         }
     }
 
@@ -306,7 +306,7 @@ mod partial_solution_tests {
         task.add_partial_solution("solution1.cpp", &[subtask1]);
 
         for _ in 0..10 {
-            assert!(task.create_tests());
+            assert!(task.create_tests().is_ok());
         }
     }
 
@@ -375,7 +375,7 @@ mod partial_solution_tests {
         task.add_partial_solution("solution1.cpp", &[]);
 
         for _ in 0..10 {
-            assert!(task.create_tests());
+            assert!(task.create_tests().is_ok());
         }
     }
 
@@ -452,7 +452,7 @@ mod partial_solution_tests {
         task.add_partial_solution("solution1.cpp", &[subtask1]);
 
         for _ in 0..10 {
-            assert!(!task.create_tests());
+            assert!(!task.create_tests().is_ok());
         }
     }
 }

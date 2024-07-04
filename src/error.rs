@@ -53,6 +53,15 @@ pub enum Error {
     
     #[error("Solution returned wrong answer on test {test_number}")]
     SolutionWrongAnswer { test_number: i32 },
+    
+    #[error("Partial solution {partial_number} passes extra subtask {subtask_number}")]
+    PartialSolutionPassesExtraSubtask { subtask_number: usize, partial_number: usize },
+    
+    #[error("Partial solution {partial_number} does not pass subtask {subtask_number}")]
+    PartialSolutionFailsSubtask { subtask_number: usize, partial_number: usize },
+    
+    #[error("Missing solution file {path}")]
+    MissingSolutionFile { path: PathBuf },
 }
 
 pub type Result<T, E = Error> = std::result::Result<T, E>;
