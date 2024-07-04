@@ -394,18 +394,18 @@ impl Task {
     }
 
     fn archive_tests(&self, test_files: &Vec<Vec<(PathBuf, PathBuf)>>) -> Result<()> {
-        let mut zipper = zip::ZipWriter::new(std::fs::File::create(&self.tests_archive_path).map_err(|err| Error::FileSystemError { err })?);
+        let mut zipper = zip::ZipWriter::new(std::fs::File::create(&self.tests_archive_path).map_err(|err| Error::IOError { err })?);
         let options = SimpleFileOptions::default().compression_method(zip::CompressionMethod::Deflated);
 
         for subtask in test_files {
             for (input_file, output_file) in subtask {
                 zipper.start_file(input_file.file_name().map_or("", |a| a.to_str().unwrap_or("")), options).map_err(|err| Error::ZipError { err })?;
-                let input_file = std::fs::read(input_file).map_err(|err| Error::FileSystemError { err })?;
-                zipper.write_all(&input_file).map_err(|err| Error::FileSystemError { err })?;
+                let input_file = std::fs::read(input_file).map_err(|err| Error::IOError { err })?;
+                zipper.write_all(&input_file).map_err(|err| Error::IOError { err })?;
 
                 zipper.start_file(output_file.file_name().map_or("", |a| a.to_str().unwrap_or("")), options).map_err(|err| Error::ZipError { err })?;
-                let output_file = std::fs::read(output_file).map_err(|err| Error::FileSystemError { err })?;
-                zipper.write_all(&output_file).map_err(|err| Error::FileSystemError { err })?;
+                let output_file = std::fs::read(output_file).map_err(|err| Error::IOError { err })?;
+                zipper.write_all(&output_file).map_err(|err| Error::IOError { err })?;
             }
         }
 
@@ -430,8 +430,8 @@ impl Task {
                 let input_file = self.get_input_file_path(cps_tests.tests.len() as i32, subtask.number as i32, subtask_tests.len() as i32);
                 let output_file = self.get_output_file_path(cps_tests.tests.len() as i32, subtask.number as i32, subtask_tests.len() as i32);
 
-                let input = std::fs::read_to_string(&input_file).map_err(|err| Error::FileSystemError { err })?;
-                let output = std::fs::read_to_string(&output_file).map_err(|err| Error::FileSystemError { err })?;
+                let input = std::fs::read_to_string(&input_file).map_err(|err| Error::IOError { err })?;
+                let output = std::fs::read_to_string(&output_file).map_err(|err| Error::IOError { err })?;
 
                 subtask_tests.push(cps_tests.tests.len());
 
@@ -443,7 +443,7 @@ impl Task {
         let mut buffer = Vec::new();
         bincode::serialize_into(&mut buffer, &cps_tests).map_err(|err| Error::BincodeError { err })?;
         let data = snap::raw::Encoder::new().compress_vec(&buffer).map_err(|err| Error::SnapError { err })?;
-        std::fs::write(&self.cps_tests_archive_path, data).map_err(|err| Error::FileSystemError { err })?;
+        std::fs::write(&self.cps_tests_archive_path, data).map_err(|err| Error::IOError { err })?;
 
         Ok(())
     }

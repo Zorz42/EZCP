@@ -44,8 +44,8 @@ fn get_gcc_path() -> Result<WindowsCompiler> {
 pub fn build_solution(source_file: &PathBuf, executable_file: &PathBuf) -> Result<bool> {
     // if solution executable exists, check if it's up to date
     if executable_file.exists() {
-        let solution_last_modified = std::fs::metadata(source_file).map_err(|err| Error::FileSystemError { err })?.modified().map_err(|err| Error::FileSystemError { err })?;
-        let solution_exe_last_modified = std::fs::metadata(executable_file).map_err(|err| Error::FileSystemError { err })?.modified().map_err(|err| Error::FileSystemError { err })?;
+        let solution_last_modified = std::fs::metadata(source_file).map_err(|err| Error::IOError { err })?.modified().map_err(|err| Error::IOError { err })?;
+        let solution_exe_last_modified = std::fs::metadata(executable_file).map_err(|err| Error::IOError { err })?.modified().map_err(|err| Error::IOError { err })?;
 
         if solution_exe_last_modified > solution_last_modified {
             return Ok(false);
@@ -55,7 +55,7 @@ pub fn build_solution(source_file: &PathBuf, executable_file: &PathBuf) -> Resul
     #[cfg(windows)]
     {
         let gcc_path = get_gcc_path()?;
-        let prev_working_dir = std::env::current_dir().map_err(|err| Error::FileSystemError { err })?;
+        let prev_working_dir = std::env::current_dir().map_err(|err| Error::IOError { err })?;
 
         let mut process = std::process::Command::new(gcc_path.get_path());
 
@@ -73,7 +73,7 @@ pub fn build_solution(source_file: &PathBuf, executable_file: &PathBuf) -> Resul
         let source_file = prev_working_dir.join(source_file);
 
         // invoke g++ to build solution
-        let process = process.arg("-std=c++17").arg("-O2").arg("-o").arg(executable_file).arg(source_file).output().map_err(|err| Error::FileSystemError { err })?;
+        let process = process.arg("-std=c++17").arg("-O2").arg("-o").arg(executable_file).arg(source_file).output().map_err(|err| Error::IOError { err })?;
 
         if !process.status.success() {
             return Err(Error::CompilerError { stderr: String::from_utf8_lossy(&process.stderr).to_string(),
@@ -95,7 +95,7 @@ pub fn build_solution(source_file: &PathBuf, executable_file: &PathBuf) -> Resul
             .arg("-o")
             .arg(executable_file)
             .arg(source_file)
-            .output().map_err(|err| Error::FileSystemError { err })?;
+            .output().map_err(|err| Error::IOError { err })?;
 
         if !process.status.success() {
             return Err(Error::CompilerError { stderr: String::from_utf8_lossy(&process.stderr).to_string(),
@@ -106,11 +106,11 @@ pub fn build_solution(source_file: &PathBuf, executable_file: &PathBuf) -> Resul
     Ok(true)
 }
 
-pub fn run_solution(executable_file: &PathBuf, input_file: &PathBuf, output_file: &PathBuf, time_limit: f32, test_id: i32) -> anyhow::Result<f32> {
+pub fn run_solution(executable_file: &PathBuf, input_file: &PathBuf, output_file: &PathBuf, time_limit: f32, test_id: i32) -> Result<f32> {
     // also time the solution
     let start_time = std::time::Instant::now();
 
-    let working_dir = std::env::current_dir()?;
+    let working_dir = std::env::current_dir().map_err(|err| Error::IOError { err })?;
 
     let executable_file = working_dir.join(executable_file);
     let mut solution_process = std::process::Command::new(executable_file);
@@ -119,7 +119,7 @@ pub fn run_solution(executable_file: &PathBuf, input_file: &PathBuf, output_file
     {
         let gcc_path = get_gcc_path()?;
         if let WindowsCompiler::FullPath(gcc_path) = &gcc_path {
-            let working_dir = std::path::Path::new(gcc_path).parent().ok_or_else(|| anyhow::anyhow!("Failed to get working directory"))?.to_path_buf();
+            let working_dir = std::path::Path::new(gcc_path).parent().unwrap_or_else(|| std::path::Path::new("/")).to_path_buf();
             solution_process.current_dir(working_dir);
         }
     }
@@ -128,30 +128,33 @@ pub fn run_solution(executable_file: &PathBuf, input_file: &PathBuf, output_file
     let output_file = working_dir.join(output_file);
 
     // spawn the solution process
-    let mut solution_process = solution_process.stdin(std::fs::File::open(input_file)?).stdout(std::fs::File::create(output_file)?).spawn()?;
+    let mut solution_process = solution_process
+        .stdin(std::fs::File::open(input_file).map_err(|err| Error::IOError { err })?)
+        .stdout(std::fs::File::create(output_file).map_err(|err| Error::IOError { err })?)
+        .spawn().map_err(|err| Error::IOError { err })?;
 
-    while solution_process.try_wait()?.is_none() {
+    while solution_process.try_wait().map_err(|err| Error::IOError { err })?.is_none() {
         std::thread::sleep(std::time::Duration::from_millis(1));
         if start_time.elapsed().as_secs_f32() > time_limit {
-            solution_process.kill()?;
-            anyhow::bail!("Solution timed out on test {}", test_id);
+            solution_process.kill().map_err(|err| Error::IOError { err })?;
+            return Err(Error::SolutionTimedOut { test_number: test_id });
         }
     }
 
-    let solution_status = solution_process.wait()?;
+    let solution_status = solution_process.wait().map_err(|err| Error::IOError { err })?;
     let elapsed_time = start_time.elapsed().as_secs_f32();
 
     if !solution_status.success() {
-        anyhow::bail!("Solution failed on test {}", test_id);
+        return Err(Error::SolutionFailed { test_number: test_id });
     }
 
     Ok(elapsed_time)
 }
 
 // ignores whitespace
-pub fn are_files_equal(file1: &PathBuf, file2: &PathBuf) -> anyhow::Result<bool> {
-    let file1 = std::fs::read_to_string(file1)?;
-    let file2 = std::fs::read_to_string(file2)?;
+pub fn are_files_equal(file1: &PathBuf, file2: &PathBuf) -> Result<bool> {
+    let file1 = std::fs::read_to_string(file1).map_err(|err| Error::IOError { err })?;
+    let file2 = std::fs::read_to_string(file2).map_err(|err| Error::IOError { err })?;
 
     let file1 = file1.split_whitespace().collect::<String>();
     let file2 = file2.split_whitespace().collect::<String>();
