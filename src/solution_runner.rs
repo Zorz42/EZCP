@@ -1,4 +1,5 @@
 use std::path::PathBuf;
+use crate::{Result, Error};
 
 #[cfg(windows)]
 enum WindowsCompiler {
@@ -17,7 +18,7 @@ impl WindowsCompiler {
 }
 
 #[cfg(windows)]
-fn get_gcc_path() -> anyhow::Result<WindowsCompiler> {
+fn get_gcc_path() -> Result<WindowsCompiler> {
     if let Ok(gcc_path) = std::env::var("GCC_PATH") {
         return Ok(WindowsCompiler::FullPath(PathBuf::from(gcc_path)));
     }
@@ -37,14 +38,14 @@ fn get_gcc_path() -> anyhow::Result<WindowsCompiler> {
         }
     }
 
-    anyhow::bail!("g++ is not installed, specify the path to g++ with the GCC_PATH environment variable");
+    Err(Error::CompilerNotFoundWindows)
 }
 
-pub fn build_solution(source_file: &PathBuf, executable_file: &PathBuf) -> anyhow::Result<bool> {
+pub fn build_solution(source_file: &PathBuf, executable_file: &PathBuf) -> Result<bool> {
     // if solution executable exists, check if it's up to date
     if executable_file.exists() {
-        let solution_last_modified = std::fs::metadata(source_file)?.modified()?;
-        let solution_exe_last_modified = std::fs::metadata(executable_file)?.modified()?;
+        let solution_last_modified = std::fs::metadata(source_file).map_err(|err| Error::FileSystemError { err })?.modified().map_err(|err| Error::FileSystemError { err })?;
+        let solution_exe_last_modified = std::fs::metadata(executable_file).map_err(|err| Error::FileSystemError { err })?.modified().map_err(|err| Error::FileSystemError { err })?;
 
         if solution_exe_last_modified > solution_last_modified {
             return Ok(false);
@@ -54,33 +55,29 @@ pub fn build_solution(source_file: &PathBuf, executable_file: &PathBuf) -> anyho
     #[cfg(windows)]
     {
         let gcc_path = get_gcc_path()?;
-        let prev_working_dir = std::env::current_dir()?;
+        let prev_working_dir = std::env::current_dir().map_err(|err| Error::FileSystemError { err })?;
 
         let mut process = std::process::Command::new(gcc_path.get_path());
 
         if let WindowsCompiler::FullPath(gcc_path) = &gcc_path {
-            let working_dir = std::path::Path::new(gcc_path).parent().ok_or_else(|| anyhow::anyhow!("Failed to get working directory"))?.to_path_buf();
+            let working_dir = std::path::Path::new(gcc_path).parent().unwrap_or_else(|| std::path::Path::new("/")).to_path_buf();
             process.current_dir(working_dir);
         }
 
         // check if g++ is installed
         if std::process::Command::new(gcc_path.get_path()).arg("--version").output().is_err() {
-            anyhow::bail!("g++ is not installed");
+            return Err(Error::CompilerNotFoundWindows);
         }
 
         let executable_file = prev_working_dir.join(executable_file);
         let source_file = prev_working_dir.join(source_file);
 
         // invoke g++ to build solution
-        let process = process.arg("-std=c++17").arg("-O2").arg("-o").arg(executable_file).arg(source_file).output()?;
+        let process = process.arg("-std=c++17").arg("-O2").arg("-o").arg(executable_file).arg(source_file).output().map_err(|err| Error::FileSystemError { err })?;
 
         if !process.status.success() {
-            anyhow::bail!(
-                "Failed to build solution:\nstderr:\n{}\nstdout:\n{}\nstatus:{}\n",
-                String::from_utf8_lossy(&process.stderr),
-                String::from_utf8_lossy(&process.stdout),
-                process.status
-            );
+            return Err(Error::CompilerError { stderr: String::from_utf8_lossy(&process.stderr).to_string(),
+                stdout: String::from_utf8_lossy(&process.stdout).to_string() })
         }
     }
 
@@ -88,7 +85,7 @@ pub fn build_solution(source_file: &PathBuf, executable_file: &PathBuf) -> anyho
     {
         // check if g++ is installed
         if std::process::Command::new("g++").arg("--version").output().is_err() {
-            anyhow::bail!("g++ is not installed");
+            return Err(Error::CompilerNotFoundUnix);
         }
 
         // invoke g++ to build solution
@@ -98,15 +95,11 @@ pub fn build_solution(source_file: &PathBuf, executable_file: &PathBuf) -> anyho
             .arg("-o")
             .arg(executable_file)
             .arg(source_file)
-            .output()?;
+            .output().map_err(|err| Error::FileSystemError { err })?;
 
         if !process.status.success() {
-            anyhow::bail!(
-                "Failed to build solution:\nstderr:\n{}\nstdout:\n{}\nstatus:{}\n",
-                String::from_utf8_lossy(&process.stderr),
-                String::from_utf8_lossy(&process.stdout),
-                process.status
-            );
+            return Err(Error::CompilerError { stderr: String::from_utf8_lossy(&process.stderr).to_string(),
+                stdout: String::from_utf8_lossy(&process.stdout).to_string() })
         }
     }
 

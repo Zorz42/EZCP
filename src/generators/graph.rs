@@ -1,5 +1,4 @@
 use crate::Input;
-use anyhow::Result;
 use rand::prelude::SliceRandom;
 use rand::Rng;
 use std::collections::HashSet;
@@ -106,17 +105,18 @@ impl Graph {
     /// The first line should contain two integers n and m, the number of nodes and edges respectively.
     /// The next m lines should contain two integers u and v, representing an edge between nodes u and v.
     /// The nodes are 1-indexed.
-    pub fn new_from_input(input: &str) -> Result<Self> {
+    #[must_use]
+    pub fn new_from_input(input: &str) -> Option<Self> {
         let mut input = Input::new(input);
-        let n = input.get_int()?;
-        let m = input.get_int()?;
+        let n = input.get_int().ok()?;
+        let m = input.get_int().ok()?;
         let mut result = Self::new_empty(n);
         for _ in 0..m {
-            let u = input.get_int()? - 1;
-            let v = input.get_int()? - 1;
+            let u = input.get_int().ok()? - 1;
+            let v = input.get_int().ok()? - 1;
             result.add_edge(u as usize, v as usize);
         }
-        Ok(result)
+        Some(result)
     }
 
     /// This function returns true if there is an edge between nodes u and v.

@@ -35,6 +35,15 @@ pub enum Error {
 
     #[error("Expected {n} integers")]
     ExpectedIntegers { n: i32 },
+    
+    #[error("C++ compiler is not found. Specify the path to g++ with the GCC_PATH environment variable.")]
+    CompilerNotFoundWindows,
+
+    #[error("C++ compiler is not found. Please install g++ and make sure, it is in the path.")]
+    CompilerNotFoundUnix,
+    
+    #[error("Compiler error: {stderr}\n{stdout}")]
+    CompilerError { stderr: String, stdout: String },
 }
 
 pub type Result<T, E = Error> = std::result::Result<T, E>;

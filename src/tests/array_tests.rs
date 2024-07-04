@@ -4,7 +4,7 @@ mod array_tests {
     use crate::tests::generic_tests::generic_tests::{initialize_test, TESTS_DIR};
     use crate::{array_generator, Subtask, Task};
     use std::path::PathBuf;
-
+    
     #[test]
     fn test_array_generator() {
         initialize_test();
