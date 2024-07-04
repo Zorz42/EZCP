@@ -150,6 +150,7 @@ pub mod generic_tests {
         let task_name = "times_out";
         let task_path = PathBuf::from(TESTS_DIR).join(task_name);
         let mut task = Task::new(task_name, &task_path);
+        task.time_limit = 0.5;
 
         // create directory
         std::fs::create_dir_all(task_path.clone()).unwrap();

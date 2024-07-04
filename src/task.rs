@@ -350,6 +350,8 @@ impl Task {
 
         logger.logln(format!("\x1b[36;1mMax solution time: {max_elapsed_time:.2}s, tests size: {tests_size:.2}MB\x1b[0m"));
 
+        //debug_assert_eq!(loading_progress, loading_progress_max);
+
         Ok(())
     }
 
@@ -363,7 +365,7 @@ impl Task {
         loading_progress_max: i32,
         logger: &Logger,
         tests_written: &mut Vec<(PathBuf, PathBuf)>,
-    ) -> anyhow::Result<()> {
+    ) -> Result<()> {
         // check if subtask has already been visited
         if subtask_visited[subtask_number] {
             return Ok(());
@@ -409,23 +411,32 @@ impl Task {
     }
 
     fn get_total_tests(&self, subtask: &Subtask) -> i32 {
-        let mut subtask_visited = vec![false; self.subtasks.len()];
-        self.get_total_tests_inner(subtask.number, &mut subtask_visited)
+        let dependencies = self.get_all_dependencies(subtask);
+        let mut result = 0;
+        for dependency in dependencies {
+            result += self.subtasks[dependency].tests.len() as i32;
+        }
+        result
     }
 
-    fn get_total_tests_inner(&self, subtask_number: usize, subtask_visited: &mut Vec<bool>) -> i32 {
+    fn get_all_dependencies(&self, subtask: &Subtask) -> Vec<usize> {
+        let mut subtask_visited = vec![false; self.subtasks.len()];
+        self.get_all_dependencies_inner(subtask.number, &mut subtask_visited)
+    }
+
+    fn get_all_dependencies_inner(&self, subtask_number: usize, subtask_visited: &mut Vec<bool>) -> Vec<usize> {
         // check if subtask has already been visited
         if subtask_visited[subtask_number] {
-            return 0;
+            return Vec::new();
         }
         subtask_visited[subtask_number] = true;
 
-        let mut result = 0;
+        let mut result = Vec::new();
         for dependency in &self.subtasks[subtask_number].dependencies {
-            result += self.get_total_tests_inner(*dependency, subtask_visited);
+            result.append(&mut self.get_all_dependencies_inner(*dependency, subtask_visited));
         }
 
-        result += self.subtasks[subtask_number].tests.len() as i32;
+        result.push(subtask_number);
 
         result
     }
