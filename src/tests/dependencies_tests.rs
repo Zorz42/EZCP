@@ -52,7 +52,7 @@ mod dependencies_tests {
         task.add_subtask_dependency(subtask3, subtask2);
 
         for _ in 0..10 {
-            assert!(task.create_tests().is_ok());
+            task.create_tests().unwrap();
         }
     }
 
@@ -121,7 +121,7 @@ mod dependencies_tests {
         task.add_subtask_dependency(subtask5, subtask4);
 
         for _ in 0..10 {
-            assert!(task.create_tests().is_ok());
+            task.create_tests().unwrap();
         }
     }
 }

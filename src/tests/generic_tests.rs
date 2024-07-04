@@ -267,8 +267,8 @@ pub mod generic_tests {
         task.add_subtask(subtask3);
 
         for _ in 0..10 {
-            assert!(task.create_tests().is_ok());
-            assert!(task.create_tests_for_cps().is_ok());
+            task.create_tests().unwrap();
+            task.create_tests_for_cps().unwrap();
         }
     }
 
@@ -318,8 +318,8 @@ pub mod generic_tests {
         task.add_subtask(subtask3);
 
         for _ in 0..10 {
-            assert!(task.create_tests().is_ok());
-            assert!(task.create_tests_for_cps().is_ok());
+            task.create_tests().unwrap();
+            task.create_tests_for_cps().unwrap();
         }
     }
 
@@ -369,8 +369,8 @@ pub mod generic_tests {
         task.add_subtask(subtask3);
 
         for _ in 0..10 {
-            assert!(task.create_tests().is_ok());
-            assert!(task.create_tests_for_cps().is_ok());
+            task.create_tests().unwrap();
+            task.create_tests_for_cps().unwrap();
         }
     }
 }

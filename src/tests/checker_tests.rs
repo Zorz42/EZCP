@@ -2,7 +2,7 @@
 #[allow(clippy::unwrap_used)]
 mod generator_tests {
     use crate::tests::generic_tests::generic_tests::{initialize_test, TESTS_DIR};
-    use crate::{array_generator, Subtask, Task};
+    use crate::{array_generator, Error, Subtask, Task};
     use std::path::PathBuf;
 
     #[test]
@@ -67,7 +67,7 @@ mod generator_tests {
         task.add_subtask(subtask1);
 
         for _ in 0..10 {
-            assert!(task.create_tests().is_ok());
+           task.create_tests().unwrap();
         }
     }
 
@@ -133,7 +133,7 @@ mod generator_tests {
         task.add_subtask(subtask1);
 
         for _ in 0..10 {
-            assert!(!task.create_tests().is_ok());
+            assert!(matches!(task.create_tests().unwrap_err(), Error::CustomError{..}));
         }
     }
 
@@ -187,7 +187,7 @@ mod generator_tests {
         task.add_subtask(subtask1);
 
         for _ in 0..10 {
-            assert!(task.create_tests().is_ok());
+            task.create_tests().unwrap();
         }
     }
 
@@ -241,7 +241,7 @@ mod generator_tests {
         task.add_subtask(subtask1);
 
         for _ in 0..10 {
-            assert!(!task.create_tests().is_ok());
+            assert!(matches!(task.create_tests().unwrap_err(), Error::CustomError{..}));
         }
     }
 
@@ -296,7 +296,7 @@ mod generator_tests {
         task.add_subtask(subtask1);
 
         for _ in 0..10 {
-            assert!(!task.create_tests().is_ok());
+            assert!(matches!(task.create_tests().unwrap_err(), Error::InputExpectedInteger{..}));
         }
     }
 
@@ -351,7 +351,7 @@ mod generator_tests {
         task.add_subtask(subtask1);
 
         for _ in 0..10 {
-            assert!(!task.create_tests().is_ok());
+            assert!(matches!(task.create_tests().unwrap_err(), Error::InputExpectedEnd{..}));
         }
     }
 
@@ -450,7 +450,7 @@ mod generator_tests {
         task.add_subtask_dependency(subtask2, subtask1);
 
         for _ in 0..10 {
-            assert!(task.create_tests().is_ok());
+            task.create_tests().unwrap();
         }
     }
 
@@ -547,13 +547,13 @@ mod generator_tests {
         let subtask3 = task.add_subtask(subtask3);
 
         for _ in 0..10 {
-            assert!(task.create_tests().is_ok());
+            task.create_tests().unwrap();
         }
 
         task.add_subtask_dependency(subtask3, subtask2);
 
         for _ in 0..10 {
-            assert!(!task.create_tests().is_ok());
+            assert!(matches!(task.create_tests().unwrap_err(), Error::CustomError{..}));
         }
     }
 }
