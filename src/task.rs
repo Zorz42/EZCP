@@ -304,11 +304,10 @@ impl Task {
         for (partial_id, partial_solution) in self.partial_solutions.iter().enumerate() {
             logger.logln(format!("Checking partial solution {}...", partial_id + 1));
 
-            let mut passed_subtasks = HashSet::new();
-
             let mut curr_test_id = 0;
-            for (subtask, subtask_tests) in self.subtasks.iter().zip(&test_files) {
+            for (subtask_id, (_subtask, subtask_tests)) in self.subtasks.iter().zip(&test_files).enumerate() {
                 let mut subtask_failed = false;
+                let mut err_message = String::new();
                 for (input_file, output_file) in subtask_tests {
                     if !subtask_failed {
                         let exe_path = self.build_folder_path.join(format!("partial_solution_{}", partial_id + 1));
@@ -316,7 +315,13 @@ impl Task {
 
                         let result = run_solution(&exe_path, input_file, &temp_output_file, self.time_limit, curr_test_id);
 
-                        if result.is_err() || !are_files_equal(&temp_output_file, output_file)? {
+                        if let Err(err) = result {
+                            err_message = err.to_string();
+                            subtask_failed = true;
+                        }
+                        
+                        if !are_files_equal(&temp_output_file, output_file)? {
+                            err_message = "Wrong answer".to_owned();
                             subtask_failed = true;
                         }
                     }
@@ -325,20 +330,12 @@ impl Task {
                     curr_test_id += 1;
                 }
 
-                if !subtask_failed {
-                    passed_subtasks.insert(subtask.number);
+                if subtask_failed && partial_solution.1.contains(&subtask_id) {
+                    return Err(Error::PartialSolutionFailsSubtask { partial_number: partial_id + 1, subtask_number: subtask_id, message: err_message });
                 }
-            }
-
-            for should_pass in &partial_solution.1 {
-                if !passed_subtasks.contains(should_pass) {
-                    return Err(Error::PartialSolutionFailsSubtask { partial_number: partial_id, subtask_number: *should_pass })
-                }
-            }
-
-            for has_passed in &passed_subtasks {
-                if !partial_solution.1.contains(has_passed) {
-                    return Err(Error::PartialSolutionPassesExtraSubtask { partial_number: partial_id, subtask_number: *has_passed })
+                
+                if !subtask_failed && !partial_solution.1.contains(&subtask_id) {
+                    return Err(Error::PartialSolutionPassesExtraSubtask { partial_number: partial_id + 1, subtask_number: subtask_id });
                 }
             }
         }

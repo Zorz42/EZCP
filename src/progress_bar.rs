@@ -8,7 +8,7 @@ pub fn print_progress_bar(progress: f32, logger: &Logger) {
 
     let bar_length = size.map_or(10, |size| (size.cols as usize - 10).max(0));
     let num_filled = (progress * bar_length as f32) as usize;
-    let num_empty = bar_length - num_filled;
+    let num_empty = ((bar_length - num_filled) as i32 - 1).max(0);
 
     for _ in 0..num_filled {
         logger.log("=");

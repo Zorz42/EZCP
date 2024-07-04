@@ -145,7 +145,7 @@ pub fn run_solution(executable_file: &PathBuf, input_file: &PathBuf, output_file
     let elapsed_time = start_time.elapsed().as_secs_f32();
 
     if !solution_status.success() {
-        return Err(Error::SolutionFailed { test_number: test_id });
+        return Err(Error::SolutionFailed { test_number: test_id  });
     }
 
     Ok(elapsed_time)

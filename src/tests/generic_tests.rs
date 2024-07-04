@@ -1,7 +1,7 @@
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 pub mod generic_tests {
-    use crate::{Subtask, Task};
+    use crate::{Error, Subtask, Task};
     use std::path::PathBuf;
     use std::sync::Once;
 
@@ -33,8 +33,8 @@ pub mod generic_tests {
         std::fs::write(task_path.join("solution.cpp"), solution_contents).unwrap();
 
         for _ in 0..10 {
-            assert!(task.create_tests().is_ok());
-            assert!(task.create_tests_for_cps().is_ok());
+            task.create_tests().unwrap();
+            task.create_tests_for_cps().unwrap();
         }
     }
 
@@ -73,8 +73,8 @@ pub mod generic_tests {
         task.add_subtask(subtask3);
 
         for _ in 0..10 {
-            assert!(task.create_tests().is_ok());
-            assert!(task.create_tests_for_cps().is_ok());
+            task.create_tests().unwrap();
+            task.create_tests_for_cps().unwrap();
         }
     }
 
@@ -121,8 +121,8 @@ pub mod generic_tests {
         task.add_subtask(subtask3);
 
         for _ in 0..10 {
-            assert!(task.create_tests().is_ok());
-            assert!(task.create_tests_for_cps().is_ok());
+            task.create_tests().unwrap();
+            task.create_tests_for_cps().unwrap();
         }
     }
 
@@ -138,8 +138,8 @@ pub mod generic_tests {
         std::fs::create_dir_all(task_path).unwrap();
 
         for _ in 0..10 {
-            assert!(!task.create_tests().is_ok());
-            assert!(!task.create_tests_for_cps().is_ok());
+            assert!(matches!(task.create_tests(), Err(Error::MissingSolutionFile { .. })));
+            assert!(matches!(task.create_tests(), Err(Error::MissingSolutionFile { .. })));
         }
     }
 
@@ -183,8 +183,8 @@ pub mod generic_tests {
         task.add_subtask(subtask1);
 
         for _ in 0..3 {
-            assert!(!task.create_tests().is_ok());
-            assert!(!task.create_tests_for_cps().is_ok());
+            assert!(matches!(task.create_tests(), Err(Error::SolutionTimedOut { .. })));
+            assert!(matches!(task.create_tests_for_cps(), Err(Error::SolutionTimedOut { .. })));
         }
     }
 
@@ -216,8 +216,8 @@ pub mod generic_tests {
         task.add_subtask(subtask1);
 
         for _ in 0..10 {
-            assert!(!task.create_tests().is_ok());
-            assert!(!task.create_tests_for_cps().is_ok());
+            assert!(matches!(task.create_tests(), Err(Error::CompilerError { .. })));
+            assert!(matches!(task.create_tests_for_cps(), Err(Error::CompilerError { .. })));
         }
     }
 

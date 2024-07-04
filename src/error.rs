@@ -57,8 +57,8 @@ pub enum Error {
     #[error("Partial solution {partial_number} passes extra subtask {subtask_number}")]
     PartialSolutionPassesExtraSubtask { subtask_number: usize, partial_number: usize },
     
-    #[error("Partial solution {partial_number} does not pass subtask {subtask_number}")]
-    PartialSolutionFailsSubtask { subtask_number: usize, partial_number: usize },
+    #[error("Partial solution {partial_number} does not pass subtask {subtask_number}. Error: \"{message}\"")]
+    PartialSolutionFailsSubtask { subtask_number: usize, partial_number: usize, message: String },
     
     #[error("Missing solution file {path}")]
     MissingSolutionFile { path: PathBuf },

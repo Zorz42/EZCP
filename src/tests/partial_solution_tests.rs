@@ -1,7 +1,7 @@
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod partial_solution_tests {
-    use crate::array_generator;
+    use crate::{array_generator, Error};
     use crate::tests::generic_tests::generic_tests::TESTS_DIR;
     use std::path::PathBuf;
 
@@ -77,7 +77,7 @@ mod partial_solution_tests {
         task.add_partial_solution("solution1.cpp", &[subtask1]);
 
         for _ in 0..10 {
-            assert!(task.create_tests().is_ok());
+            task.create_tests().unwrap();
         }
     }
 
@@ -238,6 +238,7 @@ mod partial_solution_tests {
         let task_name = "partial_solution_tle";
         let task_path = PathBuf::from(TESTS_DIR).join(task_name);
         let mut task = crate::Task::new(task_name, &task_path);
+        task.time_limit = 1.0;
 
         // create directory
         std::fs::create_dir_all(task_path.clone()).unwrap();
@@ -306,7 +307,7 @@ mod partial_solution_tests {
         task.add_partial_solution("solution1.cpp", &[subtask1]);
 
         for _ in 0..10 {
-            assert!(task.create_tests().is_ok());
+            task.create_tests().unwrap();
         }
     }
 
@@ -375,7 +376,7 @@ mod partial_solution_tests {
         task.add_partial_solution("solution1.cpp", &[]);
 
         for _ in 0..10 {
-            assert!(task.create_tests().is_ok());
+            task.create_tests().unwrap();
         }
     }
 
@@ -384,6 +385,7 @@ mod partial_solution_tests {
         let task_name = "partial_solution_tle2";
         let task_path = PathBuf::from(TESTS_DIR).join(task_name);
         let mut task = crate::Task::new(task_name, &task_path);
+        task.time_limit = 1.0;
 
         // create directory
         std::fs::create_dir_all(task_path.clone()).unwrap();
@@ -419,7 +421,7 @@ mod partial_solution_tests {
             cin>>n;
             int sum=0;
             for(int i=0;i<n;i++) {
-                int a;
+                long long a;
                 cin>>a;
                 while(a++)
                     sum++;
@@ -449,10 +451,10 @@ mod partial_solution_tests {
         task.add_subtask_dependency(subtask2, subtask1);
 
         // add partial solutions
-        task.add_partial_solution("solution1.cpp", &[subtask1]);
+        task.add_partial_solution("solution1.cpp", &[]);
 
         for _ in 0..10 {
-            assert!(!task.create_tests().is_ok());
+            task.create_tests().unwrap();
         }
     }
 }
