@@ -2,7 +2,7 @@
 #[allow(clippy::unwrap_used)]
 mod partial_solution_tests {
     use crate::tests::generic_tests::generic_tests::TESTS_DIR;
-    use crate::{array_generator, Error};
+    use crate::array_generator;
     use std::path::PathBuf;
 
     #[test]

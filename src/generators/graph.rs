@@ -38,10 +38,10 @@ impl Graph {
     #[must_use]
     pub fn new_random(n: i32, m: i32) -> Self {
         let mut result = Self::new_empty(n);
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
         while result.get_num_edges() < m {
-            let u = rng.gen_range(0..n);
-            let v = rng.gen_range(0..n);
+            let u = rng.random_range(0..n);
+            let v = rng.random_range(0..n);
             result.add_edge(u as usize, v as usize);
         }
         result
@@ -52,12 +52,12 @@ impl Graph {
     #[must_use]
     pub fn new_random_tree(n: i32) -> Self {
         let mut result = Self::new_empty(n);
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
         let mut nodes = (0..n).collect::<Vec<_>>();
         nodes.shuffle(&mut rng);
         for i in 1..n {
             let u = nodes[i as usize];
-            let v = nodes[rng.gen_range(0..i) as usize];
+            let v = nodes[rng.random_range(0..i) as usize];
             result.add_edge(u as usize, v as usize);
         }
         result
@@ -69,10 +69,10 @@ impl Graph {
     #[must_use]
     pub fn new_random_connected(n: i32, m: i32) -> Self {
         let mut result = Self::new_random_tree(n);
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
         while result.get_num_edges() < m {
-            let u = rng.gen_range(0..n);
-            let v = rng.gen_range(0..n);
+            let u = rng.random_range(0..n);
+            let v = rng.random_range(0..n);
             result.add_edge(u as usize, v as usize);
         }
         result
@@ -83,18 +83,18 @@ impl Graph {
     #[must_use]
     pub fn new_random_bipartite(n: i32, m: i32) -> Self {
         let mut result = Self::new_empty(n);
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
         let mut nodes = (0..n).collect::<Vec<_>>();
         nodes.shuffle(&mut rng);
         let size1 = loop {
-            let size1 = rng.gen_range(1..n);
+            let size1 = rng.random_range(1..n);
             if size1 * (n - size1) >= m {
                 break size1;
             }
         };
         while result.get_num_edges() < m {
-            let u = nodes[rng.gen_range(0..size1) as usize];
-            let v = nodes[rng.gen_range(size1..n) as usize];
+            let u = nodes[rng.random_range(0..size1) as usize];
+            let v = nodes[rng.random_range(size1..n) as usize];
             result.add_edge(u as usize, v as usize);
         }
         result
@@ -176,10 +176,10 @@ impl Graph {
     pub fn create_output_edges(&self) -> String {
         let mut result = String::new();
         let mut edges = self.edges_iter().collect::<Vec<_>>();
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
         edges.shuffle(&mut rng);
         for (u, v) in edges {
-            if rng.gen_bool(0.5) {
+            if rng.random_bool(0.5) {
                 writeln!(result, "{} {}", u + 1, v + 1).ok();
             } else {
                 writeln!(result, "{} {}", v + 1, u + 1).ok();

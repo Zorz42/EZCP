@@ -22,12 +22,13 @@ pub fn array_to_string(array: &Vec<i32>, include_count: bool) -> String {
 }
 
 /// This function returns a function that generates an array of integers with a custom generator.
+///
 /// The array will have a length between `min_n` and `max_n` (inclusive).
 /// The generator function will be called to generate each element in the array.
 pub fn array_generator_custom<F: Fn(&mut ThreadRng) -> i32>(min_n: i32, max_n: i32, gen: F) -> impl Fn() -> String {
     move || {
         let mut rng = rand::rng();
-        let n = rng.gen_range(min_n..=max_n);
+        let n = rng.random_range(min_n..=max_n);
         let mut array = Vec::new();
         for _ in 0..n {
             array.push(gen(&mut rng));
@@ -37,8 +38,9 @@ pub fn array_generator_custom<F: Fn(&mut ThreadRng) -> i32>(min_n: i32, max_n: i
 }
 
 /// This function returns a function that generates an array of integers.
+///
 /// The array will have a length between `min_n` and `max_n` (inclusive).
 /// The values in the array will be between `min_x` and `max_x` (inclusive).
 pub fn array_generator(min_n: i32, max_n: i32, min_x: i32, max_x: i32) -> impl Fn() -> String {
-    array_generator_custom(min_n, max_n, move |rng| rng.gen_range(min_x..=max_x))
+    array_generator_custom(min_n, max_n, move |rng| rng.random_range(min_x..=max_x))
 }

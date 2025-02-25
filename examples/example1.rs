@@ -32,7 +32,7 @@ fn main() {
     });
 
     // add 5 tests where an array is generated with length 1 and even values between 0 and 1_000_000_000 (inclusive)
-    subtask1.add_test(5, ezcp::array_generator_custom(1, 1, |rng| rng.gen_range(0..=500_000_000) * 2));
+    subtask1.add_test(5, ezcp::array_generator_custom(1, 1, |rng| rng.random_range(0..=500_000_000) * 2));
     // this is a faulty test for testing the checker
     //subtask1.add_test_str("1\n 0 0\n".to_owned());
 
@@ -63,15 +63,15 @@ fn main() {
 
     // add 5 random tests where each test is an array of length between 1 and 200_000 (inclusive) and all values are the same even value between 0 and 1_000_000_000 (inclusive)
     subtask2.add_test(5, || {
-        let mut rng = rand::thread_rng();
-        let n = rng.gen_range(1..=200_000);
-        let x = rng.gen_range(0..=500_000_000) * 2;
+        let mut rng = rand::rng();
+        let n = rng.random_range(1..=200_000);
+        let x = rng.random_range(0..=500_000_000) * 2;
         ezcp::array_to_string(&vec![x; n as usize], true)
     });
 
     // add an edge case where n is maximal
-    let mut rng = rand::thread_rng();
-    let x = rng.gen_range(0..=500_000_000) * 2;
+    let mut rng = rand::rng();
+    let x = rng.random_range(0..=500_000_000) * 2;
     subtask2.add_test_str(ezcp::array_to_string(&vec![x; 200_000], true));
 
     // add 3 edge cases where all values are maximal
@@ -102,10 +102,10 @@ fn main() {
     });
 
     // add some random tests
-    subtask3.add_test(5, ezcp::array_generator_custom(1, 200_000, |rng| rng.gen_range(0..=500_000_000) * 2));
+    subtask3.add_test(5, ezcp::array_generator_custom(1, 200_000, |rng| rng.random_range(0..=500_000_000) * 2));
 
     // add 5 edge cases where n is maximal (other edge cases are handled by subtask2)
-    subtask3.add_test(5, ezcp::array_generator_custom(200_000, 200_000, |rng| rng.gen_range(0..=500_000_000) * 2));
+    subtask3.add_test(5, ezcp::array_generator_custom(200_000, 200_000, |rng| rng.random_range(0..=500_000_000) * 2));
 
     // add subtasks to task
     let subtask1 = task.add_subtask(subtask1);

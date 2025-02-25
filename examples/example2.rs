@@ -46,8 +46,8 @@ fn main() {
     });
 
     subtask2.add_test(5, || {
-        let mut rng = rand::thread_rng();
-        let n = rng.gen_range(1..=30);
+        let mut rng = rand::rng();
+        let n = rng.random_range(1..=30);
         let mut array = Vec::new();
         for i in 0..n {
             array.push(1 << i);
