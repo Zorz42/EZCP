@@ -18,7 +18,7 @@ pub enum Error {
     #[error("Zip Error: {err}")]
     ZipError { err: zip::result::ZipError },
 
-    #[error("Test file {path} already exists")]
+    #[error("Test file already exists")]
     TestAlreadyExists { path: PathBuf },
 
     #[error("Expected integer in input")]
@@ -60,7 +60,7 @@ pub enum Error {
     #[error("Partial solution {partial_number} does not pass subtask {subtask_number}. Error: \"{message}\"")]
     PartialSolutionFailsSubtask { subtask_number: usize, partial_number: usize, message: String },
 
-    #[error("Missing solution file {path}")]
+    #[error("Missing solution file")]
     MissingSolutionFile { path: PathBuf },
 }
 

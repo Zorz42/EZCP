@@ -1,6 +1,6 @@
 use rand::prelude::ThreadRng;
-use rand::Rng;
 use std::fmt::Write;
+use rand::Rng;
 
 /// This function converts an array of integers to a string.
 /// It is used to generate the input for test cases.
@@ -16,7 +16,7 @@ pub fn array_to_string(array: &Vec<i32>, include_count: bool) -> String {
     for i in array {
         write!(result, "{i} ").ok();
     }
-
+    
     result.push('\n');
     result
 }
@@ -26,7 +26,7 @@ pub fn array_to_string(array: &Vec<i32>, include_count: bool) -> String {
 /// The generator function will be called to generate each element in the array.
 pub fn array_generator_custom<F: Fn(&mut ThreadRng) -> i32>(min_n: i32, max_n: i32, gen: F) -> impl Fn() -> String {
     move || {
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
         let n = rng.gen_range(min_n..=max_n);
         let mut array = Vec::new();
         for _ in 0..n {
