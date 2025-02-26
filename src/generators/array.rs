@@ -3,6 +3,7 @@ use std::fmt::Write;
 use rand::Rng;
 
 /// This function converts an array of integers to a string.
+///
 /// It is used to generate the input for test cases.
 /// If it receives an array of [1, 2, 3] and `include_count` is `true`, it will return the string "3\n1 2 3\n".
 /// If `include_count` is `false`, it will return the string "1 2 3\n".

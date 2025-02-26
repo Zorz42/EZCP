@@ -28,7 +28,7 @@ pub struct Test {
 }
 
 impl Test {
-    pub fn new(input_generator: Rc<TestGenerator>) -> Self {
+    pub const fn new(input_generator: Rc<TestGenerator>) -> Self {
         Self { input_generator, input_file: None }
     }
 

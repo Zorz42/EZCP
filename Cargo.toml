@@ -39,7 +39,6 @@ correctness = { level = "warn", priority = -1 }
 perf = { level = "warn", priority = -1 }
 style = { level = "warn", priority = -1 }
 suspicious = { level = "warn", priority = -1 }
-allow_attributes_without_reason = "warn"
 assertions_on_result_states = "warn"
 create_dir = "warn"
 decimal_literal_representation = "warn"
@@ -169,3 +168,4 @@ missing_safety_doc = "allow"
 cargo_common_metadata = "allow"
 zero_ptr = "allow"
 indexing_slicing = "allow"
+allow_attributes_without_reason = "allow"
