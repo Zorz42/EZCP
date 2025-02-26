@@ -36,7 +36,7 @@ impl Test {
     /// If `input_file` is already set, it will copy the file to `file_path`.
     pub fn generate_input(&mut self, file_path: &Path) -> Result<()> {
         if file_path.exists() {
-            return Err(Error::TestAlreadyExists { path: file_path.to_path_buf() });
+            return Err(Error::TestAlreadyExists { path: file_path.to_str().unwrap_or("???").to_owned() });
         }
 
         if let Some(input_file) = &self.input_file {

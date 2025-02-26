@@ -156,7 +156,7 @@ impl Task {
 
         // check if solution file exists
         if !self.solution_path.exists() {
-            return Err(Error::MissingSolutionFile { path: self.solution_path.clone() });
+            return Err(Error::MissingSolutionFile { path: self.solution_path.to_str().unwrap().to_owned() });
         }
 
         // assign numbers to subtasks

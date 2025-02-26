@@ -1,4 +1,3 @@
-use std::path::PathBuf;
 use thiserror::Error;
 
 #[derive(Error, Debug)]
@@ -18,8 +17,8 @@ pub enum Error {
     #[error("Zip Error: {err}")]
     ZipError { err: zip::result::ZipError },
 
-    #[error("Test file already exists")]
-    TestAlreadyExists { path: PathBuf },
+    #[error("Test file {path} already exists")]
+    TestAlreadyExists { path: String },
 
     #[error("Expected integer in input")]
     InputExpectedInteger,
@@ -60,8 +59,8 @@ pub enum Error {
     #[error("Partial solution {partial_number} does not pass subtask {subtask_number}. Error: \"{message}\"")]
     PartialSolutionFailsSubtask { subtask_number: usize, partial_number: usize, message: String },
 
-    #[error("Missing solution file")]
-    MissingSolutionFile { path: PathBuf },
+    #[error("Missing solution file: {path}")]
+    MissingSolutionFile { path: String },
 }
 
 pub type Result<T, E = Error> = std::result::Result<T, E>;
