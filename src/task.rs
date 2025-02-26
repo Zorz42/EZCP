@@ -1,6 +1,6 @@
 use crate::logger::Logger;
 use crate::progress_bar::{clear_progress_bar, print_progress_bar};
-use crate::solution_runner::{are_files_equal, build_solution, run_solution};
+use crate::solution_runner::{are_files_equal, build_solution, run_solution, TestResult};
 use crate::subtask::Subtask;
 use crate::{Error, Input, Result};
 use std::collections::HashSet;
@@ -156,7 +156,7 @@ impl Task {
 
         // check if solution file exists
         if !self.solution_path.exists() {
-            return Err(Error::MissingSolutionFile { path: self.solution_path.to_str().unwrap().to_owned() });
+            return Err(Error::MissingSolutionFile { path: self.solution_path.to_str().unwrap_or("???").to_owned() });
         }
 
         // assign numbers to subtasks
@@ -287,13 +287,25 @@ impl Task {
 
         // invoke solution on each test
         let mut max_elapsed_time: f32 = 0.0;
-        let mut curr_test_id = 0;
         for subtask in &test_files {
             for (input_file, output_file) in subtask {
                 print_progress_bar((loading_progress as f32) / (loading_progress_max as f32), logger);
 
                 loading_progress += 1;
-                let elapsed_time = run_solution(&self.solution_exe_path, input_file, output_file, self.time_limit, curr_test_id)?;
+                let test_result = run_solution(&self.solution_exe_path, input_file, output_file, self.time_limit)?;
+                let elapsed_time = match test_result {
+                    TestResult::Ok(elapsed_time) => { elapsed_time }
+                    TestResult::TimedOut => {
+                        return Err(Error::SolutionTimedOut {
+                            test_path: input_file.to_str().unwrap_or("???").to_owned(),
+                        });
+                    }
+                    TestResult::Crashed => {
+                        return Err(Error::SolutionFailed {
+                            test_path: input_file.to_str().unwrap_or("???").to_owned(),
+                        });
+                    }
+                };
                 curr_test_id += 1;
                 max_elapsed_time = max_elapsed_time.max(elapsed_time);
             }
@@ -304,7 +316,6 @@ impl Task {
         for (partial_id, partial_solution) in self.partial_solutions.iter().enumerate() {
             logger.logln(format!("Checking partial solution {}...", partial_id + 1));
 
-            let mut curr_test_id = 0;
             for (subtask_id, (_subtask, subtask_tests)) in self.subtasks.iter().zip(&test_files).enumerate() {
                 let mut subtask_failed = false;
                 let mut err_message = String::new();
@@ -313,7 +324,7 @@ impl Task {
                         let exe_path = self.build_folder_path.join(format!("partial_solution_{}", partial_id + 1));
                         let temp_output_file = self.build_folder_path.join("temp_output");
 
-                        let result = run_solution(&exe_path, input_file, &temp_output_file, self.time_limit, curr_test_id);
+                        let result = run_solution(&exe_path, input_file, &temp_output_file, self.time_limit);
 
                         if let Err(err) = result {
                             err_message = err.to_string();
@@ -321,7 +332,7 @@ impl Task {
                         }
 
                         if !are_files_equal(&temp_output_file, output_file)? {
-                            "Wrong answer".clone_into(&mut err_message);
+                            err_message = "Wrong Answer".to_owned();
                             subtask_failed = true;
                         }
                     }

@@ -121,7 +121,13 @@ pub fn build_solution(source_file: &PathBuf, executable_file: &PathBuf) -> Resul
     Ok(true)
 }
 
-pub fn run_solution(executable_file: &PathBuf, input_file: &PathBuf, output_file: &PathBuf, time_limit: f32, test_id: i32) -> Result<f32> {
+pub enum TestResult {
+    Ok(f32), // elapsed time
+    TimedOut,
+    Crashed,
+}
+
+pub fn run_solution(executable_file: &PathBuf, input_file: &PathBuf, output_file: &PathBuf, time_limit: f32) -> Result<TestResult> {
     // also time the solution
     let start_time = std::time::Instant::now();
 
@@ -153,7 +159,7 @@ pub fn run_solution(executable_file: &PathBuf, input_file: &PathBuf, output_file
         std::thread::sleep(std::time::Duration::from_millis(1));
         if start_time.elapsed().as_secs_f32() > time_limit {
             solution_process.kill().map_err(|err| Error::IOError { err })?;
-            return Err(Error::SolutionTimedOut { test_number: test_id });
+            return Ok(TestResult::TimedOut);
         }
     }
 
@@ -161,10 +167,10 @@ pub fn run_solution(executable_file: &PathBuf, input_file: &PathBuf, output_file
     let elapsed_time = start_time.elapsed().as_secs_f32();
 
     if !solution_status.success() {
-        return Err(Error::SolutionFailed { test_number: test_id });
+        return Ok(TestResult::Crashed);
     }
 
-    Ok(elapsed_time)
+    Ok(TestResult::Ok(elapsed_time))
 }
 
 // ignores whitespace
