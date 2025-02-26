@@ -170,18 +170,16 @@ impl Task {
                 test.reset_input_file();
             }
         }
-
-        logger.logln("Building solution...");
+        
         let has_built = build_solution(&self.solution_path, &self.solution_exe_path)?;
-        if !has_built {
-            logger.logln("Skipping solution compilation as it is up to date.");
+        if has_built {
+            logger.logln("Built solution");
         }
 
         for (i, partial_solution) in self.partial_solutions.iter().enumerate() {
-            logger.logln("Building partial solution...");
             let has_built = build_solution(&partial_solution.0, &self.build_folder_path.join(format!("partial_solution_{}", i + 1)))?;
-            if !has_built {
-                logger.logln(format!("Skipping partial solution {i} compilation as it is up to date."));
+            if has_built {
+                logger.logln(format!("Built partial solution {:?}", partial_solution.0));
             }
         }
 
@@ -324,11 +322,18 @@ impl Task {
                         let exe_path = self.build_folder_path.join(format!("partial_solution_{}", partial_id + 1));
                         let temp_output_file = self.build_folder_path.join("temp_output");
 
-                        let result = run_solution(&exe_path, input_file, &temp_output_file, self.time_limit);
+                        let result = run_solution(&exe_path, input_file, &temp_output_file, self.time_limit)?;
 
-                        if let Err(err) = result {
-                            err_message = err.to_string();
-                            subtask_failed = true;
+                        match result {
+                            TestResult::Ok(_) => {}
+                            TestResult::TimedOut => {
+                                err_message = "Partial solution timed out".to_owned();
+                                subtask_failed = true;
+                            }
+                            TestResult::Crashed => {
+                                err_message = "Partial solution crashed".to_owned();
+                                subtask_failed = true;
+                            }
                         }
 
                         if !are_files_equal(&temp_output_file, output_file)? {

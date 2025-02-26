@@ -41,6 +41,9 @@ fn get_gcc_path() -> Result<WindowsCompiler> {
     Err(Error::CompilerNotFoundWindows)
 }
 
+/// The only job of this function is to build the solution.
+/// It takes a c++ source file and produces an executable file.
+/// It returns true if the executable was built and false if it was up to date.
 pub fn build_solution(source_file: &PathBuf, executable_file: &PathBuf) -> Result<bool> {
     // if solution executable exists, check if it's up to date
     if executable_file.exists() {
