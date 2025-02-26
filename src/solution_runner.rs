@@ -130,8 +130,10 @@ pub enum TestResult {
     Crashed,
 }
 
+
+/// This function takes an executable file and runs it with the input file.
+/// It writes the output to the output file, and returns the result of the test.
 pub fn run_solution(executable_file: &PathBuf, input_file: &PathBuf, output_file: &PathBuf, time_limit: f32) -> Result<TestResult> {
-    // also time the solution
     let start_time = std::time::Instant::now();
 
     let working_dir = std::env::current_dir().map_err(|err| Error::IOError { err })?;
@@ -176,7 +178,8 @@ pub fn run_solution(executable_file: &PathBuf, input_file: &PathBuf, output_file
     Ok(TestResult::Ok(elapsed_time))
 }
 
-// ignores whitespace
+/// Compares if two file have equal contents.
+/// It ignores whitespace.
 pub fn are_files_equal(file1: &PathBuf, file2: &PathBuf) -> Result<bool> {
     let file1 = std::fs::read_to_string(file1).map_err(|err| Error::IOError { err })?;
     let file2 = std::fs::read_to_string(file2).map_err(|err| Error::IOError { err })?;
