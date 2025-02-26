@@ -333,7 +333,7 @@ impl Task {
                 if subtask_failed && partial_solution.1.contains(&subtask_id) {
                     return Err(Error::PartialSolutionFailsSubtask {
                         partial_number: partial_id + 1,
-                        subtask_number: subtask_id,
+                        subtask_number: subtask_id + 1,
                         message: err_message,
                     });
                 }
@@ -341,7 +341,7 @@ impl Task {
                 if !subtask_failed && !partial_solution.1.contains(&subtask_id) {
                     return Err(Error::PartialSolutionPassesExtraSubtask {
                         partial_number: partial_id + 1,
-                        subtask_number: subtask_id,
+                        subtask_number: subtask_id + 1,
                     });
                 }
             }
