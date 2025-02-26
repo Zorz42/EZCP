@@ -75,7 +75,8 @@ impl Task {
     /// This function adds a subtask to the task.
     /// The subtask must be ready as it cannot be modified after it is added to the task.
     /// The function returns the index of the subtask.
-    pub fn add_subtask(&mut self, subtask: Subtask) -> usize {
+    pub fn add_subtask(&mut self, mut subtask: Subtask) -> usize {
+        subtask.number = self.subtasks.len();
         self.subtasks.push(subtask);
         self.subtasks.len() - 1
     }
@@ -116,6 +117,7 @@ impl Task {
         self.create_tests_inner1(true, true)
     }
 
+    /// This creates tests and prints the error message if there is an error.
     fn create_tests_inner1(&mut self, print_output: bool, generate_cps: bool) -> Result<()> {
         let logger = Logger::new(print_output);
 
@@ -131,10 +133,11 @@ impl Task {
         }
     }
 
+    /// This function builds solution and then calls `generate_tests`.
     fn create_tests_inner2(&mut self, logger: &Logger, generate_cps: bool) -> Result<()> {
         logger.logln("");
         let text = format!("Creating tests for task \"{}\"", self.name);
-        // print = before and after text
+        // print title with ===== before and after text
         for _ in 0..text.len() {
             logger.log("=");
         }
@@ -144,8 +147,8 @@ impl Task {
         }
         logger.logln("");
 
+        // if there are no subtasks, print a warning in bold yellow
         if self.subtasks.is_empty() {
-            // if there are no subtasks, print a warning in bold yellow
             logger.logln("\x1b[33;1mWarning: no subtasks\x1b[0m");
         }
 
@@ -159,11 +162,6 @@ impl Task {
             return Err(Error::MissingSolutionFile { path: self.solution_path.to_str().unwrap_or("???").to_owned() });
         }
 
-        // assign numbers to subtasks
-        for (i, subtask) in self.subtasks.iter_mut().enumerate() {
-            subtask.number = i;
-        }
-
         // reset subtask input files
         for subtask in &mut self.subtasks {
             for test in &mut subtask.tests {
@@ -173,7 +171,7 @@ impl Task {
         
         let has_built = build_solution(&self.solution_path, &self.solution_exe_path)?;
         if has_built {
-            logger.logln("Built solution");
+            logger.logln(format!("Built solution {:?}", self.solution_path));
         }
 
         for (i, partial_solution) in self.partial_solutions.iter().enumerate() {
@@ -187,7 +185,7 @@ impl Task {
 
         Ok(())
     }
-
+    
     #[allow(clippy::too_many_lines)]
     fn generate_tests(&mut self, logger: &Logger, generate_cps: bool) -> Result<()> {
         // create tests directory if it doesn't exist and clear it
@@ -197,26 +195,20 @@ impl Task {
         }
 
         // count how many tests there are in total (if one subtask is a dependency of another, its tests are counted multiple times)
-        let num_tests = {
-            let mut result = 0;
-            for subtask in &self.subtasks {
-                result += self.get_total_tests(subtask);
-            }
-            result
-        };
+        let mut num_tests = 0;
+        for subtask in &self.subtasks {
+            num_tests += self.get_total_tests(subtask);
+        }
 
         // calculate how many steps there are in total for the progress bar. If checkers are missing, it is less steps.
-        let loading_progress_max = {
-            // 2 generating input and producing output and num_tests for every partial solution
-            let mut result = 2 * num_tests + self.partial_solutions.len() as i32 * num_tests;
-            for subtask in &self.subtasks {
-                if subtask.checker.is_some() {
-                    // and for each check
-                    result += self.get_total_tests(subtask);
-                }
+        // 2 generating input and producing output and num_tests for every partial solution
+        let mut loading_progress_max = 2 * num_tests + self.partial_solutions.len() as i32 * num_tests;
+        for subtask in &self.subtasks {
+            if subtask.checker.is_some() {
+                // and for each check
+                loading_progress_max += self.get_total_tests(subtask);
             }
-            result
-        };
+        }
 
         logger.logln("Generating tests...");
 
@@ -265,7 +257,8 @@ impl Task {
             let checker = &subtask.checker;
             if let Some(checker) = checker {
                 for test_id_in_subtask in 0..self.get_total_tests(subtask) {
-                    let input_str = std::fs::read_to_string(self.get_input_file_path(curr_test_id, subtask_id as i32, test_id_in_subtask)).map_err(|err| Error::IOError { err })?;
+                    let input_test_path = self.get_input_file_path(curr_test_id, subtask_id as i32, test_id_in_subtask)
+                    let input_str = std::fs::read_to_string(input_test_path).map_err(|err| Error::IOError { err })?;
                     checker(Input::new(&input_str))?;
                     curr_test_id += 1;
                     loading_progress += 1;
@@ -378,6 +371,7 @@ impl Task {
         Ok(())
     }
 
+    /// Get number of tests for a subtask (including dependencies)
     fn get_total_tests(&self, subtask: &Subtask) -> i32 {
         let dependencies = self.get_all_dependencies(subtask);
         let mut result = 0;
@@ -386,12 +380,14 @@ impl Task {
         }
         result
     }
-
+    
+    /// Get all dependencies, even dependencies of dependencies and so on
     fn get_all_dependencies(&self, subtask: &Subtask) -> Vec<usize> {
         let mut subtask_visited = vec![false; self.subtasks.len()];
         self.get_all_dependencies_inner(subtask.number, &mut subtask_visited)
     }
-
+    
+    /// A simple dfs to get all dependencies
     fn get_all_dependencies_inner(&self, subtask_number: usize, subtask_visited: &mut Vec<bool>) -> Vec<usize> {
         // check if subtask has already been visited
         if subtask_visited[subtask_number] {
@@ -408,7 +404,8 @@ impl Task {
 
         result
     }
-
+    
+    /// Archive all tests into a zip file
     fn archive_tests(&self, test_files: &Vec<Vec<(PathBuf, PathBuf)>>) -> Result<()> {
         let mut zipper = zip::ZipWriter::new(std::fs::File::create(&self.tests_archive_path).map_err(|err| Error::IOError { err })?);
         let options = SimpleFileOptions::default().compression_method(zip::CompressionMethod::Deflated);
@@ -431,7 +428,8 @@ impl Task {
 
         Ok(())
     }
-
+    
+    /// Generate a CPS compatible
     fn generate_cps_file(&self) -> Result<()> {
         let mut cps_tests = CPSTests {
             tests: Vec::new(),
