@@ -257,7 +257,7 @@ impl Task {
             let checker = &subtask.checker;
             if let Some(checker) = checker {
                 for test_id_in_subtask in 0..self.get_total_tests(subtask) {
-                    let input_test_path = self.get_input_file_path(curr_test_id, subtask_id as i32, test_id_in_subtask)
+                    let input_test_path = self.get_input_file_path(curr_test_id, subtask_id as i32, test_id_in_subtask);
                     let input_str = std::fs::read_to_string(input_test_path).map_err(|err| Error::IOError { err })?;
                     checker(Input::new(&input_str))?;
                     curr_test_id += 1;
