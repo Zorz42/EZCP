@@ -147,14 +147,16 @@ impl Task {
         logger.logln("");
         let text = format!("Creating tests for task \"{}\"", self.name);
         // print title with ===== before and after text
-        for _ in 0..text.len() {
+        logger.log(" ");
+        for _ in 0..text.len() + 6 {
             logger.log("=");
         }
-        logger.logln(format!("\n\x1b[1m{text}\x1b[0m"));
-        for _ in 0..text.len() {
+        logger.logln(format!("\n || \x1b[1m{text}\x1b[0m ||"));
+        logger.log(" ");
+        for _ in 0..text.len() + 6 {
             logger.log("=");
         }
-        logger.logln("");
+        logger.logln("\n");
 
         // if there are no subtasks, print a warning in bold yellow
         if self.subtasks.is_empty() {
@@ -196,17 +198,21 @@ impl Task {
             std::fs::remove_file(entry.map_err(|err| Error::IOError { err })?.path()).map_err(|err| Error::IOError { err })?;
         }
 
+        logger.logln("[1/5] Generating tests...");
         let test_files = self.generate_tests(logger)?;
+        logger.logln("[2/5] Checking tests...");
         self.check_tests(logger)?;
+        logger.logln("[3/5] Generating test solutions...");
         self.generate_test_solutions(logger, &test_files)?;
+        logger.logln("[4/5] Checking partial solutions ...");
         self.check_partial_solutions(logger, &test_files)?;
 
         if generate_cps {
-            println!("Generating CPS file...");
+            println!("[5/5] Generating CPS file...");
             self.generate_cps_file()?;
         } else {
-            println!("Archiving tests...");
-            self.archive_tests(&test_files)?;
+            println!("[5/5] Archiving tests...");
+            self.archive_tests(logger, &test_files)?;
         }
 
         let tests_size = fs_extra::dir::get_size(&self.tests_path).unwrap_or(0) as f32 / 1_000_000.0;
@@ -222,8 +228,6 @@ impl Task {
         // calculate how many steps there are in total for the progress bar.
         let loading_progress_max = num_tests;
         let mut loading_progress = 0;
-
-        logger.logln("Generating tests...");
 
         // Generate and write tests for each subtask
         let mut curr_test_id = 0;
@@ -277,7 +281,6 @@ impl Task {
         let mut loading_progress = 0;
 
         let mut curr_test_id = 0;
-        logger.logln("Checking tests...");
         print_progress_bar((loading_progress as f32) / (loading_progress_max as f32), logger);
         for (subtask_id, subtask) in self.subtasks.iter().enumerate() {
             let checker = &subtask.checker;
@@ -311,7 +314,6 @@ impl Task {
         let loading_progress_max = num_tests;
         let mut loading_progress = 0;
         
-        logger.logln("Generating test solutions...");
         print_progress_bar((loading_progress as f32) / (loading_progress_max as f32), logger);
 
         // invoke solution on each test
@@ -415,48 +417,20 @@ impl Task {
         
         Ok(())
     }
-
-    /// Get number of tests for a subtask (including dependencies)
-    fn get_total_tests(&self, subtask: &Subtask) -> i32 {
-        let dependencies = self.get_all_dependencies(subtask);
-        let mut result = 0;
-        for dependency in dependencies {
-            result += self.subtasks[dependency].tests.len() as i32;
-        }
-        result
-    }
-    
-    /// Get all dependencies, even dependencies of dependencies and so on
-    fn get_all_dependencies(&self, subtask: &Subtask) -> Vec<usize> {
-        let mut subtask_visited = vec![false; self.subtasks.len()];
-        self.get_all_dependencies_inner(subtask.number, &mut subtask_visited)
-    }
-    
-    /// A simple dfs to get all dependencies
-    fn get_all_dependencies_inner(&self, subtask_number: usize, subtask_visited: &mut Vec<bool>) -> Vec<usize> {
-        // check if subtask has already been visited
-        if subtask_visited[subtask_number] {
-            return Vec::new();
-        }
-        subtask_visited[subtask_number] = true;
-
-        let mut result = Vec::new();
-        for dependency in &self.subtasks[subtask_number].dependencies {
-            result.append(&mut self.get_all_dependencies_inner(*dependency, subtask_visited));
-        }
-
-        result.push(subtask_number);
-
-        result
-    }
     
     /// Archive all tests into a zip file
-    fn archive_tests(&self, test_files: &Vec<Vec<(PathBuf, PathBuf)>>) -> Result<()> {
+    fn archive_tests(&self, logger: &Logger, test_files: &Vec<Vec<(PathBuf, PathBuf)>>) -> Result<()> {
         let mut zipper = zip::ZipWriter::new(std::fs::File::create(&self.tests_archive_path).map_err(|err| Error::IOError { err })?);
         let options = SimpleFileOptions::default().compression_method(zip::CompressionMethod::Deflated);
 
+        let loading_progress_max = test_files.iter().map(Vec::len).sum::<usize>() as i32;
+        let mut loading_progress = 0;
+        
         for subtask in test_files {
             for (input_file, output_file) in subtask {
+                print_progress_bar((loading_progress as f32) / (loading_progress_max as f32), logger);
+                loading_progress += 1;
+                
                 zipper
                     .start_file(input_file.file_name().map_or("", |a| a.to_str().unwrap_or("")), options)
                     .map_err(|err| Error::ZipError { err })?;
@@ -470,6 +444,8 @@ impl Task {
                 zipper.write_all(&output_file).map_err(|err| Error::IOError { err })?;
             }
         }
+        
+        clear_progress_bar(logger);
 
         Ok(())
     }
@@ -509,5 +485,39 @@ impl Task {
         std::fs::write(&self.cps_tests_archive_path, data).map_err(|err| Error::IOError { err })?;
 
         Ok(())
+    }
+
+    /// Get number of tests for a subtask (including dependencies)
+    fn get_total_tests(&self, subtask: &Subtask) -> i32 {
+        let dependencies = self.get_all_dependencies(subtask);
+        let mut result = 0;
+        for dependency in dependencies {
+            result += self.subtasks[dependency].tests.len() as i32;
+        }
+        result
+    }
+
+    /// Get all dependencies, even dependencies of dependencies and so on
+    fn get_all_dependencies(&self, subtask: &Subtask) -> Vec<usize> {
+        let mut subtask_visited = vec![false; self.subtasks.len()];
+        self.get_all_dependencies_inner(subtask.number, &mut subtask_visited)
+    }
+
+    /// A simple dfs to get all dependencies
+    fn get_all_dependencies_inner(&self, subtask_number: usize, subtask_visited: &mut Vec<bool>) -> Vec<usize> {
+        // check if subtask has already been visited
+        if subtask_visited[subtask_number] {
+            return Vec::new();
+        }
+        subtask_visited[subtask_number] = true;
+
+        let mut result = Vec::new();
+        for dependency in &self.subtasks[subtask_number].dependencies {
+            result.append(&mut self.get_all_dependencies_inner(*dependency, subtask_visited));
+        }
+
+        result.push(subtask_number);
+
+        result
     }
 }
