@@ -133,6 +133,15 @@ impl Task {
         }
     }
 
+    /// count how many tests there are in total (if one subtask is a dependency of another, its tests are counted multiple times)
+    fn get_num_all_tests(&self) -> i32 {
+        let mut num_tests = 0;
+        for subtask in &self.subtasks {
+            num_tests += self.get_total_tests(subtask);
+        }
+        num_tests
+    }
+
     /// This function builds solution and then calls `generate_tests`.
     fn create_tests_inner2(&mut self, logger: &Logger, generate_cps: bool) -> Result<()> {
         logger.logln("");
@@ -181,38 +190,40 @@ impl Task {
             }
         }
 
-        self.generate_tests(logger, generate_cps)?;
-
-        Ok(())
-    }
-    
-    #[allow(clippy::too_many_lines)]
-    fn generate_tests(&mut self, logger: &Logger, generate_cps: bool) -> Result<()> {
         // create tests directory if it doesn't exist and clear it
         std::fs::create_dir_all(&self.tests_path).map_err(|err| Error::IOError { err })?;
         for entry in std::fs::read_dir(&self.tests_path).map_err(|err| Error::IOError { err })? {
             std::fs::remove_file(entry.map_err(|err| Error::IOError { err })?.path()).map_err(|err| Error::IOError { err })?;
         }
 
-        // count how many tests there are in total (if one subtask is a dependency of another, its tests are counted multiple times)
-        let mut num_tests = 0;
-        for subtask in &self.subtasks {
-            num_tests += self.get_total_tests(subtask);
+        let test_files = self.generate_tests(logger)?;
+        self.check_tests(logger)?;
+        self.generate_test_solutions(logger, &test_files)?;
+        self.check_partial_solutions(logger, &test_files)?;
+
+        if generate_cps {
+            println!("Generating CPS file...");
+            self.generate_cps_file()?;
+        } else {
+            println!("Archiving tests...");
+            self.archive_tests(&test_files)?;
         }
 
-        // calculate how many steps there are in total for the progress bar. If checkers are missing, it is less steps.
-        // 2 generating input and producing output and num_tests for every partial solution
-        let mut loading_progress_max = 2 * num_tests + self.partial_solutions.len() as i32 * num_tests;
-        for subtask in &self.subtasks {
-            if subtask.checker.is_some() {
-                // and for each check
-                loading_progress_max += self.get_total_tests(subtask);
-            }
-        }
+        let tests_size = fs_extra::dir::get_size(&self.tests_path).unwrap_or(0) as f32 / 1_000_000.0;
+        logger.logln(format!("\x1b[36;1mTests size: {tests_size:.2}MB\x1b[0m"));
+
+        Ok(())
+    }
+    
+    #[allow(clippy::too_many_lines)]
+    fn generate_tests(&mut self, logger: &Logger) -> Result<Vec<Vec<(PathBuf, PathBuf)>>> {
+        let num_tests = self.get_num_all_tests();
+
+        // calculate how many steps there are in total for the progress bar.
+        let loading_progress_max = num_tests;
+        let mut loading_progress = 0;
 
         logger.logln("Generating tests...");
-
-        let mut loading_progress = 0;
 
         // Generate and write tests for each subtask
         let mut curr_test_id = 0;
@@ -239,8 +250,8 @@ impl Task {
                 // generate input files for all tests
                 for (test, input_file) in &mut self.subtasks[subtask_number].tests.iter_mut().zip(tests_input_files) {
                     test.generate_input(&input_file)?;
-                    loading_progress += 1;
                     print_progress_bar((loading_progress as f32) / (loading_progress_max as f32), logger);
+                    loading_progress += 1;
                 }
             }
 
@@ -248,11 +259,26 @@ impl Task {
         }
 
         clear_progress_bar(logger);
+        
+        assert_eq!(loading_progress, loading_progress_max);
+
+        Ok(test_files)
+    }
+    
+    fn check_tests(&self, logger: &Logger) -> Result<()> {
+        // calculate how many steps there are in total for the progress bar.
+        let mut loading_progress_max = 0;
+        for subtask in &self.subtasks {
+            if subtask.checker.is_some() {
+                // and for each check
+                loading_progress_max += self.get_total_tests(subtask);
+            }
+        }
+        let mut loading_progress = 0;
+
+        let mut curr_test_id = 0;
         logger.logln("Checking tests...");
         print_progress_bar((loading_progress as f32) / (loading_progress_max as f32), logger);
-
-        // check all tests
-        curr_test_id = 0;
         for (subtask_id, subtask) in self.subtasks.iter().enumerate() {
             let checker = &subtask.checker;
             if let Some(checker) = checker {
@@ -271,43 +297,68 @@ impl Task {
                 curr_test_id += self.get_total_tests(subtask);
             }
         }
-
         clear_progress_bar(logger);
+
+        assert_eq!(loading_progress, loading_progress_max);
+        
+        Ok(())
+    }
+    
+    fn generate_test_solutions(&self, logger: &Logger, test_files: &Vec<Vec<(PathBuf, PathBuf)>>) -> Result<()> {
+        let num_tests = self.get_num_all_tests();
+        
+        // calculate how many steps there are in total for the progress bar.
+        let loading_progress_max = num_tests;
+        let mut loading_progress = 0;
+        
         logger.logln("Generating test solutions...");
         print_progress_bar((loading_progress as f32) / (loading_progress_max as f32), logger);
 
         // invoke solution on each test
         let mut max_elapsed_time: f32 = 0.0;
-        for subtask in &test_files {
+        for subtask in test_files {
             for (input_file, output_file) in subtask {
                 print_progress_bar((loading_progress as f32) / (loading_progress_max as f32), logger);
-
                 loading_progress += 1;
+                
                 let test_result = run_solution(&self.solution_exe_path, input_file, output_file, self.time_limit)?;
                 let elapsed_time = match test_result {
                     TestResult::Ok(elapsed_time) => { elapsed_time }
                     TestResult::TimedOut => {
+                        clear_progress_bar(logger);
                         return Err(Error::SolutionTimedOut {
-                            test_path: input_file.to_str().unwrap_or("???").to_owned(),
+                            test_path: input_file.to_str().unwrap_or("?").to_owned(),
                         });
                     }
                     TestResult::Crashed => {
+                        clear_progress_bar(logger);
                         return Err(Error::SolutionFailed {
                             test_path: input_file.to_str().unwrap_or("???").to_owned(),
                         });
                     }
                 };
-                curr_test_id += 1;
                 max_elapsed_time = max_elapsed_time.max(elapsed_time);
             }
         }
         clear_progress_bar(logger);
-        let tests_size = fs_extra::dir::get_size(&self.tests_path).unwrap_or(0) as f32 / 1_000_000.0;
 
+        assert_eq!(loading_progress, loading_progress_max);
+        
+        Ok(())
+    }
+    
+    fn check_partial_solutions(&self, logger: &Logger, test_files: &Vec<Vec<(PathBuf, PathBuf)>>) -> Result<()> {
+        let num_tests = self.get_num_all_tests();
+        
+        // calculate how many steps there are in total for the progress bar.
+        let loading_progress_max = self.partial_solutions.len() as i32 * num_tests;
+        let mut loading_progress = 0;
+        
         for (partial_id, partial_solution) in self.partial_solutions.iter().enumerate() {
             logger.logln(format!("Checking partial solution {}...", partial_id + 1));
-
-            for (subtask_id, (_subtask, subtask_tests)) in self.subtasks.iter().zip(&test_files).enumerate() {
+            
+            print_progress_bar((loading_progress as f32) / (loading_progress_max as f32), logger);
+            for (subtask_id, (_subtask, subtask_tests)) in self.subtasks.iter().zip(test_files).enumerate() {
                 let mut subtask_failed = false;
                 let mut err_message = String::new();
                 for (input_file, output_file) in subtask_tests {
@@ -335,11 +386,12 @@ impl Task {
                         }
                     }
 
+                    print_progress_bar((loading_progress as f32) / (loading_progress_max as f32), logger);
                     loading_progress += 1;
-                    curr_test_id += 1;
                 }
 
                 if subtask_failed && partial_solution.1.contains(&subtask_id) {
+                    clear_progress_bar(logger);
                     return Err(Error::PartialSolutionFailsSubtask {
                         partial_number: partial_id + 1,
                         subtask_number: subtask_id + 1,
@@ -348,26 +400,19 @@ impl Task {
                 }
 
                 if !subtask_failed && !partial_solution.1.contains(&subtask_id) {
+                    clear_progress_bar(logger);
                     return Err(Error::PartialSolutionPassesExtraSubtask {
                         partial_number: partial_id + 1,
                         subtask_number: subtask_id + 1,
                     });
                 }
             }
+
+            clear_progress_bar(logger);
         }
-
-        if generate_cps {
-            println!("Generating CPS file...");
-            self.generate_cps_file()?;
-        } else {
-            println!("Archiving tests...");
-            self.archive_tests(&test_files)?;
-        }
-
-        logger.logln(format!("\x1b[36;1mMax solution time: {max_elapsed_time:.2}s, tests size: {tests_size:.2}MB\x1b[0m"));
-
-        debug_assert_eq!(loading_progress, loading_progress_max);
-
+        
+        assert_eq!(loading_progress, loading_progress_max);
+        
         Ok(())
     }
 
