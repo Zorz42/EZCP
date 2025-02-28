@@ -327,7 +327,7 @@ impl Task {
         print_progress_bar((loading_progress as f32) / (loading_progress_max as f32), logger);
 
         // invoke solution on each test
-        let mut max_elapsed_time: f32 = 0.0;
+        let mut max_elapsed_time = 0;
         for subtask in test_files {
             for (input_file, output_file) in subtask {
                 print_progress_bar((loading_progress as f32) / (loading_progress_max as f32), logger);
@@ -353,6 +353,7 @@ impl Task {
             }
         }
         clear_progress_bar(logger);
+        logger.logln(format!("Solution time: {max_elapsed_time}ms"));
 
         assert_eq!(loading_progress, loading_progress_max);
         
@@ -362,17 +363,18 @@ impl Task {
     fn check_partial_solutions(&self, logger: &Logger, test_files: &Vec<Vec<(PathBuf, PathBuf)>>) -> Result<()> {
         let num_tests = self.get_num_all_tests();
         
-        // calculate how many steps there are in total for the progress bar.
-        let loading_progress_max = self.partial_solutions.len() as i32 * num_tests;
-        let mut loading_progress = 0;
         
         for (partial_id, partial_solution) in self.partial_solutions.iter().enumerate() {
             logger.logln(format!("Testing partial solution {}", partial_id + 1));
-            
+
+            let loading_progress_max = num_tests;
+            let mut loading_progress = 0;
             print_progress_bar((loading_progress as f32) / (loading_progress_max as f32), logger);
             for (subtask_id, (_subtask, subtask_tests)) in self.subtasks.iter().zip(test_files).enumerate() {
                 let mut subtask_failed = false;
                 let mut err_message = String::new();
+                let mut max_time = Some(0);
+                let mut verdict = format!("{ANSI_BOLD}{ANSI_GREEN}OK{ANSI_RESET}");
                 for (input_file, output_file) in subtask_tests {
                     if !subtask_failed {
                         let exe_path = self.build_folder_path.join(format!("partial_solution_{}", partial_id + 1));
@@ -381,19 +383,26 @@ impl Task {
                         let result = run_solution(&exe_path, input_file, &temp_output_file, self.time_limit)?;
 
                         match result {
-                            TestResult::Ok(_) => {}
+                            TestResult::Ok(time) => {
+                                max_time = Some(i32::max(max_time.unwrap_or(0), time));
+                            }
                             TestResult::TimedOut => {
                                 err_message = "Partial solution timed out".to_owned();
+                                verdict = format!("{ANSI_BOLD}{ANSI_RED}TLE{ANSI_RESET}");
+                                max_time = None;
                                 subtask_failed = true;
                             }
                             TestResult::Crashed => {
                                 err_message = "Partial solution crashed".to_owned();
+                                verdict = format!("{ANSI_BOLD}{ANSI_RED}RTE{ANSI_RESET}");
+                                max_time = None;
                                 subtask_failed = true;
                             }
                         }
 
                         if !are_files_equal(&temp_output_file, output_file)? {
                             err_message = "Wrong Answer".to_owned();
+                            verdict = format!("{ANSI_BOLD}{ANSI_RED}WA{ANSI_RESET}");
                             subtask_failed = true;
                         }
                     }
@@ -401,7 +410,15 @@ impl Task {
                     print_progress_bar((loading_progress as f32) / (loading_progress_max as f32), logger);
                     loading_progress += 1;
                 }
-
+                
+                clear_progress_bar(logger);
+                logger.log(format!("- Subtask {}: {verdict} ", subtask_id + 1));
+                if let Some(max_time) = max_time {
+                    logger.log(format!("{max_time}ms"));
+                }
+                logger.log("\n");
+                print_progress_bar((loading_progress as f32) / (loading_progress_max as f32), logger);
+                
                 if subtask_failed && partial_solution.1.contains(&subtask_id) {
                     clear_progress_bar(logger);
                     return Err(Error::PartialSolutionFailsSubtask {
@@ -421,9 +438,8 @@ impl Task {
             }
 
             clear_progress_bar(logger);
+            assert_eq!(loading_progress, loading_progress_max);
         }
-        
-        assert_eq!(loading_progress, loading_progress_max);
         
         Ok(())
     }

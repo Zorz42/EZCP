@@ -125,7 +125,7 @@ pub fn build_solution(source_file: &PathBuf, executable_file: &PathBuf) -> Resul
 }
 
 pub enum TestResult {
-    Ok(f32), // elapsed time
+    Ok(i32), // elapsed time in milliseconds
     TimedOut,
     Crashed,
 }
@@ -175,7 +175,8 @@ pub fn run_solution(executable_file: &PathBuf, input_file: &PathBuf, output_file
         return Ok(TestResult::Crashed);
     }
 
-    Ok(TestResult::Ok(elapsed_time))
+    let elapsed_time_ms = (elapsed_time * 1000.0).ceil() as i32;
+    Ok(TestResult::Ok(elapsed_time_ms))
 }
 
 /// Compares if two file have equal contents.
