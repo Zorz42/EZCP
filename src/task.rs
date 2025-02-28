@@ -1,5 +1,6 @@
+use crate::progress_bar::{ANSI_GREEN, ANSI_RED};
 use crate::logger::Logger;
-use crate::progress_bar::{clear_progress_bar, print_progress_bar};
+use crate::progress_bar::{clear_progress_bar, print_progress_bar, ANSI_BLUE, ANSI_BOLD, ANSI_RESET, ANSI_YELLOW};
 use crate::solution_runner::{are_files_equal, build_solution, run_solution, TestResult};
 use crate::subtask::Subtask;
 use crate::{Error, Input, Result};
@@ -124,11 +125,11 @@ impl Task {
         let start_time = std::time::Instant::now();
         let res = self.create_tests_inner2(&logger, generate_cps);
         if let Err(err) = res {
-            logger.logln(format!("\n\x1b[31;1mError: {err}\x1b[0m"));
+            logger.logln(format!("\n{ANSI_RED}{ANSI_BOLD}Error: {err}{ANSI_RESET}"));
             Err(err)
         } else {
-            logger.logln("\n\x1b[32;1mSuccess!\x1b[0m");
-            logger.logln(format!("\x1b[36;1mElapsed time: {:.2}s\n\x1b[0m", start_time.elapsed().as_secs_f32()));
+            logger.logln(format!("\n{ANSI_GREEN}{ANSI_BOLD}Success!{ANSI_RESET}"));
+            logger.logln(format!("Elapsed time: {ANSI_BOLD}{:.2}s{ANSI_RESET}\n", start_time.elapsed().as_secs_f32()));
             Ok(())
         }
     }
@@ -151,7 +152,7 @@ impl Task {
         for _ in 0..text.len() + 6 {
             logger.log("=");
         }
-        logger.logln(format!("\n || \x1b[1m{text}\x1b[0m ||"));
+        logger.logln(format!("\n || {ANSI_BOLD}{text}{ANSI_RESET} ||"));
         logger.log(" ");
         for _ in 0..text.len() + 6 {
             logger.log("=");
@@ -160,7 +161,7 @@ impl Task {
 
         // if there are no subtasks, print a warning in bold yellow
         if self.subtasks.is_empty() {
-            logger.logln("\x1b[33;1mWarning: no subtasks\x1b[0m");
+            logger.logln(format!("{ANSI_YELLOW}{ANSI_BOLD}Warning: no subtasks{ANSI_RESET}"));
         }
 
         // create build directory if it doesn't exist
@@ -197,26 +198,35 @@ impl Task {
         for entry in std::fs::read_dir(&self.tests_path).map_err(|err| Error::IOError { err })? {
             std::fs::remove_file(entry.map_err(|err| Error::IOError { err })?.path()).map_err(|err| Error::IOError { err })?;
         }
+        
+        let print_progress = |curr, total| {
+            logger.log(format!("[{ANSI_BOLD}{curr}{ANSI_RESET}/{ANSI_BOLD}{total}{ANSI_RESET}] "));
+        };
 
-        logger.logln("[1/5] Generating tests...");
+        print_progress(1,5);
+        logger.logln(format!("{ANSI_BLUE}{ANSI_BOLD}Generating tests{ANSI_RESET}"));
         let test_files = self.generate_tests(logger)?;
-        logger.logln("[2/5] Checking tests...");
+        print_progress(2,5);
+        logger.logln(format!("{ANSI_BLUE}{ANSI_BOLD}Checking generated tests{ANSI_RESET}"));
         self.check_tests(logger)?;
-        logger.logln("[3/5] Generating test solutions...");
+        print_progress(3,5);
+        logger.logln(format!("{ANSI_BLUE}{ANSI_BOLD}Generating test solutions{ANSI_RESET}"));
         self.generate_test_solutions(logger, &test_files)?;
-        logger.logln("[4/5] Checking partial solutions ...");
+        print_progress(4,5);
+        logger.logln(format!("{ANSI_BLUE}{ANSI_BOLD}Checking partial solutions{ANSI_RESET}"));
         self.check_partial_solutions(logger, &test_files)?;
 
+        print_progress(5,5);
         if generate_cps {
-            println!("[5/5] Generating CPS file...");
+            logger.logln(format!("{ANSI_BLUE}{ANSI_BOLD}Generating CPS file{ANSI_RESET}"));
             self.generate_cps_file()?;
         } else {
-            println!("[5/5] Archiving tests...");
+            logger.logln(format!("{ANSI_BLUE}{ANSI_BOLD}Archiving tests{ANSI_RESET}"));
             self.archive_tests(logger, &test_files)?;
         }
 
         let tests_size = fs_extra::dir::get_size(&self.tests_path).unwrap_or(0) as f32 / 1_000_000.0;
-        logger.logln(format!("\x1b[36;1mTests size: {tests_size:.2}MB\x1b[0m"));
+        logger.logln(format!("Tests size: {ANSI_BOLD}{tests_size:.2}MB{ANSI_RESET}"));
 
         Ok(())
     }
@@ -295,7 +305,7 @@ impl Task {
                 }
             } else {
                 clear_progress_bar(logger);
-                logger.logln(format!("\x1b[33mWarning: no checker for subtask {}\x1b[0m", subtask.number));
+                logger.logln(format!("{ANSI_YELLOW}{ANSI_BOLD}Warning{ANSI_RESET}: No checker for subtask {}.", subtask.number + 1));
                 print_progress_bar((loading_progress as f32) / (loading_progress_max as f32), logger);
                 curr_test_id += self.get_total_tests(subtask);
             }
@@ -335,7 +345,7 @@ impl Task {
                     TestResult::Crashed => {
                         clear_progress_bar(logger);
                         return Err(Error::SolutionFailed {
-                            test_path: input_file.to_str().unwrap_or("???").to_owned(),
+                            test_path: input_file.to_str().unwrap_or("?").to_owned(),
                         });
                     }
                 };
@@ -357,7 +367,7 @@ impl Task {
         let mut loading_progress = 0;
         
         for (partial_id, partial_solution) in self.partial_solutions.iter().enumerate() {
-            logger.logln(format!("Checking partial solution {}...", partial_id + 1));
+            logger.logln(format!("Testing partial solution {}", partial_id + 1));
             
             print_progress_bar((loading_progress as f32) / (loading_progress_max as f32), logger);
             for (subtask_id, (_subtask, subtask_tests)) in self.subtasks.iter().zip(test_files).enumerate() {
