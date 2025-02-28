@@ -400,7 +400,7 @@ impl Task {
                             }
                         }
 
-                        if !are_files_equal(&temp_output_file, output_file)? {
+                        if !subtask_failed && !are_files_equal(&temp_output_file, output_file)? {
                             err_message = "Wrong Answer".to_owned();
                             verdict = format!("{ANSI_BOLD}{ANSI_RED}WA{ANSI_RESET}");
                             subtask_failed = true;
