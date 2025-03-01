@@ -1,5 +1,5 @@
 use crate::error::{Error, Result};
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::rc::Rc;
 
 /// A struct that represents a test generator.
@@ -34,7 +34,7 @@ impl Test {
 
     /// Generates input and writes it to `file_path`.
     /// If `input_file` is already set, it will copy the file to `file_path`.
-    pub fn generate_input(&mut self, file_path: &Path) -> Result<()> {
+    pub fn generate_input(&mut self, file_path: PathBuf) -> Result<()> {
         if file_path.exists() {
             return Err(Error::TestAlreadyExists { path: file_path.to_str().unwrap_or("???").to_owned() });
         }
@@ -45,7 +45,7 @@ impl Test {
         } else {
             // generate input and write it to file_path
             let input = self.input_generator.generate();
-            self.input_file = Some(file_path.to_path_buf());
+            self.input_file = Some(file_path.clone());
             std::fs::write(file_path, input).map_err(|err| Error::IOError { err })?;
         }
 

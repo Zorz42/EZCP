@@ -1,5 +1,8 @@
+use std::mem::swap;
 use crate::{Error, Result};
 use std::path::PathBuf;
+use crate::logger::Logger;
+use crate::progress_bar::{clear_progress_bar, print_progress_bar};
 
 #[cfg(windows)]
 enum WindowsCompiler {
@@ -124,12 +127,50 @@ pub fn build_solution(source_file: &PathBuf, executable_file: &PathBuf) -> Resul
     Ok(true)
 }
 
+#[derive(Clone)]
 pub enum TestResult {
     Ok(i32), // elapsed time in milliseconds
     TimedOut,
     Crashed,
 }
 
+pub struct SolutionRunner {
+    tasks: Vec<(PathBuf, PathBuf, PathBuf, f32, Option<Result<TestResult>>)>,
+}
+
+impl SolutionRunner {
+    pub const fn new() -> Self {
+        Self { tasks: Vec::new() }
+    }
+    
+    pub fn add_task(&mut self, executable_file: PathBuf, input_file: PathBuf, output_file: PathBuf, time_limit: f32) -> usize {
+        self.tasks.push((executable_file, input_file, output_file, time_limit, None));
+        self.tasks.len() - 1
+    }
+    
+    pub fn run_tasks(&mut self, logger: &Logger) {
+        let loading_progress_max = self.tasks.len() as i32;
+        let mut loading_progress = 0;
+        
+        for (executable_file, input_file, output_file, time_limit, result) in &mut self.tasks {
+            print_progress_bar(loading_progress as f32 / loading_progress_max as f32, logger);
+            loading_progress += 1;
+            
+            if result.is_none() {
+                *result = Some(run_solution(executable_file, input_file, output_file, *time_limit));
+            }
+        }
+        
+        assert_eq!(loading_progress, loading_progress_max);
+        clear_progress_bar(logger);
+    }
+    
+    pub fn get_result(&mut self, task_id: usize) -> Result<TestResult> {
+        let mut res = None;
+        swap(&mut res, &mut self.tasks.get_mut(task_id).as_mut().unwrap().4);
+        res.unwrap()
+    }
+}
 
 /// This function takes an executable file and runs it with the input file.
 /// It writes the output to the output file, and returns the result of the test.

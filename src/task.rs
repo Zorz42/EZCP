@@ -1,7 +1,7 @@
 use crate::progress_bar::{ANSI_GREEN, ANSI_RED};
 use crate::logger::Logger;
 use crate::progress_bar::{clear_progress_bar, print_progress_bar, ANSI_BLUE, ANSI_BOLD, ANSI_RESET, ANSI_YELLOW};
-use crate::solution_runner::{are_files_equal, build_solution, run_solution, TestResult};
+use crate::solution_runner::{are_files_equal, build_solution, run_solution, SolutionRunner, TestResult};
 use crate::subtask::Subtask;
 use crate::{Error, Input, Result};
 use std::collections::HashSet;
@@ -263,7 +263,7 @@ impl Task {
 
                 // generate input files for all tests
                 for (test, input_file) in &mut self.subtasks[subtask_number].tests.iter_mut().zip(tests_input_files) {
-                    test.generate_input(&input_file)?;
+                    test.generate_input(input_file)?;
                     print_progress_bar((loading_progress as f32) / (loading_progress_max as f32), logger);
                     loading_progress += 1;
                 }
@@ -318,22 +318,25 @@ impl Task {
     }
     
     fn generate_test_solutions(&self, logger: &Logger, test_files: &Vec<Vec<(PathBuf, PathBuf)>>) -> Result<()> {
-        let num_tests = self.get_num_all_tests();
+        let mut solution_runner = SolutionRunner::new();
+        let mut test_tasks = Vec::new();
         
-        // calculate how many steps there are in total for the progress bar.
-        let loading_progress_max = num_tests;
-        let mut loading_progress = 0;
-        
-        print_progress_bar((loading_progress as f32) / (loading_progress_max as f32), logger);
-
         // invoke solution on each test
-        let mut max_elapsed_time = 0;
         for subtask in test_files {
+            let mut subtask_tasks = Vec::new();
             for (input_file, output_file) in subtask {
-                print_progress_bar((loading_progress as f32) / (loading_progress_max as f32), logger);
-                loading_progress += 1;
                 
-                let test_result = run_solution(&self.solution_exe_path, input_file, output_file, self.time_limit)?;
+                subtask_tasks.push(solution_runner.add_task(self.solution_exe_path.clone(), input_file.clone(), output_file.clone(), self.time_limit));
+            }
+            test_tasks.push(subtask_tasks);
+        }
+        
+        solution_runner.run_tasks(logger);
+
+        let mut max_elapsed_time = 0;
+        for (subtask, tasks) in test_files.iter().zip(test_tasks) {
+            for ((input_file, _output_file), task) in subtask.iter().zip(tasks) {
+                let test_result = solution_runner.get_result(task)?;
                 let elapsed_time = match test_result {
                     TestResult::Ok(elapsed_time) => { elapsed_time }
                     TestResult::TimedOut => {
@@ -352,10 +355,7 @@ impl Task {
                 max_elapsed_time = max_elapsed_time.max(elapsed_time);
             }
         }
-        clear_progress_bar(logger);
         logger.logln(format!("Solution time: {max_elapsed_time}ms"));
-
-        assert_eq!(loading_progress, loading_progress_max);
         
         Ok(())
     }
