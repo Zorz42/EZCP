@@ -12,10 +12,12 @@ pub const ANSI_GREY: &str = "\x1b[90m";
 /// Prints a progress bar to stdout.
 pub fn print_progress_bar(progress: f32, logger: &Logger) {
     let size = termsize::get();
-    logger.log(format!("\r {ANSI_BLUE}{ANSI_BOLD}{:.2}%{ANSI_RESET} [", progress * 100.0));
+    let progress_percent = (progress * 100.0).round() as i32;
+    let padding = if progress_percent < 10 { "  " } else if progress_percent < 100 { " " } else { "" }; 
+    logger.log(format!("\r {padding}{ANSI_BLUE}{ANSI_BOLD}{progress_percent}%{ANSI_RESET} ["));
 
-    let bar_length = size.map_or(10, |size| (size.cols as usize - 15).max(0));
-    let num_filled = (progress * bar_length as f32) as usize;
+    let bar_length = size.map_or(30, |size| (size.cols as usize - 15).max(30));
+    let num_filled = (progress * (bar_length - 1) as f32) as usize;
     let num_empty = ((bar_length - num_filled) as i32 - 1).max(0);
 
     logger.log(ANSI_GREY);
@@ -38,7 +40,7 @@ pub fn print_progress_bar(progress: f32, logger: &Logger) {
 /// Clears the progress bar from stdout.
 pub fn clear_progress_bar(logger: &Logger) {
     let size = termsize::get();
-    let bar_length = size.map_or(10, |size| size.cols as usize);
+    let bar_length = size.map_or(30, |size| size.cols as usize);
 
     logger.log("\r");
     for _ in 0..bar_length {

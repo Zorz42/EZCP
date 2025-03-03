@@ -1,6 +1,10 @@
+use std::io::{Read, Write};
 use std::mem::swap;
 use crate::{Error, Result};
 use std::path::PathBuf;
+use std::process::Stdio;
+use std::thread::spawn;
+use libc::wait;
 use crate::logger::Logger;
 use crate::progress_bar::{clear_progress_bar, print_progress_bar};
 
@@ -151,16 +155,44 @@ impl SolutionRunner {
     pub fn run_tasks(&mut self, logger: &Logger) {
         let loading_progress_max = self.tasks.len() as i32;
         let mut loading_progress = 0;
-        
-        for (executable_file, input_file, output_file, time_limit, result) in &mut self.tasks {
-            print_progress_bar(loading_progress as f32 / loading_progress_max as f32, logger);
-            loading_progress += 1;
-            
-            if result.is_none() {
-                *result = Some(run_solution(executable_file, input_file, output_file, *time_limit));
+
+        let num_threads = num_cpus::get();
+        let mut threads = Vec::new();
+
+        let mut it = 0;
+
+        loop {
+            while threads.len() < num_threads && it < self.tasks.len() {
+                let executable_file = self.tasks[it].0.clone();
+                let input_file = self.tasks[it].1.clone();
+                let output_file = self.tasks[it].2.clone();
+                let time_limit = self.tasks[it].3;
+                it += 1;
+                loading_progress += 1;
+                print_progress_bar((loading_progress as f32) / (loading_progress_max as f32), logger);
+
+                threads.push((std::thread::spawn(move || run_solution(&executable_file, &input_file, &output_file, time_limit)), it - 1));
+            }
+
+            let mut new_threads = Vec::new();
+            for (thread, idx) in threads {
+                if thread.is_finished() {
+                    let result = thread.join().unwrap();
+                    self.tasks[idx].4 = Some(result);
+                } else {
+                    new_threads.push((thread, idx));
+                }
+            }
+
+            threads = new_threads;
+
+            std::thread::sleep(std::time::Duration::from_millis(1));
+
+            if it == self.tasks.len() && threads.is_empty() {
+                break;
             }
         }
-        
+
         assert_eq!(loading_progress, loading_progress_max);
         clear_progress_bar(logger);
     }
@@ -172,6 +204,18 @@ impl SolutionRunner {
     }
 }
 
+fn parse_time_output(output: &str) -> (f32, f32) {
+    let mut tokens = output.split_whitespace().collect::<Vec<_>>();
+    let mut floats = Vec::new();
+    for token in tokens {
+        if let Ok(float) = token.parse::<f32>() {
+            floats.push(float);
+        }
+    }
+    assert_eq!(floats.len(), 3);
+    (floats[1], floats[2])
+}
+
 /// This function takes an executable file and runs it with the input file.
 /// It writes the output to the output file, and returns the result of the test.
 pub fn run_solution(executable_file: &PathBuf, input_file: &PathBuf, output_file: &PathBuf, time_limit: f32) -> Result<TestResult> {
@@ -180,6 +224,11 @@ pub fn run_solution(executable_file: &PathBuf, input_file: &PathBuf, output_file
     let working_dir = std::env::current_dir().map_err(|err| Error::IOError { err })?;
 
     let executable_file = working_dir.join(executable_file);
+    #[cfg(unix)]
+    let mut solution_process = std::process::Command::new("time");
+    #[cfg(unix)]
+    let solution_process = solution_process.arg(executable_file);
+    #[cfg(windows)]
     let mut solution_process = std::process::Command::new(executable_file);
 
     #[cfg(windows)]
@@ -198,19 +247,44 @@ pub fn run_solution(executable_file: &PathBuf, input_file: &PathBuf, output_file
     let mut solution_process = solution_process
         .stdin(std::fs::File::open(input_file).map_err(|err| Error::IOError { err })?)
         .stdout(std::fs::File::create(output_file).map_err(|err| Error::IOError { err })?)
+        .stderr(Stdio::piped())
         .spawn()
         .map_err(|err| Error::IOError { err })?;
 
     while solution_process.try_wait().map_err(|err| Error::IOError { err })?.is_none() {
         std::thread::sleep(std::time::Duration::from_millis(1));
-        if start_time.elapsed().as_secs_f32() > time_limit {
+        let end_time = std::time::Instant::now();
+        let elapsed = end_time.duration_since(start_time);
+        let elapsed_time = elapsed.as_secs_f32();
+        if elapsed_time > 5.0 * time_limit {
             solution_process.kill().map_err(|err| Error::IOError { err })?;
             return Ok(TestResult::TimedOut);
         }
     }
 
+    #[cfg(unix)]
+    let elapsed_time = {
+        // capture stderr from solution process
+        let stderr = solution_process.stderr.as_mut().unwrap();
+        let mut stderr_str = String::new();
+        stderr.read_to_string(&mut stderr_str).map_err(|err| Error::IOError { err })?;
+        // parse output from time command
+        let (user_time, sys_time) = parse_time_output(&stderr_str);
+        user_time + sys_time
+    };
+
+    #[cfg(windows)]
+    let elapsed_time = {
+        let end_time = std::time::Instant::now();
+        end_time.duration_since(start_time);
+    };
+
+    if elapsed_time > time_limit {
+        println!("{elapsed_time} > {time_limit}");
+        return Ok(TestResult::TimedOut);
+    }
+    
     let solution_status = solution_process.wait().map_err(|err| Error::IOError { err })?;
-    let elapsed_time = start_time.elapsed().as_secs_f32();
 
     if !solution_status.success() {
         return Ok(TestResult::Crashed);
@@ -226,8 +300,19 @@ pub fn are_files_equal(file1: &PathBuf, file2: &PathBuf) -> Result<bool> {
     let file1 = std::fs::read_to_string(file1).map_err(|err| Error::IOError { err })?;
     let file2 = std::fs::read_to_string(file2).map_err(|err| Error::IOError { err })?;
 
-    let file1 = file1.split_whitespace().collect::<String>();
-    let file2 = file2.split_whitespace().collect::<String>();
+    let file1_it = file1.split_whitespace();
+    let file2_it = file2.split_whitespace();
 
+    let mut file1 = Vec::new();
+    let mut file2 = Vec::new();
+
+    for i in file1_it {
+        file1.push(i.to_owned());
+    }
+
+    for i in file2_it {
+        file2.push(i.to_owned());
+    }
+    
     Ok(file1 == file2)
 }
