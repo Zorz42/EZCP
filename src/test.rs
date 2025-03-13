@@ -41,12 +41,13 @@ impl Test {
 
         if let Some(input_file) = &self.input_file {
             // copy input file to file_path
-            std::fs::copy(input_file, file_path).map_err(|err| Error::IOError { err })?;
+            std::fs::copy(input_file.clone(), file_path.clone()).map_err(move |err| Error::IOError { err, file: format!("{input_file:?} -> {file_path:?}") })?;
         } else {
             // generate input and write it to file_path
             let input = self.input_generator.generate();
             self.input_file = Some(file_path.clone());
-            std::fs::write(file_path, input).map_err(|err| Error::IOError { err })?;
+            let file_path_str = file_path.to_str().unwrap_or("???").to_owned();
+            std::fs::write(file_path, input).map_err(|err| Error::IOError { err, file: file_path_str })?;
         }
 
         Ok(())

@@ -1,7 +1,7 @@
 use crate::progress_bar::{ANSI_GREEN, ANSI_RED};
 use crate::logger::Logger;
 use crate::progress_bar::{clear_progress_bar, print_progress_bar, ANSI_BLUE, ANSI_BOLD, ANSI_RESET, ANSI_YELLOW};
-use crate::solution_runner::{are_files_equal, build_solution, run_solution, SolutionRunner, TestResult};
+use crate::solution_runner::{are_files_equal, build_solution, check_if_timer_is_built, run_solution, SolutionRunner, TestResult};
 use crate::subtask::Subtask;
 use crate::{Error, Input, Result};
 use std::collections::HashSet;
@@ -56,8 +56,8 @@ impl Task {
             solution_exe_path: build_folder_path.join("solution"),
             tests_archive_path: path.join("tests.zip"),
             cps_tests_archive_path: path.join("tests.cpt"),
-            get_input_file_name: Box::new(|test_id, _subtask_id, _test_id_in_subtask| format!("test{test_id:0>3}.in")),
-            get_output_file_name: Box::new(|test_id, _subtask_id, _test_id_in_subtask| format!("test{test_id:0>3}.out")),
+            get_input_file_name: Box::new(|test_id, subtask_id, _test_id_in_subtask| format!("test{:02}_{:03}.in", subtask_id+1, test_id+1)),
+            get_output_file_name: Box::new(|test_id, subtask_id, _test_id_in_subtask| format!("test{:02}_{:03}.out", subtask_id+1, test_id+1)),
             build_folder_path,
             time_limit: 5.0,
             subtasks: Vec::new(),
@@ -166,7 +166,7 @@ impl Task {
 
         // create build directory if it doesn't exist
         if !self.build_folder_path.exists() {
-            std::fs::create_dir_all(&self.build_folder_path).map_err(|err| Error::IOError { err })?;
+            std::fs::create_dir_all(&self.build_folder_path).map_err(|err| Error::IOError { err, file: String::new() })?;
         }
 
         // check if solution file exists
@@ -194,14 +194,16 @@ impl Task {
         }
 
         // create tests directory if it doesn't exist and clear it
-        std::fs::create_dir_all(&self.tests_path).map_err(|err| Error::IOError { err })?;
-        for entry in std::fs::read_dir(&self.tests_path).map_err(|err| Error::IOError { err })? {
-            std::fs::remove_file(entry.map_err(|err| Error::IOError { err })?.path()).map_err(|err| Error::IOError { err })?;
+        std::fs::create_dir_all(&self.tests_path).map_err(|err| Error::IOError { err, file: String::new() })?;
+        for entry in std::fs::read_dir(&self.tests_path).map_err(|err| Error::IOError { err, file: String::new() })? {
+            std::fs::remove_file(entry.map_err(|err| Error::IOError { err, file: String::new() })?.path()).map_err(|err| Error::IOError { err, file: String::new() })?;
         }
         
         let print_progress = |curr, total| {
             logger.log(format!("[{ANSI_BOLD}{curr}{ANSI_RESET}/{ANSI_BOLD}{total}{ANSI_RESET}] "));
         };
+        
+        check_if_timer_is_built(&self.build_folder_path);
 
         print_progress(1,5);
         logger.logln(format!("{ANSI_BLUE}{ANSI_BOLD}Generating tests{ANSI_RESET}"));
@@ -297,7 +299,7 @@ impl Task {
             if let Some(checker) = checker {
                 for test_id_in_subtask in 0..self.get_total_tests(subtask) {
                     let input_test_path = self.get_input_file_path(curr_test_id, subtask_id as i32, test_id_in_subtask);
-                    let input_str = std::fs::read_to_string(input_test_path).map_err(|err| Error::IOError { err })?;
+                    let input_str = std::fs::read_to_string(input_test_path).map_err(|err| Error::IOError { err, file: String::new() })?;
                     checker(Input::new(&input_str))?;
                     curr_test_id += 1;
                     loading_progress += 1;
@@ -331,7 +333,7 @@ impl Task {
             test_tasks.push(subtask_tasks);
         }
         
-        solution_runner.run_tasks(logger);
+        solution_runner.run_tasks(logger, &self.build_folder_path);
 
         let mut max_elapsed_time = 0;
         for (subtask, tasks) in test_files.iter().zip(test_tasks) {
@@ -380,7 +382,7 @@ impl Task {
                         let exe_path = self.build_folder_path.join(format!("partial_solution_{}", partial_id + 1));
                         let temp_output_file = self.build_folder_path.join("temp_output");
 
-                        let result = run_solution(&exe_path, input_file, &temp_output_file, self.time_limit)?;
+                        let result = run_solution(&exe_path, input_file, &temp_output_file, self.time_limit, &self.build_folder_path)?;
 
                         match result {
                             TestResult::Ok(time) => {
@@ -446,7 +448,7 @@ impl Task {
     
     /// Archive all tests into a zip file
     fn archive_tests(&self, logger: &Logger, test_files: &Vec<Vec<(PathBuf, PathBuf)>>) -> Result<()> {
-        let mut zipper = zip::ZipWriter::new(std::fs::File::create(&self.tests_archive_path).map_err(|err| Error::IOError { err })?);
+        let mut zipper = zip::ZipWriter::new(std::fs::File::create(&self.tests_archive_path).map_err(|err| Error::IOError { err, file: String::new() })?);
         let options = SimpleFileOptions::default().compression_method(zip::CompressionMethod::Deflated);
 
         let loading_progress_max = test_files.iter().map(Vec::len).sum::<usize>() as i32;
@@ -460,14 +462,14 @@ impl Task {
                 zipper
                     .start_file(input_file.file_name().map_or("", |a| a.to_str().unwrap_or("")), options)
                     .map_err(|err| Error::ZipError { err })?;
-                let input_file = std::fs::read(input_file).map_err(|err| Error::IOError { err })?;
-                zipper.write_all(&input_file).map_err(|err| Error::IOError { err })?;
+                let input_file = std::fs::read(input_file).map_err(|err| Error::IOError { err, file: String::new() })?;
+                zipper.write_all(&input_file).map_err(|err| Error::IOError { err, file: String::new() })?;
 
                 zipper
                     .start_file(output_file.file_name().map_or("", |a| a.to_str().unwrap_or("")), options)
                     .map_err(|err| Error::ZipError { err })?;
-                let output_file = std::fs::read(output_file).map_err(|err| Error::IOError { err })?;
-                zipper.write_all(&output_file).map_err(|err| Error::IOError { err })?;
+                let output_file = std::fs::read(output_file).map_err(|err| Error::IOError { err, file: String::new() })?;
+                zipper.write_all(&output_file).map_err(|err| Error::IOError { err, file: String::new() })?;
             }
         }
         
@@ -495,8 +497,8 @@ impl Task {
                 let input_file = self.get_input_file_path(cps_tests.tests.len() as i32, subtask.number as i32, subtask_tests.len() as i32);
                 let output_file = self.get_output_file_path(cps_tests.tests.len() as i32, subtask.number as i32, subtask_tests.len() as i32);
 
-                let input = std::fs::read_to_string(&input_file).map_err(|err| Error::IOError { err })?;
-                let output = std::fs::read_to_string(&output_file).map_err(|err| Error::IOError { err })?;
+                let input = std::fs::read_to_string(&input_file).map_err(|err| Error::IOError { err, file: String::new() })?;
+                let output = std::fs::read_to_string(&output_file).map_err(|err| Error::IOError { err, file: String::new() })?;
 
                 subtask_tests.push(cps_tests.tests.len());
 
@@ -508,7 +510,7 @@ impl Task {
         let mut buffer = Vec::new();
         bincode::serialize_into(&mut buffer, &cps_tests).map_err(|err| Error::BincodeError { err })?;
         let data = snap::raw::Encoder::new().compress_vec(&buffer).map_err(|err| Error::SnapError { err })?;
-        std::fs::write(&self.cps_tests_archive_path, data).map_err(|err| Error::IOError { err })?;
+        std::fs::write(&self.cps_tests_archive_path, data).map_err(|err| Error::IOError { err, file: String::new() })?;
 
         Ok(())
     }

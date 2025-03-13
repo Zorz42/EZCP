@@ -1,10 +1,9 @@
-use std::io::{Read, Write};
+use std::io::Read;
 use std::mem::swap;
 use crate::{Error, Result};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::thread::spawn;
-use libc::wait;
 use crate::logger::Logger;
 use crate::progress_bar::{clear_progress_bar, print_progress_bar};
 
@@ -54,11 +53,15 @@ fn get_gcc_path() -> Result<WindowsCompiler> {
 pub fn build_solution(source_file: &PathBuf, executable_file: &PathBuf) -> Result<bool> {
     // if solution executable exists, check if it's up to date
     if executable_file.exists() {
-        let solution_last_modified = std::fs::metadata(source_file).map_err(|err| Error::IOError { err })?.modified().map_err(|err| Error::IOError { err })?;
+        let executable_file_str1 = executable_file.to_str().unwrap_or("???").to_owned();
+        let executable_file_str2 = executable_file_str1.clone();
+        let executable_file_str3 = executable_file_str1.clone();
+        let executable_file_str4 = executable_file_str1.clone();
+        let solution_last_modified = std::fs::metadata(source_file).map_err(|err| Error::IOError { err, file: executable_file_str1 })?.modified().map_err(|err| Error::IOError { err, file: executable_file_str2 })?;
         let solution_exe_last_modified = std::fs::metadata(executable_file)
-            .map_err(|err| Error::IOError { err })?
+            .map_err(|err| Error::IOError { err, file: executable_file_str3 })?
             .modified()
-            .map_err(|err| Error::IOError { err })?;
+            .map_err(|err| Error::IOError { err, file: executable_file_str4 })?;
 
         if solution_exe_last_modified > solution_last_modified {
             return Ok(false);
@@ -118,7 +121,7 @@ pub fn build_solution(source_file: &PathBuf, executable_file: &PathBuf) -> Resul
             .arg(executable_file)
             .arg(source_file)
             .output()
-            .map_err(|err| Error::IOError { err })?;
+            .map_err(|err| Error::IOError { err, file: String::new() })?;
 
         if !process.status.success() {
             return Err(Error::CompilerError {
@@ -152,7 +155,7 @@ impl SolutionRunner {
         self.tasks.len() - 1
     }
     
-    pub fn run_tasks(&mut self, logger: &Logger) {
+    pub fn run_tasks(&mut self, logger: &Logger, build_dir: &Path) {
         let loading_progress_max = self.tasks.len() as i32;
         let mut loading_progress = 0;
 
@@ -160,7 +163,7 @@ impl SolutionRunner {
         let mut threads = Vec::new();
 
         let mut it = 0;
-
+        
         loop {
             while threads.len() < num_threads && it < self.tasks.len() {
                 let executable_file = self.tasks[it].0.clone();
@@ -171,7 +174,8 @@ impl SolutionRunner {
                 loading_progress += 1;
                 print_progress_bar((loading_progress as f32) / (loading_progress_max as f32), logger);
 
-                threads.push((std::thread::spawn(move || run_solution(&executable_file, &input_file, &output_file, time_limit)), it - 1));
+                let build_dir = build_dir.to_owned();
+                threads.push((spawn(move || run_solution(&executable_file, &input_file, &output_file, time_limit, &build_dir)), it - 1));
             }
 
             let mut new_threads = Vec::new();
@@ -192,7 +196,7 @@ impl SolutionRunner {
                 break;
             }
         }
-
+    
         assert_eq!(loading_progress, loading_progress_max);
         clear_progress_bar(logger);
     }
@@ -204,32 +208,31 @@ impl SolutionRunner {
     }
 }
 
-fn parse_time_output(output: &str) -> (f32, f32) {
-    let mut tokens = output.split_whitespace().collect::<Vec<_>>();
-    let mut floats = Vec::new();
-    for token in tokens {
-        if let Ok(float) = token.parse::<f32>() {
-            floats.push(float);
+pub fn check_if_timer_is_built(build_dir: &Path) {
+    let timer_source = build_dir.join("timer.cpp");
+    let timer_executable = build_dir.join("timer");
+    if timer_executable.exists() {
+        let timer_source_content = std::fs::read_to_string(&timer_source).unwrap();
+        if timer_source_content != include_str!("timer.cpp") {
+            std::fs::write(&timer_source, include_str!("timer.cpp")).unwrap();
         }
+    } else {
+        std::fs::write(&timer_source, include_str!("timer.cpp")).unwrap();
     }
-    assert_eq!(floats.len(), 3);
-    (floats[1], floats[2])
+    
+    let _ = build_solution(&timer_source, &timer_executable);
 }
 
 /// This function takes an executable file and runs it with the input file.
 /// It writes the output to the output file, and returns the result of the test.
-pub fn run_solution(executable_file: &PathBuf, input_file: &PathBuf, output_file: &PathBuf, time_limit: f32) -> Result<TestResult> {
-    let start_time = std::time::Instant::now();
-
-    let working_dir = std::env::current_dir().map_err(|err| Error::IOError { err })?;
+/// Build dir is needed, so that timer can be built if it's not already.
+pub fn run_solution(executable_file: &PathBuf, input_file: &PathBuf, output_file: &PathBuf, time_limit: f32, build_dir: &Path) -> Result<TestResult> {
+    let working_dir = std::env::current_dir().map_err(|err| Error::IOError { err, file: "Error1".to_owned() })?;
+    let timer_path = build_dir.join("timer");
 
     let executable_file = working_dir.join(executable_file);
-    #[cfg(unix)]
-    let mut solution_process = std::process::Command::new("time");
-    #[cfg(unix)]
+    let mut solution_process = std::process::Command::new(timer_path);
     let solution_process = solution_process.arg(executable_file);
-    #[cfg(windows)]
-    let mut solution_process = std::process::Command::new(executable_file);
 
     #[cfg(windows)]
     {
@@ -243,62 +246,50 @@ pub fn run_solution(executable_file: &PathBuf, input_file: &PathBuf, output_file
     let input_file = working_dir.join(input_file);
     let output_file = working_dir.join(output_file);
 
+    let input_file_str = input_file.to_str().unwrap_or("???").to_owned();
+    let output_file_str = output_file.to_str().unwrap_or("???").to_owned();
+    
     // spawn the solution process
     let mut solution_process = solution_process
-        .stdin(std::fs::File::open(input_file).map_err(|err| Error::IOError { err })?)
-        .stdout(std::fs::File::create(output_file).map_err(|err| Error::IOError { err })?)
+        .stdin(std::fs::File::open(input_file).map_err(|err| Error::IOError { err, file: input_file_str })?)
+        .stdout(std::fs::File::create(output_file).map_err(|err| Error::IOError { err, file: output_file_str })?)
         .stderr(Stdio::piped())
         .spawn()
-        .map_err(|err| Error::IOError { err })?;
+        .map_err(|err| Error::IOError { err, file: "Error2".to_owned() })?;
 
-    while solution_process.try_wait().map_err(|err| Error::IOError { err })?.is_none() {
-        std::thread::sleep(std::time::Duration::from_millis(1));
-        let end_time = std::time::Instant::now();
-        let elapsed = end_time.duration_since(start_time);
-        let elapsed_time = elapsed.as_secs_f32();
-        if elapsed_time > 5.0 * time_limit {
-            solution_process.kill().map_err(|err| Error::IOError { err })?;
-            return Ok(TestResult::TimedOut);
-        }
-    }
-
-    #[cfg(unix)]
-    let elapsed_time = {
-        // capture stderr from solution process
-        let stderr = solution_process.stderr.as_mut().unwrap();
-        let mut stderr_str = String::new();
-        stderr.read_to_string(&mut stderr_str).map_err(|err| Error::IOError { err })?;
-        // parse output from time command
-        let (user_time, sys_time) = parse_time_output(&stderr_str);
-        user_time + sys_time
-    };
-
-    #[cfg(windows)]
-    let elapsed_time = {
-        let end_time = std::time::Instant::now();
-        end_time.duration_since(start_time);
-    };
-
-    if elapsed_time > time_limit {
-        println!("{elapsed_time} > {time_limit}");
+    let return_code = solution_process.wait().map_err(|err| Error::IOError { err, file: "Error2".to_owned() })?;
+    
+    if return_code.code() == Some(1) {
         return Ok(TestResult::TimedOut);
     }
     
-    let solution_status = solution_process.wait().map_err(|err| Error::IOError { err })?;
-
-    if !solution_status.success() {
+    if !return_code.success() {
         return Ok(TestResult::Crashed);
     }
 
-    let elapsed_time_ms = (elapsed_time * 1000.0).ceil() as i32;
+    let elapsed_time_ms = {
+        // capture stderr from solution process
+        let stderr = solution_process.stderr.as_mut().unwrap();
+        let mut stderr_str = String::new();
+        stderr.read_to_string(&mut stderr_str).map_err(|err| Error::IOError { err, file: "Error5".to_owned() })?;
+        // parse output from time command
+        stderr_str.parse::<i32>().unwrap()
+    };
+
+    if elapsed_time_ms as f32 * 0.001 > time_limit {
+        return Ok(TestResult::TimedOut);
+    }
+    
     Ok(TestResult::Ok(elapsed_time_ms))
 }
 
 /// Compares if two file have equal contents.
 /// It ignores whitespace.
 pub fn are_files_equal(file1: &PathBuf, file2: &PathBuf) -> Result<bool> {
-    let file1 = std::fs::read_to_string(file1).map_err(|err| Error::IOError { err })?;
-    let file2 = std::fs::read_to_string(file2).map_err(|err| Error::IOError { err })?;
+    let file1_str = file1.to_str().unwrap_or("???").to_owned();
+    let file2_str = file2.to_str().unwrap_or("???").to_owned();
+    let file1 = std::fs::read_to_string(file1).map_err(|err| Error::IOError { err, file: file1_str })?;
+    let file2 = std::fs::read_to_string(file2).map_err(|err| Error::IOError { err, file: file2_str })?;
 
     let file1_it = file1.split_whitespace();
     let file2_it = file2.split_whitespace();

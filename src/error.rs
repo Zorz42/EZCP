@@ -5,8 +5,8 @@ pub enum Error {
     #[error("{message}")]
     CustomError { message: String },
 
-    #[error("IO Error: {err}")]
-    IOError { err: std::io::Error },
+    #[error("IO Error: {err} with file: {file}")]
+    IOError { err: std::io::Error, file: String },
 
     #[error("Snap Error: {err}")]
     SnapError { err: snap::Error },
