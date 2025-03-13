@@ -25,18 +25,14 @@ int run_command_with_timeout(const string& command, int timeout_ms) {
     }
 
     if (pid == 0) {
-        // Child process: run the command
-        execl("/bin/sh", "sh", "-c", command.c_str(), (char *)nullptr);
-        // If execl fails
-        //cerr << "execl failed!" << endl;
-        _exit(127);
+        exit(system(command.c_str()));
     }
 
     // Parent process
     auto start = chrono::high_resolution_clock::now();
 
     int status;
-    int wait_time_ms = 100; // check every 100ms
+    int wait_time_ms = 10; // check every 10ms
     int elapsed = 0;
 
     while (elapsed < timeout_ms) {

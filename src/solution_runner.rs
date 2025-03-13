@@ -232,7 +232,7 @@ pub fn run_solution(executable_file: &PathBuf, input_file: &PathBuf, output_file
 
     let executable_file = working_dir.join(executable_file);
     let mut solution_process = std::process::Command::new(timer_path);
-    let solution_process = solution_process.arg(executable_file);
+    let solution_process = solution_process.arg(executable_file).arg(format!("{}", (time_limit * 1000.0) as i32));
 
     #[cfg(windows)]
     {
