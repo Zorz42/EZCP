@@ -20,16 +20,13 @@ int run_command_with_timeout(const string& command, int timeout_ms) {
     pid_t pid = fork();
 
     if (pid < 0) {
-        //cerr << "Fork failed!" << endl;
+        // fork failed
         return -1;
     }
 
     if (pid == 0) {
-        exit(system(command.c_str()));
+        exit(execl("/bin/sh", "sh", "-c", command.c_str(), (char*) nullptr));
     }
-
-    // Parent process
-    auto start = chrono::high_resolution_clock::now();
 
     int status;
     int wait_time_ms = 10; // check every 10ms
@@ -38,11 +35,6 @@ int run_command_with_timeout(const string& command, int timeout_ms) {
     while (elapsed < timeout_ms) {
         pid_t result = waitpid(pid, &status, WNOHANG);
         if (result == pid) {
-            // Child finished
-            auto end = chrono::high_resolution_clock::now();
-            auto duration = chrono::duration_cast<chrono::milliseconds>(end - start);
-            //cout << "Process finished with exit code " << WEXITSTATUS(status) << endl;
-            //cout << "Time taken: " << duration.count() << " ms" << endl;
             return WEXITSTATUS(status);
         }
 
@@ -50,12 +42,10 @@ int run_command_with_timeout(const string& command, int timeout_ms) {
         elapsed += wait_time_ms;
     }
 
-    // Timeout expired, kill the process
-    //cout << "Process timed out. Terminating..." << endl;
     kill(pid, SIGKILL);
-    waitpid(pid, &status, 0); // Clean up
+    waitpid(pid, &status, 0);
 
-    return 1; // Indicate timeout
+    return 1;
 }
 
 int main(int argc, const char* argv[]) {
@@ -67,7 +57,7 @@ int main(int argc, const char* argv[]) {
     long long end = get_rusage();
     
     long long elapsed = end - start;
-    
+
     if(elapsed > time_limit_ms)
         return 1;
     

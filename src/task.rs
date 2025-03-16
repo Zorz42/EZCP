@@ -1,7 +1,7 @@
 use crate::progress_bar::{ANSI_GREEN, ANSI_RED};
 use crate::logger::Logger;
 use crate::progress_bar::{clear_progress_bar, print_progress_bar, ANSI_BLUE, ANSI_BOLD, ANSI_RESET, ANSI_YELLOW};
-use crate::solution_runner::{are_files_equal, build_solution, check_if_timer_is_built, run_solution, SolutionRunner, TestResult};
+use crate::solution_runner::{are_files_equal, build_solution, check_if_timer_is_built, SolutionRunner, TestResult};
 use crate::subtask::Subtask;
 use crate::{Error, Input, Result};
 use std::collections::HashSet;
@@ -203,7 +203,7 @@ impl Task {
             logger.log(format!("[{ANSI_BOLD}{curr}{ANSI_RESET}/{ANSI_BOLD}{total}{ANSI_RESET}] "));
         };
         
-        check_if_timer_is_built(&self.build_folder_path);
+        check_if_timer_is_built(&self.build_folder_path)?;
 
         print_progress(1,5);
         logger.logln(format!("{ANSI_BLUE}{ANSI_BOLD}Generating tests{ANSI_RESET}"));
@@ -363,16 +363,13 @@ impl Task {
     }
     
     fn check_partial_solutions(&self, logger: &Logger, test_files: &Vec<Vec<(PathBuf, PathBuf)>>) -> Result<()> {
-        let num_tests = self.get_num_all_tests();
-        
         
         for (partial_id, partial_solution) in self.partial_solutions.iter().enumerate() {
             logger.logln(format!("Testing partial solution {}", partial_id + 1));
 
-            let loading_progress_max = num_tests;
-            let mut loading_progress = 0;
-            print_progress_bar((loading_progress as f32) / (loading_progress_max as f32), logger);
-            for (subtask_id, (_subtask, subtask_tests)) in self.subtasks.iter().zip(test_files).enumerate() {
+            let mut test_handles = Vec::new();
+            let mut solution_runner = SolutionRunner::new();
+            /*for (subtask_id, (_subtask, subtask_tests)) in self.subtasks.iter().zip(test_files).enumerate() {
                 let mut subtask_failed = false;
                 let mut err_message = String::new();
                 let mut max_time = Some(0);
@@ -408,21 +405,15 @@ impl Task {
                             subtask_failed = true;
                         }
                     }
-
-                    print_progress_bar((loading_progress as f32) / (loading_progress_max as f32), logger);
-                    loading_progress += 1;
                 }
-                
-                clear_progress_bar(logger);
+
                 logger.log(format!("- Subtask {}: {verdict} ", subtask_id + 1));
                 if let Some(max_time) = max_time {
                     logger.log(format!("{max_time}ms"));
                 }
                 logger.log("\n");
-                print_progress_bar((loading_progress as f32) / (loading_progress_max as f32), logger);
                 
                 if subtask_failed && partial_solution.1.contains(&subtask_id) {
-                    clear_progress_bar(logger);
                     return Err(Error::PartialSolutionFailsSubtask {
                         partial_number: partial_id + 1,
                         subtask_number: subtask_id + 1,
@@ -431,16 +422,84 @@ impl Task {
                 }
 
                 if !subtask_failed && !partial_solution.1.contains(&subtask_id) {
-                    clear_progress_bar(logger);
+                    return Err(Error::PartialSolutionPassesExtraSubtask {
+                        partial_number: partial_id + 1,
+                        subtask_number: subtask_id + 1,
+                    });
+                }
+            }*/
+
+            for subtask_tests in test_files {
+                let mut test_handles_element = Vec::new();
+                for (input_file, output_file) in subtask_tests {
+                    let exe_path = self.build_folder_path.join(format!("partial_solution_{}", partial_id + 1));
+                    let temp_output_file = self.build_folder_path.join(output_file.file_name().unwrap()).with_extension("out");
+
+                    let handle = solution_runner.add_task(exe_path, input_file.clone(), temp_output_file.clone(), self.time_limit);
+
+                    test_handles_element.push((handle, output_file.clone(), temp_output_file));
+                }
+                test_handles.push(test_handles_element);
+            }
+
+            solution_runner.run_tasks(logger, &self.build_folder_path);
+
+            for (subtask_id, subtask_test_handles) in test_handles.iter().enumerate() {
+                let mut subtask_failed = false;
+                let mut err_message = String::new();
+                let mut max_time = Some(0);
+                let mut verdict = format!("{ANSI_BOLD}{ANSI_GREEN}OK{ANSI_RESET}");
+                for (handle, output_file, program_output_file) in subtask_test_handles {
+                    let result = solution_runner.get_result(*handle)?;
+
+                    match result {
+                        TestResult::Ok(time) => {
+                            if max_time.is_some() {
+                                max_time = Some(i32::max(max_time.unwrap(), time));
+                            }
+                        }
+                        TestResult::TimedOut => {
+                            err_message = "Partial solution timed out".to_owned();
+                            verdict = format!("{ANSI_BOLD}{ANSI_RED}TLE{ANSI_RESET}");
+                            max_time = None;
+                            subtask_failed = true;
+                        }
+                        TestResult::Crashed => {
+                            err_message = "Partial solution crashed".to_owned();
+                            verdict = format!("{ANSI_BOLD}{ANSI_RED}RTE{ANSI_RESET}");
+                            max_time = None;
+                            subtask_failed = true;
+                        }
+                    }
+
+                    if !subtask_failed && !are_files_equal(program_output_file, output_file)? {
+                        err_message = "Wrong Answer".to_owned();
+                        verdict = format!("{ANSI_BOLD}{ANSI_RED}WA{ANSI_RESET}");
+                        subtask_failed = true;
+                    }
+                }
+
+                logger.log(format!("- Subtask {}: {verdict} ", subtask_id + 1));
+                if let Some(max_time) = max_time {
+                    logger.log(format!("{max_time}ms"));
+                }
+                logger.log("\n");
+
+                if subtask_failed && partial_solution.1.contains(&subtask_id) {
+                    return Err(Error::PartialSolutionFailsSubtask {
+                        partial_number: partial_id + 1,
+                        subtask_number: subtask_id + 1,
+                        message: err_message,
+                    });
+                }
+
+                if !subtask_failed && !partial_solution.1.contains(&subtask_id) {
                     return Err(Error::PartialSolutionPassesExtraSubtask {
                         partial_number: partial_id + 1,
                         subtask_number: subtask_id + 1,
                     });
                 }
             }
-
-            clear_progress_bar(logger);
-            assert_eq!(loading_progress, loading_progress_max);
         }
         
         Ok(())

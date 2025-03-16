@@ -208,7 +208,7 @@ impl SolutionRunner {
     }
 }
 
-pub fn check_if_timer_is_built(build_dir: &Path) {
+pub fn check_if_timer_is_built(build_dir: &Path) -> Result<()> {
     let timer_source = build_dir.join("timer.cpp");
     let timer_executable = build_dir.join("timer");
     if timer_executable.exists() {
@@ -220,7 +220,9 @@ pub fn check_if_timer_is_built(build_dir: &Path) {
         std::fs::write(&timer_source, include_str!("timer.cpp")).unwrap();
     }
     
-    let _ = build_solution(&timer_source, &timer_executable);
+    build_solution(&timer_source, &timer_executable)?;
+    
+    Ok(())
 }
 
 /// This function takes an executable file and runs it with the input file.
@@ -257,7 +259,7 @@ pub fn run_solution(executable_file: &PathBuf, input_file: &PathBuf, output_file
         .spawn()
         .map_err(|err| Error::IOError { err, file: "Error2".to_owned() })?;
 
-    let return_code = solution_process.wait().map_err(|err| Error::IOError { err, file: "Error2".to_owned() })?;
+    let return_code = solution_process.wait().map_err(|err| Error::IOError { err, file: "Error3".to_owned() })?;
     
     if return_code.code() == Some(1) {
         return Ok(TestResult::TimedOut);
@@ -271,7 +273,7 @@ pub fn run_solution(executable_file: &PathBuf, input_file: &PathBuf, output_file
         // capture stderr from solution process
         let stderr = solution_process.stderr.as_mut().unwrap();
         let mut stderr_str = String::new();
-        stderr.read_to_string(&mut stderr_str).map_err(|err| Error::IOError { err, file: "Error5".to_owned() })?;
+        stderr.read_to_string(&mut stderr_str).map_err(|err| Error::IOError { err, file: "Error4".to_owned() })?;
         // parse output from time command
         stderr_str.parse::<i32>().unwrap()
     };
