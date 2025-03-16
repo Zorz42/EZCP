@@ -26,7 +26,7 @@ int run_command_with_timeout(const string& command, int timeout_ms) {
     }
 
     if (pid == 0) {
-        exit(execl("/bin/sh", "sh", "-c", command.c_str(), (char*) nullptr));
+        exit(execl(command.c_str(), (char*) nullptr));
     }
 
     int status;

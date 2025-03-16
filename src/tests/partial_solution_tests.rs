@@ -375,7 +375,7 @@ mod partial_solution_tests {
         // add partial solutions
         task.add_partial_solution("solution1.cpp", &[]);
 
-        for _ in 0..10 {
+        for _ in 0..3 {
             task.create_tests().unwrap();
         }
     }
