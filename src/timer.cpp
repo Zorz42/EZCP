@@ -4,6 +4,7 @@
 #include <sys/wait.h>
 #include <signal.h>
 #include <thread>
+#include <sys/resource.h>
 using namespace std;
 
 long long get_rusage() {
