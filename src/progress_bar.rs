@@ -9,7 +9,7 @@ pub const ANSI_RED: &str = "\x1b[91m";
 pub const ANSI_GREEN: &str = "\x1b[92m";
 pub const ANSI_GREY: &str = "\x1b[90m";
 
-/// Prints a progress bar to stdout.
+/// Prints a progress bar to logger.
 pub fn print_progress_bar(progress: f32, logger: &Logger) {
     let size = termsize::get();
     let progress_percent = (progress * 100.0).round() as i32;
@@ -37,7 +37,7 @@ pub fn print_progress_bar(progress: f32, logger: &Logger) {
     std::io::stdout().flush().ok();
 }
 
-/// Clears the progress bar from stdout.
+/// Clears the progress bar from logger.
 pub fn clear_progress_bar(logger: &Logger) {
     let size = termsize::get();
     let bar_length = size.map_or(30, |size| size.cols as usize);

@@ -1,27 +1,21 @@
 use crate::progress_bar::{ANSI_GREEN, ANSI_RED};
 use crate::logger::Logger;
 use crate::progress_bar::{clear_progress_bar, print_progress_bar, ANSI_BLUE, ANSI_BOLD, ANSI_RESET, ANSI_YELLOW};
-use crate::solution_runner::{are_files_equal, build_solution, check_if_timer_is_built, SolutionRunner, TestResult};
+use crate::solution_runner::{build_timer, SolutionRunner, TestResult};
 use crate::subtask::Subtask;
 use crate::{Error, Input, Result};
 use std::collections::HashSet;
-use std::io::Write;
 use std::path::{Path, PathBuf};
-use zip::write::SimpleFileOptions;
-
-#[derive(serde::Serialize)]
-pub struct CPSTests {
-    pub tests: Vec<(String, String)>,
-    pub subtask_tests: Vec<Vec<usize>>,
-    pub subtask_points: Vec<i32>,
-}
+use crate::archiver::archive_files;
+use crate::cpp_builder::build_solution;
+use crate::partial_solution::run_partial_solution;
 
 /// This struct represents an entire task.
 /// You can add subtasks, partial solutions and set the time limit.
 /// Once you are done, you can create tests for the task.
 pub struct Task {
-    name: String,
-    path: PathBuf,
+    pub(crate) name: String,
+    pub(crate) path: PathBuf,
     // path to the folder with tests
     pub tests_path: PathBuf,
     // path to cpp file with solution
@@ -35,10 +29,10 @@ pub struct Task {
     // input to the closure is (test_id, subtask_id, test_id_in_subtask)
     pub get_input_file_name: Box<dyn Fn(i32, i32, i32) -> String>,
     pub get_output_file_name: Box<dyn Fn(i32, i32, i32) -> String>,
-    solution_exe_path: PathBuf,
-    build_folder_path: PathBuf,
-    subtasks: Vec<Subtask>,
-    partial_solutions: Vec<(PathBuf, HashSet<usize>)>,
+    pub(crate) solution_exe_path: PathBuf,
+    pub(crate) build_folder_path: PathBuf,
+    pub(crate) subtasks: Vec<Subtask>,
+    pub(crate) partial_solutions: Vec<(PathBuf, HashSet<usize>)>,
 }
 
 impl Task {
@@ -56,8 +50,8 @@ impl Task {
             solution_exe_path: build_folder_path.join("solution"),
             tests_archive_path: path.join("tests.zip"),
             cps_tests_archive_path: path.join("tests.cpt"),
-            get_input_file_name: Box::new(|test_id, subtask_id, _test_id_in_subtask| format!("test{:02}_{:03}.in", subtask_id+1, test_id+1)),
-            get_output_file_name: Box::new(|test_id, subtask_id, _test_id_in_subtask| format!("test{:02}_{:03}.out", subtask_id+1, test_id+1)),
+            get_input_file_name: Box::new(|test_id, subtask_id, _test_id_in_subtask| format!("test.{:02}.{:03}.in", subtask_id+1, test_id+1)),
+            get_output_file_name: Box::new(|test_id, subtask_id, _test_id_in_subtask| format!("test.{:02}.{:03}.out", subtask_id+1, test_id+1)),
             build_folder_path,
             time_limit: 5.0,
             subtasks: Vec::new(),
@@ -65,11 +59,11 @@ impl Task {
         }
     }
 
-    fn get_input_file_path(&self, test_id: i32, subtask_id: i32, test_id_in_subtask: i32) -> PathBuf {
+    pub(crate) fn get_input_file_path(&self, test_id: i32, subtask_id: i32, test_id_in_subtask: i32) -> PathBuf {
         self.tests_path.join((self.get_input_file_name)(test_id, subtask_id, test_id_in_subtask))
     }
 
-    fn get_output_file_path(&self, test_id: i32, subtask_id: i32, test_id_in_subtask: i32) -> PathBuf {
+    pub(crate) fn get_output_file_path(&self, test_id: i32, subtask_id: i32, test_id_in_subtask: i32) -> PathBuf {
         self.tests_path.join((self.get_output_file_name)(test_id, subtask_id, test_id_in_subtask))
     }
 
@@ -181,16 +175,10 @@ impl Task {
             }
         }
         
-        let has_built = build_solution(&self.solution_path, &self.solution_exe_path)?;
-        if has_built {
-            logger.logln(format!("Built solution {:?}", self.solution_path));
-        }
+        build_solution(&self.solution_path, &self.solution_exe_path, logger)?;
 
         for (i, partial_solution) in self.partial_solutions.iter().enumerate() {
-            let has_built = build_solution(&partial_solution.0, &self.build_folder_path.join(format!("partial_solution_{}", i + 1)))?;
-            if has_built {
-                logger.logln(format!("Built partial solution {:?}", partial_solution.0));
-            }
+            build_solution(&partial_solution.0, &self.build_folder_path.join(format!("partial_solution_{}", i + 1)), logger)?;
         }
 
         // create tests directory if it doesn't exist and clear it
@@ -203,7 +191,7 @@ impl Task {
             logger.log(format!("[{ANSI_BOLD}{curr}{ANSI_RESET}/{ANSI_BOLD}{total}{ANSI_RESET}] "));
         };
         
-        check_if_timer_is_built(&self.build_folder_path)?;
+        build_timer(&self.build_folder_path, logger)?;
 
         print_progress(1,5);
         logger.logln(format!("{ANSI_BLUE}{ANSI_BOLD}Generating tests{ANSI_RESET}"));
@@ -233,7 +221,6 @@ impl Task {
         Ok(())
     }
     
-    #[allow(clippy::too_many_lines)]
     fn generate_tests(&mut self, logger: &Logger) -> Result<Vec<Vec<(PathBuf, PathBuf)>>> {
         let num_tests = self.get_num_all_tests();
 
@@ -363,133 +350,20 @@ impl Task {
     }
     
     fn check_partial_solutions(&self, logger: &Logger, test_files: &Vec<Vec<(PathBuf, PathBuf)>>) -> Result<()> {
-        
         for (partial_id, partial_solution) in self.partial_solutions.iter().enumerate() {
-            logger.logln(format!("Testing partial solution {}", partial_id + 1));
+            logger.logln(format!("Testing partial solution {}: {}", partial_id + 1, partial_solution.0.display()));
 
-            let mut test_handles = Vec::new();
-            let mut solution_runner = SolutionRunner::new();
-            /*for (subtask_id, (_subtask, subtask_tests)) in self.subtasks.iter().zip(test_files).enumerate() {
-                let mut subtask_failed = false;
-                let mut err_message = String::new();
-                let mut max_time = Some(0);
-                let mut verdict = format!("{ANSI_BOLD}{ANSI_GREEN}OK{ANSI_RESET}");
-                for (input_file, output_file) in subtask_tests {
-                    if !subtask_failed {
-                        let exe_path = self.build_folder_path.join(format!("partial_solution_{}", partial_id + 1));
-                        let temp_output_file = self.build_folder_path.join("temp_output");
+            let exe_path = self.build_folder_path.join(format!("partial_solution_{}", partial_id + 1));
+            
+            let subtasks_passed = run_partial_solution(test_files, &exe_path, logger, &self.build_folder_path, self.time_limit)?;
 
-                        let result = run_solution(&exe_path, input_file, &temp_output_file, self.time_limit, &self.build_folder_path)?;
-
-                        match result {
-                            TestResult::Ok(time) => {
-                                max_time = Some(i32::max(max_time.unwrap_or(0), time));
-                            }
-                            TestResult::TimedOut => {
-                                err_message = "Partial solution timed out".to_owned();
-                                verdict = format!("{ANSI_BOLD}{ANSI_RED}TLE{ANSI_RESET}");
-                                max_time = None;
-                                subtask_failed = true;
-                            }
-                            TestResult::Crashed => {
-                                err_message = "Partial solution crashed".to_owned();
-                                verdict = format!("{ANSI_BOLD}{ANSI_RED}RTE{ANSI_RESET}");
-                                max_time = None;
-                                subtask_failed = true;
-                            }
-                        }
-
-                        if !subtask_failed && !are_files_equal(&temp_output_file, output_file)? {
-                            err_message = "Wrong Answer".to_owned();
-                            verdict = format!("{ANSI_BOLD}{ANSI_RED}WA{ANSI_RESET}");
-                            subtask_failed = true;
-                        }
-                    }
-                }
-
-                logger.log(format!("- Subtask {}: {verdict} ", subtask_id + 1));
-                if let Some(max_time) = max_time {
-                    logger.log(format!("{max_time}ms"));
-                }
-                logger.log("\n");
+            for subtask_id in 0..self.subtasks.len() {
+                let subtask_failed = !subtasks_passed.contains(&subtask_id);
                 
                 if subtask_failed && partial_solution.1.contains(&subtask_id) {
                     return Err(Error::PartialSolutionFailsSubtask {
                         partial_number: partial_id + 1,
                         subtask_number: subtask_id + 1,
-                        message: err_message,
-                    });
-                }
-
-                if !subtask_failed && !partial_solution.1.contains(&subtask_id) {
-                    return Err(Error::PartialSolutionPassesExtraSubtask {
-                        partial_number: partial_id + 1,
-                        subtask_number: subtask_id + 1,
-                    });
-                }
-            }*/
-
-            for subtask_tests in test_files {
-                let mut test_handles_element = Vec::new();
-                for (input_file, output_file) in subtask_tests {
-                    let exe_path = self.build_folder_path.join(format!("partial_solution_{}", partial_id + 1));
-                    let temp_output_file = self.build_folder_path.join(output_file.file_name().unwrap()).with_extension("out");
-
-                    let handle = solution_runner.add_task(exe_path, input_file.clone(), temp_output_file.clone(), self.time_limit);
-
-                    test_handles_element.push((handle, output_file.clone(), temp_output_file));
-                }
-                test_handles.push(test_handles_element);
-            }
-
-            solution_runner.run_tasks(logger, &self.build_folder_path);
-
-            for (subtask_id, subtask_test_handles) in test_handles.iter().enumerate() {
-                let mut subtask_failed = false;
-                let mut err_message = String::new();
-                let mut max_time = Some(0);
-                let mut verdict = format!("{ANSI_BOLD}{ANSI_GREEN}OK{ANSI_RESET}");
-                for (handle, output_file, program_output_file) in subtask_test_handles {
-                    let result = solution_runner.get_result(*handle)?;
-
-                    match result {
-                        TestResult::Ok(time) => {
-                            if max_time.is_some() {
-                                max_time = Some(i32::max(max_time.unwrap(), time));
-                            }
-                        }
-                        TestResult::TimedOut => {
-                            err_message = "Partial solution timed out".to_owned();
-                            verdict = format!("{ANSI_BOLD}{ANSI_RED}TLE{ANSI_RESET}");
-                            max_time = None;
-                            subtask_failed = true;
-                        }
-                        TestResult::Crashed => {
-                            err_message = "Partial solution crashed".to_owned();
-                            verdict = format!("{ANSI_BOLD}{ANSI_RED}RTE{ANSI_RESET}");
-                            max_time = None;
-                            subtask_failed = true;
-                        }
-                    }
-
-                    if !subtask_failed && !are_files_equal(program_output_file, output_file)? {
-                        err_message = "Wrong Answer".to_owned();
-                        verdict = format!("{ANSI_BOLD}{ANSI_RED}WA{ANSI_RESET}");
-                        subtask_failed = true;
-                    }
-                }
-
-                logger.log(format!("- Subtask {}: {verdict} ", subtask_id + 1));
-                if let Some(max_time) = max_time {
-                    logger.log(format!("{max_time}ms"));
-                }
-                logger.log("\n");
-
-                if subtask_failed && partial_solution.1.contains(&subtask_id) {
-                    return Err(Error::PartialSolutionFailsSubtask {
-                        partial_number: partial_id + 1,
-                        subtask_number: subtask_id + 1,
-                        message: err_message,
                     });
                 }
 
@@ -507,69 +381,15 @@ impl Task {
     
     /// Archive all tests into a zip file
     fn archive_tests(&self, logger: &Logger, test_files: &Vec<Vec<(PathBuf, PathBuf)>>) -> Result<()> {
-        let mut zipper = zip::ZipWriter::new(std::fs::File::create(&self.tests_archive_path).map_err(|err| Error::IOError { err, file: String::new() })?);
-        let options = SimpleFileOptions::default().compression_method(zip::CompressionMethod::Deflated);
-
-        let loading_progress_max = test_files.iter().map(Vec::len).sum::<usize>() as i32;
-        let mut loading_progress = 0;
-        
+        let mut test_files_vec = Vec::new();
         for subtask in test_files {
             for (input_file, output_file) in subtask {
-                print_progress_bar((loading_progress as f32) / (loading_progress_max as f32), logger);
-                loading_progress += 1;
-                
-                zipper
-                    .start_file(input_file.file_name().map_or("", |a| a.to_str().unwrap_or("")), options)
-                    .map_err(|err| Error::ZipError { err })?;
-                let input_file = std::fs::read(input_file).map_err(|err| Error::IOError { err, file: String::new() })?;
-                zipper.write_all(&input_file).map_err(|err| Error::IOError { err, file: String::new() })?;
-
-                zipper
-                    .start_file(output_file.file_name().map_or("", |a| a.to_str().unwrap_or("")), options)
-                    .map_err(|err| Error::ZipError { err })?;
-                let output_file = std::fs::read(output_file).map_err(|err| Error::IOError { err, file: String::new() })?;
-                zipper.write_all(&output_file).map_err(|err| Error::IOError { err, file: String::new() })?;
+                test_files_vec.push(input_file.clone());
+                test_files_vec.push(output_file.clone());
             }
         }
         
-        clear_progress_bar(logger);
-
-        Ok(())
-    }
-    
-    /// Generate a CPS compatible
-    fn generate_cps_file(&self) -> Result<()> {
-        let mut cps_tests = CPSTests {
-            tests: Vec::new(),
-            subtask_tests: vec![Vec::new(); self.subtasks.len()],
-            subtask_points: vec![0; self.subtasks.len()],
-        };
-
-        for subtask in &self.subtasks {
-            cps_tests.subtask_points[subtask.number] = subtask.points;
-
-            let mut subtask_tests = Vec::new();
-            for dependency in &subtask.dependencies {
-                subtask_tests.extend_from_slice(&cps_tests.subtask_tests[*dependency]);
-            }
-            for _test in &subtask.tests {
-                let input_file = self.get_input_file_path(cps_tests.tests.len() as i32, subtask.number as i32, subtask_tests.len() as i32);
-                let output_file = self.get_output_file_path(cps_tests.tests.len() as i32, subtask.number as i32, subtask_tests.len() as i32);
-
-                let input = std::fs::read_to_string(&input_file).map_err(|err| Error::IOError { err, file: String::new() })?;
-                let output = std::fs::read_to_string(&output_file).map_err(|err| Error::IOError { err, file: String::new() })?;
-
-                subtask_tests.push(cps_tests.tests.len());
-
-                cps_tests.tests.push((input, output));
-            }
-            cps_tests.subtask_tests[subtask.number] = subtask_tests;
-        }
-
-        let mut buffer = Vec::new();
-        bincode::serialize_into(&mut buffer, &cps_tests).map_err(|err| Error::BincodeError { err })?;
-        let data = snap::raw::Encoder::new().compress_vec(&buffer).map_err(|err| Error::SnapError { err })?;
-        std::fs::write(&self.cps_tests_archive_path, data).map_err(|err| Error::IOError { err, file: String::new() })?;
+        archive_files(&test_files_vec, &self.tests_archive_path, logger)?;
 
         Ok(())
     }

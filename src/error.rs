@@ -50,14 +50,11 @@ pub enum Error {
     #[error("Solution crashed on test {test_path}")]
     SolutionFailed { test_path: String },
 
-    #[error("Solution returned wrong answer on test {test_path}")]
-    SolutionWrongAnswer { test_path: String },
-
     #[error("Partial solution {partial_number} passes extra subtask {subtask_number}")]
     PartialSolutionPassesExtraSubtask { subtask_number: usize, partial_number: usize },
 
-    #[error("Partial solution {partial_number} does not pass subtask {subtask_number}. Error: \"{message}\"")]
-    PartialSolutionFailsSubtask { subtask_number: usize, partial_number: usize, message: String },
+    #[error("Partial solution {partial_number} does not pass subtask {subtask_number}.")]
+    PartialSolutionFailsSubtask { subtask_number: usize, partial_number: usize },
 
     #[error("Missing solution file: {path}")]
     MissingSolutionFile { path: String },
