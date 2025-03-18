@@ -12,7 +12,7 @@ pub enum Error {
     SnapError { err: snap::Error },
 
     #[error("Bincode Error: {err}")]
-    BincodeError { err: bincode::Error },
+    BincodeError { err: bincode::error::EncodeError },
 
     #[error("Zip Error: {err}")]
     ZipError { err: zip::result::ZipError },

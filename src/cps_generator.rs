@@ -38,7 +38,7 @@ impl Task {
         }
 
         let mut buffer = Vec::new();
-        bincode::serialize_into(&mut buffer, &cps_tests).map_err(|err| Error::BincodeError { err })?;
+        bincode::serde::encode_into_std_write(&cps_tests, &mut buffer, bincode::config::standard()).map_err(|err| Error::BincodeError { err })?;
         let data = snap::raw::Encoder::new().compress_vec(&buffer).map_err(|err| Error::SnapError { err })?;
         std::fs::write(&self.cps_tests_archive_path, data).map_err(|err| Error::IOError { err, file: String::new() })?;
 
