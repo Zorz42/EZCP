@@ -112,6 +112,7 @@ pub fn run_solution(executable_file: &PathBuf, input_file: &PathBuf, output_file
 
     #[cfg(windows)]
     {
+        use crate::cpp_builder::{get_gcc_path, WindowsCompiler};
         let gcc_path = get_gcc_path()?;
         if let WindowsCompiler::FullPath(gcc_path) = &gcc_path {
             let working_dir = std::path::Path::new(gcc_path).parent().unwrap_or_else(|| std::path::Path::new("/")).to_path_buf();

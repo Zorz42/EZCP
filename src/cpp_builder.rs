@@ -3,7 +3,7 @@ use crate::Error;
 use crate::logger::Logger;
 
 #[cfg(windows)]
-enum WindowsCompiler {
+pub enum WindowsCompiler {
     FullPath(PathBuf),
     Command(PathBuf),
 }
@@ -19,7 +19,7 @@ impl WindowsCompiler {
 }
 
 #[cfg(windows)]
-fn get_gcc_path() -> crate::Result<WindowsCompiler> {
+pub fn get_gcc_path() -> crate::Result<WindowsCompiler> {
     if let Ok(gcc_path) = std::env::var("GCC_PATH") {
         return Ok(WindowsCompiler::FullPath(PathBuf::from(gcc_path)));
     }
@@ -68,7 +68,7 @@ pub fn build_solution(source_file: &PathBuf, executable_file: &PathBuf, logger: 
     #[cfg(windows)]
     {
         let gcc_path = get_gcc_path()?;
-        let prev_working_dir = std::env::current_dir().map_err(|err| Error::IOError { err })?;
+        let prev_working_dir = std::env::current_dir().map_err(|err| Error::IOError { err, file: "Error".to_owned() })?;
 
         let mut process = std::process::Command::new(gcc_path.get_path());
 
@@ -93,7 +93,7 @@ pub fn build_solution(source_file: &PathBuf, executable_file: &PathBuf, logger: 
             .arg(executable_file)
             .arg(source_file)
             .output()
-            .map_err(|err| Error::IOError { err })?;
+            .map_err(|err| Error::IOError { err, file: "Error".to_owned() })?;
 
         if !process.status.success() {
             return Err(Error::CompilerError {
