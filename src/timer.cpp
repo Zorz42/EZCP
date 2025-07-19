@@ -1,7 +1,7 @@
 #ifdef _WIN32
 #include <iostream>
 #include <chrono>
-#include <Windows.h>
+#include <windows.h>
 #include <thread>
 #include <string>
 
@@ -52,7 +52,7 @@ int run_command_with_timeout(const string& command, int timeout_ms) {
             return exitCode;
         }
 
-        this_thread::sleep_for(chrono::milliseconds(wait_time_ms));
+        Sleep(wait_time_ms);
         elapsed += wait_time_ms;
     }
 

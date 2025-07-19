@@ -149,7 +149,7 @@ pub fn run_solution(executable_file: &PathBuf, input_file: &PathBuf, output_file
         let stderr = solution_process.stderr.as_mut().unwrap();
         let mut stderr_str = String::new();
         stderr.read_to_string(&mut stderr_str).map_err(|err| Error::IOError { err, file: "Error4".to_owned() })?;
-        // parse output from time command
+        // parse output from timer command
         stderr_str.parse::<i32>().unwrap()
     };
 
