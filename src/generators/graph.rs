@@ -135,7 +135,7 @@ impl Graph {
 
     /// This function returns the count of nodes in the graph.
     #[must_use]
-    pub fn get_num_nodes(&self) -> i32 {
+    pub const fn get_num_nodes(&self) -> i32 {
         self.nodes.len() as i32
     }
 

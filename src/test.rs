@@ -41,7 +41,7 @@ impl Test {
 
         if let Some(input_file) = &self.input_file {
             // copy input file to file_path
-            std::fs::copy(input_file.clone(), file_path.clone()).map_err(move |err| Error::IOError { err, file: format!("{input_file:?} -> {file_path:?}") })?;
+            std::fs::copy(input_file.clone(), file_path.clone()).map_err(move |err| Error::IOError { err, file: format!("{} -> {}", input_file.display(), file_path.display()) })?;
         } else {
             // generate input and write it to file_path
             let input = self.input_generator.generate();

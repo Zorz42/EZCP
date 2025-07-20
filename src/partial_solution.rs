@@ -2,8 +2,8 @@ use crate::progress_bar::{ANSI_RESET, ANSI_GREEN, ANSI_BOLD, ANSI_RED};
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use crate::logger::Logger;
-use crate::solution_runner::{are_files_equal, SolutionRunner, TestResult};
-use crate::Result;
+use crate::solution_runner::{SolutionRunner, TestResult};
+use crate::{Error, Result};
 
 /// This function takes an executable file and a list of test files.
 /// It runs the executable on each test file and compares the output with the expected output.
@@ -40,13 +40,8 @@ pub fn run_partial_solution(test_files: &Vec<Vec<(PathBuf, PathBuf)>>, exe_path:
                         max_time = Some(i32::max(max_time.unwrap(), time));
                     }
                 }
-                TestResult::TimedOut => {
-                    verdict = format!("{ANSI_BOLD}{ANSI_RED}TLE{ANSI_RESET}");
-                    max_time = None;
-                    subtask_failed = true;
-                }
-                TestResult::Crashed => {
-                    verdict = format!("{ANSI_BOLD}{ANSI_RED}RTE{ANSI_RESET}");
+                TestResult::TimedOut | TestResult::Crashed => {
+                    verdict = if result == TestResult::TimedOut { format!("{ANSI_BOLD}{ANSI_RED}TLE{ANSI_RESET}") } else { format!("{ANSI_BOLD}{ANSI_RED}RTE{ANSI_RESET}") };
                     max_time = None;
                     subtask_failed = true;
                 }
@@ -70,4 +65,29 @@ pub fn run_partial_solution(test_files: &Vec<Vec<(PathBuf, PathBuf)>>, exe_path:
     }
     
     Ok(passed_subtasks)
+}
+
+/// Compares if two file have equal contents.
+/// It ignores whitespace.
+pub fn are_files_equal(file1: &PathBuf, file2: &PathBuf) -> Result<bool> {
+    let file1_str = file1.to_str().unwrap_or("???").to_owned();
+    let file2_str = file2.to_str().unwrap_or("???").to_owned();
+    let file1 = std::fs::read_to_string(file1).map_err(|err| Error::IOError { err, file: file1_str })?;
+    let file2 = std::fs::read_to_string(file2).map_err(|err| Error::IOError { err, file: file2_str })?;
+
+    let file1_it = file1.split_whitespace();
+    let file2_it = file2.split_whitespace();
+
+    let mut file1 = Vec::new();
+    let mut file2 = Vec::new();
+
+    for i in file1_it {
+        file1.push(i.to_owned());
+    }
+
+    for i in file2_it {
+        file2.push(i.to_owned());
+    }
+
+    Ok(file1 == file2)
 }

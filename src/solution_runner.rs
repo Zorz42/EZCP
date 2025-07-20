@@ -8,7 +8,7 @@ use crate::cpp_builder::build_solution;
 use crate::logger::Logger;
 use crate::progress_bar::{clear_progress_bar, print_progress_bar};
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Eq)]
 pub enum TestResult {
     Ok(i32), // elapsed time in milliseconds
     TimedOut,
@@ -158,29 +158,4 @@ pub fn run_solution(executable_file: &PathBuf, input_file: &PathBuf, output_file
     }
     
     Ok(TestResult::Ok(elapsed_time_ms))
-}
-
-/// Compares if two file have equal contents.
-/// It ignores whitespace.
-pub fn are_files_equal(file1: &PathBuf, file2: &PathBuf) -> Result<bool> {
-    let file1_str = file1.to_str().unwrap_or("???").to_owned();
-    let file2_str = file2.to_str().unwrap_or("???").to_owned();
-    let file1 = std::fs::read_to_string(file1).map_err(|err| Error::IOError { err, file: file1_str })?;
-    let file2 = std::fs::read_to_string(file2).map_err(|err| Error::IOError { err, file: file2_str })?;
-
-    let file1_it = file1.split_whitespace();
-    let file2_it = file2.split_whitespace();
-
-    let mut file1 = Vec::new();
-    let mut file2 = Vec::new();
-
-    for i in file1_it {
-        file1.push(i.to_owned());
-    }
-
-    for i in file2_it {
-        file2.push(i.to_owned());
-    }
-    
-    Ok(file1 == file2)
 }
