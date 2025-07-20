@@ -8,7 +8,6 @@ mod subtask;
 mod task;
 mod test;
 mod tests;
-mod cps_generator;
 mod cpp_builder;
 mod partial_solution;
 mod archiver;

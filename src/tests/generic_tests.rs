@@ -28,7 +28,6 @@ pub mod generic_tests {
         pub fn test(mut self) {
             for _ in 0..10 {
                 self.task.create_tests().unwrap();
-                self.task.create_tests_for_cps().unwrap();
             }
             // Clean up the temporary directory
             drop(self.task_path);
@@ -158,7 +157,6 @@ pub mod generic_tests {
 
         for _ in 0..3 {
             assert!(matches!(task.task.create_tests(), Err(Error::SolutionTimedOut { .. })));
-            assert!(matches!(task.task.create_tests_for_cps(), Err(Error::SolutionTimedOut { .. })));
         }
     }
 
@@ -184,7 +182,6 @@ pub mod generic_tests {
 
         for _ in 0..10 {
             assert!(matches!(task.task.create_tests(), Err(Error::CompilerError { .. })));
-            assert!(matches!(task.task.create_tests_for_cps(), Err(Error::CompilerError { .. })));
         }
     }
 

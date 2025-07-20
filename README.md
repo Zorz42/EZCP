@@ -11,7 +11,6 @@ Features:
 - Array generator.
 - Add a partial solution and specify which subtasks it should pass.
 - Automatically archive all test files into a zip.
-- Support for CPS https://github.com/Zorz42/CPS
 
 Suggestions and bug reports: jakob@zorz.si
 You can also open a pull request.

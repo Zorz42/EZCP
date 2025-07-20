@@ -24,7 +24,6 @@ pub struct Task {
     pub time_limit: f32,
     // path to the zip file with tests
     pub tests_archive_path: PathBuf,
-    pub cps_tests_archive_path: PathBuf,
     // two closures that tells what should the input/output file be named for a given test
     // input to the closure is (test_id, subtask_id, test_id_in_subtask)
     pub get_input_file_name: Box<dyn Fn(i32, i32, i32) -> String>,
@@ -49,7 +48,6 @@ impl Task {
             solution_path: path.join("solution.cpp"),
             solution_exe_path: build_folder_path.join("solution"),
             tests_archive_path: path.join("tests.zip"),
-            cps_tests_archive_path: path.join("tests.cpt"),
             get_input_file_name: Box::new(|test_id, subtask_id, _test_id_in_subtask| format!("test.{:02}.{:03}.in", subtask_id+1, test_id+1)),
             get_output_file_name: Box::new(|test_id, subtask_id, _test_id_in_subtask| format!("test.{:02}.{:03}.out", subtask_id+1, test_id+1)),
             build_folder_path,
@@ -99,25 +97,20 @@ impl Task {
     /// This function does all the work.
     /// It builds the solution and all partial solutions, generates tests and checks them.
     pub fn create_tests(&mut self) -> Result<()> {
-        self.create_tests_inner1(true, false)
+        self.create_tests_inner1(true)
     }
 
     /// This is the same as `create_tests` but it doesn't print anything.
     pub fn create_tests_no_print(&mut self) -> Result<()> {
-        self.create_tests_inner1(false, false)
-    }
-
-    /// This also generates a CPS file.
-    pub fn create_tests_for_cps(&mut self) -> Result<()> {
-        self.create_tests_inner1(true, true)
+        self.create_tests_inner1(false)
     }
 
     /// This creates tests and prints the error message if there is an error.
-    fn create_tests_inner1(&mut self, print_output: bool, generate_cps: bool) -> Result<()> {
+    fn create_tests_inner1(&mut self, print_output: bool) -> Result<()> {
         let logger = Logger::new(print_output);
 
         let start_time = std::time::Instant::now();
-        let res = self.create_tests_inner2(&logger, generate_cps);
+        let res = self.create_tests_inner2(&logger);
         if let Err(err) = res {
             logger.logln(format!("\n{ANSI_RED}{ANSI_BOLD}Error: {err}{ANSI_RESET}"));
             Err(err)
@@ -138,7 +131,7 @@ impl Task {
     }
 
     /// This function builds solution and then calls `generate_tests`.
-    fn create_tests_inner2(&mut self, logger: &Logger, generate_cps: bool) -> Result<()> {
+    fn create_tests_inner2(&mut self, logger: &Logger) -> Result<()> {
         logger.logln("");
         let text = format!("Creating tests for task \"{}\"", self.name);
         // print title with ===== before and after text
@@ -207,13 +200,8 @@ impl Task {
         self.check_partial_solutions(logger, &test_files)?;
 
         print_progress(5,5);
-        if generate_cps {
-            logger.logln(format!("{ANSI_BLUE}{ANSI_BOLD}Generating CPS file{ANSI_RESET}"));
-            self.generate_cps_file()?;
-        } else {
-            logger.logln(format!("{ANSI_BLUE}{ANSI_BOLD}Archiving tests{ANSI_RESET}"));
-            self.archive_tests(logger, &test_files)?;
-        }
+        logger.logln(format!("{ANSI_BLUE}{ANSI_BOLD}Archiving tests{ANSI_RESET}"));
+        self.archive_tests(logger, &test_files)?;
 
         let tests_size = fs_extra::dir::get_size(&self.tests_path).unwrap_or(0) as f32 / 1_000_000.0;
         logger.logln(format!("Tests size: {ANSI_BOLD}{tests_size:.2}MB{ANSI_RESET}"));
