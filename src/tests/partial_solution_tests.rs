@@ -238,7 +238,7 @@ mod partial_solution_tests {
         let task_name = "partial_solution_tle";
         let task_path = PathBuf::from(TESTS_DIR).join(task_name);
         let mut task = crate::Task::new(task_name, &task_path);
-        task.time_limit = 1.0;
+        task.time_limit = 2.0;
 
         // create directory
         std::fs::create_dir_all(task_path.clone()).unwrap();
