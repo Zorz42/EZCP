@@ -1,20 +1,12 @@
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod dependencies_tests {
-    use crate::tests::generic_tests::generic_tests::{initialize_test, TESTS_DIR};
-    use crate::{Subtask, Task};
-    use std::path::PathBuf;
+    use crate::tests::generic_tests::generic_tests::Test;
+    use crate::{Subtask};
 
     #[test]
     fn create_with_dependencies() {
-        initialize_test();
-
-        let task_name = "dependencies";
-        let task_path = PathBuf::from(TESTS_DIR).join(task_name);
-        let mut task = Task::new(task_name, &task_path);
-
-        // create directory
-        std::fs::create_dir_all(task_path.clone()).unwrap();
+        let mut task = Test::new();
 
         // create solution file
         let solution_contents = r#"
@@ -28,7 +20,7 @@ mod dependencies_tests {
         
         "#;
 
-        std::fs::write(task_path.join("solution.cpp"), solution_contents).unwrap();
+        task.create_solution(solution_contents);
 
         let mut subtask1 = Subtask::new(20);
         subtask1.add_test_str("1\n");
@@ -44,28 +36,19 @@ mod dependencies_tests {
         subtask3.add_test_str("9\n");
 
         // create subtasks
-        let subtask1 = task.add_subtask(subtask1);
-        let subtask2 = task.add_subtask(subtask2);
-        let subtask3 = task.add_subtask(subtask3);
+        let subtask1 = task.task.add_subtask(subtask1);
+        let subtask2 = task.task.add_subtask(subtask2);
+        let subtask3 = task.task.add_subtask(subtask3);
 
-        task.add_subtask_dependency(subtask3, subtask1);
-        task.add_subtask_dependency(subtask3, subtask2);
+        task.task.add_subtask_dependency(subtask3, subtask1);
+        task.task.add_subtask_dependency(subtask3, subtask2);
 
-        for _ in 0..10 {
-            task.create_tests().unwrap();
-        }
+        task.test()
     }
 
     #[test]
     fn test_complicated_dependencies() {
-        initialize_test();
-
-        let task_name = "complicated_dependencies";
-        let task_path = PathBuf::from(TESTS_DIR).join(task_name);
-        let mut task = Task::new(task_name, &task_path);
-
-        // create directory
-        std::fs::create_dir_all(task_path.clone()).unwrap();
+        let mut task = Test::new();
 
         // create solution file
         let solution_contents = r#"
@@ -79,7 +62,7 @@ mod dependencies_tests {
         
         "#;
 
-        std::fs::write(task_path.join("solution.cpp"), solution_contents).unwrap();
+        task.create_solution(solution_contents);
 
         let mut subtask1 = Subtask::new(20);
         subtask1.add_test_str("1 1\n");
@@ -103,25 +86,23 @@ mod dependencies_tests {
         subtask5.add_test_str("5 3\n");
 
         // create subtasks
-        let subtask1 = task.add_subtask(subtask1);
-        let subtask2 = task.add_subtask(subtask2);
-        let subtask3 = task.add_subtask(subtask3);
-        let subtask4 = task.add_subtask(subtask4);
-        let subtask5 = task.add_subtask(subtask5);
+        let subtask1 = task.task.add_subtask(subtask1);
+        let subtask2 = task.task.add_subtask(subtask2);
+        let subtask3 = task.task.add_subtask(subtask3);
+        let subtask4 = task.task.add_subtask(subtask4);
+        let subtask5 = task.task.add_subtask(subtask5);
 
-        task.add_subtask_dependency(subtask2, subtask1);
-        task.add_subtask_dependency(subtask3, subtask1);
-        task.add_subtask_dependency(subtask3, subtask2);
-        task.add_subtask_dependency(subtask4, subtask1);
-        task.add_subtask_dependency(subtask4, subtask2);
-        task.add_subtask_dependency(subtask4, subtask3);
-        task.add_subtask_dependency(subtask5, subtask1);
-        task.add_subtask_dependency(subtask5, subtask2);
-        task.add_subtask_dependency(subtask5, subtask3);
-        task.add_subtask_dependency(subtask5, subtask4);
+        task.task.add_subtask_dependency(subtask2, subtask1);
+        task.task.add_subtask_dependency(subtask3, subtask1);
+        task.task.add_subtask_dependency(subtask3, subtask2);
+        task.task.add_subtask_dependency(subtask4, subtask1);
+        task.task.add_subtask_dependency(subtask4, subtask2);
+        task.task.add_subtask_dependency(subtask4, subtask3);
+        task.task.add_subtask_dependency(subtask5, subtask1);
+        task.task.add_subtask_dependency(subtask5, subtask2);
+        task.task.add_subtask_dependency(subtask5, subtask3);
+        task.task.add_subtask_dependency(subtask5, subtask4);
 
-        for _ in 0..10 {
-            task.create_tests().unwrap();
-        }
+        task.test()
     }
 }

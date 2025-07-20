@@ -16,7 +16,7 @@ pub fn print_progress_bar(progress: f32, logger: &Logger) {
     let padding = if progress_percent < 10 { "  " } else if progress_percent < 100 { " " } else { "" }; 
     logger.log(format!("\r {padding}{ANSI_BLUE}{ANSI_BOLD}{progress_percent}%{ANSI_RESET} ["));
 
-    let bar_length = size.map_or(30, |size| (size.cols as usize - 15).max(30));
+    let bar_length = size.map_or(30, |size| (size.cols as i32 - 15).max(30) as usize);
     let num_filled = (progress * (bar_length - 1) as f32) as usize;
     let num_empty = ((bar_length - num_filled) as i32 - 1).max(0);
 

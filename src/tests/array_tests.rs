@@ -1,20 +1,12 @@
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod array_tests {
-    use crate::tests::generic_tests::generic_tests::{initialize_test, TESTS_DIR};
-    use crate::{array_generator, Error, Subtask, Task};
-    use std::path::PathBuf;
+    use crate::{array_generator, Error, Subtask};
+    use crate::tests::generic_tests::generic_tests::Test;
 
     #[test]
     fn test_array_generator() {
-        initialize_test();
-
-        let task_name = "array_generator";
-        let task_path = PathBuf::from(TESTS_DIR).join(task_name);
-        let mut task = Task::new(task_name, &task_path);
-
-        // create directory
-        std::fs::create_dir_all(task_path.clone()).unwrap();
+        let mut task = Test::new();
 
         // create solution file
         let solution_contents = r#"
@@ -34,7 +26,7 @@ mod array_tests {
         
         "#;
 
-        std::fs::write(task_path.join("solution.cpp"), solution_contents).unwrap();
+        task.create_solution(solution_contents);
 
         // create subtasks
         let mut subtask1 = Subtask::new(20);
@@ -104,18 +96,18 @@ mod array_tests {
         subtask3.add_test(5, array_generator(100, 100, 47, 47));
         subtask3.add_test(5, array_generator(1, 1, 47, 47));
 
-        let subtask1 = task.add_subtask(subtask1);
-        let subtask2 = task.add_subtask(subtask2);
-        task.add_subtask(subtask3);
+        let subtask1 = task.task.add_subtask(subtask1);
+        let subtask2 = task.task.add_subtask(subtask2);
+        task.task.add_subtask(subtask3);
 
         for _ in 0..10 {
-            task.create_tests().unwrap();
+            task.task.create_tests().unwrap();
         }
 
-        task.add_subtask_dependency(subtask2, subtask1);
+        task.task.add_subtask_dependency(subtask2, subtask1);
 
         for _ in 0..10 {
-            assert!(matches!(task.create_tests().unwrap_err(), Error::CustomError { .. }));
+            assert!(matches!(task.task.create_tests().unwrap_err(), Error::CustomError { .. }));
         }
     }
 }

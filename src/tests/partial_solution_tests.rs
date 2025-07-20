@@ -1,18 +1,12 @@
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod partial_solution_tests {
-    use crate::tests::generic_tests::generic_tests::TESTS_DIR;
     use crate::array_generator;
-    use std::path::PathBuf;
+    use crate::tests::generic_tests::generic_tests::Test;
 
     #[test]
     fn test_partial_solution() {
-        let task_name = "partial_solution";
-        let task_path = PathBuf::from(TESTS_DIR).join(task_name);
-        let mut task = crate::Task::new(task_name, &task_path);
-
-        // create directory
-        std::fs::create_dir_all(task_path.clone()).unwrap();
+        let mut task = Test::new();
 
         // create solution file
         let solution_contents = r#"
@@ -33,7 +27,7 @@ mod partial_solution_tests {
         }
         "#;
 
-        std::fs::write(task_path.join("solution.cpp"), solution_contents).unwrap();
+        task.create_solution(solution_contents);
 
         // create partial solution file (it overflows)
         let partial_solution_contents = r#"
@@ -54,7 +48,7 @@ mod partial_solution_tests {
         }
         "#;
 
-        std::fs::write(task_path.join("solution1.cpp"), partial_solution_contents).unwrap();
+        std::fs::write(task.task_path().join("solution1.cpp"), partial_solution_contents).unwrap();
 
         // subtask 1, the sum is less than 10^6
         let mut subtask1 = crate::Subtask::new(50);
@@ -67,28 +61,21 @@ mod partial_solution_tests {
         subtask2.add_test(5, array_generator(1, 100, 1, 1_000_000_000));
 
         // create subtasks
-        let subtask1 = task.add_subtask(subtask1);
-        let subtask2 = task.add_subtask(subtask2);
+        let subtask1 = task.task.add_subtask(subtask1);
+        let subtask2 = task.task.add_subtask(subtask2);
 
         // add dependencies
-        task.add_subtask_dependency(subtask2, subtask1);
+        task.task.add_subtask_dependency(subtask2, subtask1);
 
         // add partial solutions
-        task.add_partial_solution("solution1.cpp", &[subtask1]);
+        task.task.add_partial_solution("solution1.cpp", &[subtask1]);
 
-        for _ in 0..10 {
-            task.create_tests().unwrap();
-        }
+        task.test()
     }
 
     #[test]
     fn test_partial_solution_wrong_subtask() {
-        let task_name = "partial_solution_wrong_subtask";
-        let task_path = PathBuf::from(TESTS_DIR).join(task_name);
-        let mut task = crate::Task::new(task_name, &task_path);
-
-        // create directory
-        std::fs::create_dir_all(task_path.clone()).unwrap();
+        let mut task = Test::new();
 
         // create solution file
         let solution_contents = r#"
@@ -109,7 +96,7 @@ mod partial_solution_tests {
         }
         "#;
 
-        std::fs::write(task_path.join("solution.cpp"), solution_contents).unwrap();
+        task.create_solution(solution_contents);
 
         // create partial solution file (it overflows)
         let partial_solution_contents = r#"
@@ -130,7 +117,7 @@ mod partial_solution_tests {
         }
         "#;
 
-        std::fs::write(task_path.join("solution1.cpp"), partial_solution_contents).unwrap();
+        std::fs::write(task.task_path().join("solution1.cpp"), partial_solution_contents).unwrap();
 
         // subtask 1, the sum is less than 10^6
         let mut subtask1 = crate::Subtask::new(50);
@@ -143,28 +130,23 @@ mod partial_solution_tests {
         subtask2.add_test(5, array_generator(1, 100, 1, 1_000_000_000));
 
         // create subtasks
-        let subtask1 = task.add_subtask(subtask1);
-        let subtask2 = task.add_subtask(subtask2);
+        let subtask1 = task.task.add_subtask(subtask1);
+        let subtask2 = task.task.add_subtask(subtask2);
 
         // add dependencies
-        task.add_subtask_dependency(subtask2, subtask1);
+        task.task.add_subtask_dependency(subtask2, subtask1);
 
         // add partial solutions
-        task.add_partial_solution("solution1.cpp", &[subtask2]);
+        task.task.add_partial_solution("solution1.cpp", &[subtask2]);
 
         for _ in 0..10 {
-            assert!(!task.create_tests().is_ok());
+            assert!(!task.task.create_tests().is_ok());
         }
     }
 
     #[test]
     fn test_partial_solution_wa() {
-        let task_name = "partial_solution_wa";
-        let task_path = PathBuf::from(TESTS_DIR).join(task_name);
-        let mut task = crate::Task::new(task_name, &task_path);
-
-        // create directory
-        std::fs::create_dir_all(task_path.clone()).unwrap();
+        let mut task = Test::new();
 
         // create solution file
         let solution_contents = r#"
@@ -185,7 +167,7 @@ mod partial_solution_tests {
         }
         "#;
 
-        std::fs::write(task_path.join("solution.cpp"), solution_contents).unwrap();
+        task.create_solution(solution_contents);
 
         // create partial solution file (it overflows)
         let partial_solution_contents = r#"
@@ -206,7 +188,7 @@ mod partial_solution_tests {
         }
         "#;
 
-        std::fs::write(task_path.join("solution1.cpp"), partial_solution_contents).unwrap();
+        std::fs::write(task.task_path().join("solution1.cpp"), partial_solution_contents).unwrap();
 
         // subtask 1, the sum is less than 10^6
         let mut subtask1 = crate::Subtask::new(50);
@@ -219,29 +201,23 @@ mod partial_solution_tests {
         subtask2.add_test(5, array_generator(1, 100, 1, 1_000_000_000));
 
         // create subtasks
-        let subtask1 = task.add_subtask(subtask1);
-        let subtask2 = task.add_subtask(subtask2);
+        let subtask1 = task.task.add_subtask(subtask1);
+        let subtask2 = task.task.add_subtask(subtask2);
 
         // add dependencies
-        task.add_subtask_dependency(subtask2, subtask1);
+        task.task.add_subtask_dependency(subtask2, subtask1);
 
         // add partial solutions
-        task.add_partial_solution("solution1.cpp", &[subtask1]);
+        task.task.add_partial_solution("solution1.cpp", &[subtask1]);
 
         for _ in 0..10 {
-            assert!(!task.create_tests().is_ok());
+            assert!(!task.task.create_tests().is_ok());
         }
     }
 
     #[test]
     fn test_partial_solution_tle() {
-        let task_name = "partial_solution_tle";
-        let task_path = PathBuf::from(TESTS_DIR).join(task_name);
-        let mut task = crate::Task::new(task_name, &task_path);
-        task.time_limit = 2.0;
-
-        // create directory
-        std::fs::create_dir_all(task_path.clone()).unwrap();
+        let mut task = Test::new();
 
         // create solution file
         let solution_contents = r#"
@@ -262,7 +238,7 @@ mod partial_solution_tests {
         }
         "#;
 
-        std::fs::write(task_path.join("solution.cpp"), solution_contents).unwrap();
+        task.create_solution(solution_contents);
 
         // create partial solution file (it overflows)
         let partial_solution_contents = r#"
@@ -284,7 +260,7 @@ mod partial_solution_tests {
         }
         "#;
 
-        std::fs::write(task_path.join("solution1.cpp"), partial_solution_contents).unwrap();
+        std::fs::write(task.task_path().join("solution1.cpp"), partial_solution_contents).unwrap();
 
         // subtask 1, the sum is less than 10^6
         let mut subtask1 = crate::Subtask::new(50);
@@ -297,28 +273,21 @@ mod partial_solution_tests {
         subtask2.add_test(5, array_generator(1, 100, 1, 1_000_000_000));
 
         // create subtasks
-        let subtask1 = task.add_subtask(subtask1);
-        let subtask2 = task.add_subtask(subtask2);
+        let subtask1 = task.task.add_subtask(subtask1);
+        let subtask2 = task.task.add_subtask(subtask2);
 
         // add dependencies
-        task.add_subtask_dependency(subtask2, subtask1);
+        task.task.add_subtask_dependency(subtask2, subtask1);
 
         // add partial solutions
-        task.add_partial_solution("solution1.cpp", &[subtask1]);
+        task.task.add_partial_solution("solution1.cpp", &[subtask1]);
 
-        for _ in 0..10 {
-            task.create_tests().unwrap();
-        }
+        task.test()
     }
 
     #[test]
     fn test_partial_solution_crash() {
-        let task_name = "partial_solution_crash";
-        let task_path = PathBuf::from(TESTS_DIR).join(task_name);
-        let mut task = crate::Task::new(task_name, &task_path);
-
-        // create directory
-        std::fs::create_dir_all(task_path.clone()).unwrap();
+        let mut task = Test::new();
 
         // create solution file
         let solution_contents = r#"
@@ -339,7 +308,7 @@ mod partial_solution_tests {
         }
         "#;
 
-        std::fs::write(task_path.join("solution.cpp"), solution_contents).unwrap();
+        task.create_solution(solution_contents);
 
         // create partial solution file (it crashes)
         let partial_solution_contents = "
@@ -353,7 +322,7 @@ mod partial_solution_tests {
         }
         ";
 
-        std::fs::write(task_path.join("solution1.cpp"), partial_solution_contents).unwrap();
+        std::fs::write(task.task_path().join("solution1.cpp"), partial_solution_contents).unwrap();
 
         // subtask 1, the sum is less than 10^6
         let mut subtask1 = crate::Subtask::new(50);
@@ -366,29 +335,21 @@ mod partial_solution_tests {
         subtask2.add_test(5, array_generator(1, 100, 1, 1_000_000_000));
 
         // create subtasks
-        let subtask1 = task.add_subtask(subtask1);
-        let subtask2 = task.add_subtask(subtask2);
+        let subtask1 = task.task.add_subtask(subtask1);
+        let subtask2 = task.task.add_subtask(subtask2);
 
         // add dependencies
-        task.add_subtask_dependency(subtask2, subtask1);
+        task.task.add_subtask_dependency(subtask2, subtask1);
 
         // add partial solutions
-        task.add_partial_solution("solution1.cpp", &[]);
+        task.task.add_partial_solution("solution1.cpp", &[]);
 
-        for _ in 0..3 {
-            task.create_tests().unwrap();
-        }
+        task.test()
     }
 
     #[test]
     fn test_partial_solution_tle2() {
-        let task_name = "partial_solution_tle2";
-        let task_path = PathBuf::from(TESTS_DIR).join(task_name);
-        let mut task = crate::Task::new(task_name, &task_path);
-        task.time_limit = 1.0;
-
-        // create directory
-        std::fs::create_dir_all(task_path.clone()).unwrap();
+        let mut task = Test::new();
 
         // create solution file
         let solution_contents = r#"
@@ -409,7 +370,7 @@ mod partial_solution_tests {
         }
         "#;
 
-        std::fs::write(task_path.join("solution.cpp"), solution_contents).unwrap();
+        task.create_solution(solution_contents);
 
         // create partial solution file (it overflows)
         let partial_solution_contents = r#"
@@ -431,7 +392,7 @@ mod partial_solution_tests {
         }
         "#;
 
-        std::fs::write(task_path.join("solution1.cpp"), partial_solution_contents).unwrap();
+        std::fs::write(task.task_path().join("solution1.cpp"), partial_solution_contents).unwrap();
 
         // subtask 1, the sum is less than 10^6
         let mut subtask1 = crate::Subtask::new(50);
@@ -444,17 +405,15 @@ mod partial_solution_tests {
         subtask2.add_test(5, array_generator(1, 100, 1, 1_000_000_000));
 
         // create subtasks
-        let subtask1 = task.add_subtask(subtask1);
-        let subtask2 = task.add_subtask(subtask2);
+        let subtask1 = task.task.add_subtask(subtask1);
+        let subtask2 = task.task.add_subtask(subtask2);
 
         // add dependencies
-        task.add_subtask_dependency(subtask2, subtask1);
+        task.task.add_subtask_dependency(subtask2, subtask1);
 
         // add partial solutions
-        task.add_partial_solution("solution1.cpp", &[]);
+        task.task.add_partial_solution("solution1.cpp", &[]);
 
-        for _ in 0..10 {
-            task.create_tests().unwrap();
-        }
+        task.test()
     }
 }

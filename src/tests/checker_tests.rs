@@ -1,20 +1,12 @@
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod generator_tests {
-    use crate::tests::generic_tests::generic_tests::{initialize_test, TESTS_DIR};
-    use crate::{array_generator, Error, Subtask, Task};
-    use std::path::PathBuf;
+    use crate::tests::generic_tests::generic_tests::Test;
+    use crate::{array_generator, Error, Subtask};
 
     #[test]
     fn test_checker() {
-        initialize_test();
-
-        let task_name = "checker";
-        let task_path = PathBuf::from(TESTS_DIR).join(task_name);
-        let mut task = Task::new(task_name, &task_path);
-
-        // create directory
-        std::fs::create_dir_all(task_path.clone()).unwrap();
+        let mut task = Test::new();
 
         // create solution file
         let solution_contents = r#"
@@ -34,7 +26,7 @@ mod generator_tests {
         
         "#;
 
-        std::fs::write(task_path.join("solution.cpp"), solution_contents).unwrap();
+        task.create_solution(solution_contents);
 
         // create subtasks
         let mut subtask1 = Subtask::new(20);
@@ -64,23 +56,14 @@ mod generator_tests {
         subtask1.add_test(5, array_generator(100, 100, 1, 1));
         subtask1.add_test(5, array_generator(1, 1, 1, 1));
 
-        task.add_subtask(subtask1);
+        task.task.add_subtask(subtask1);
 
-        for _ in 0..10 {
-            task.create_tests().unwrap();
-        }
+        task.test()
     }
 
     #[test]
     fn test_checker_fail() {
-        initialize_test();
-
-        let task_name = "checker_fail";
-        let task_path = PathBuf::from(TESTS_DIR).join(task_name);
-        let mut task = Task::new(task_name, &task_path);
-
-        // create directory
-        std::fs::create_dir_all(task_path.clone()).unwrap();
+        let mut task = Test::new();
 
         // create solution file
         let solution_contents = r#"
@@ -100,7 +83,7 @@ mod generator_tests {
         
         "#;
 
-        std::fs::write(task_path.join("solution.cpp"), solution_contents).unwrap();
+        task.create_solution(solution_contents);
 
         // create subtasks
         let mut subtask1 = Subtask::new(20);
@@ -130,23 +113,16 @@ mod generator_tests {
         subtask1.add_test(5, array_generator(100, 100, 1, 1));
         subtask1.add_test(5, array_generator(1, 1, 1, 1));
 
-        task.add_subtask(subtask1);
+        task.task.add_subtask(subtask1);
 
         for _ in 0..10 {
-            assert!(matches!(task.create_tests().unwrap_err(), Error::CustomError { .. }));
+            assert!(matches!(task.task.create_tests().unwrap_err(), Error::CustomError { .. }));
         }
     }
 
     #[test]
     fn test_checker2() {
-        initialize_test();
-
-        let task_name = "checker2";
-        let task_path = PathBuf::from(TESTS_DIR).join(task_name);
-        let mut task = Task::new(task_name, &task_path);
-
-        // create directory
-        std::fs::create_dir_all(task_path.clone()).unwrap();
+        let mut task = Test::new();
 
         // create solution file
         let solution_contents = r#"
@@ -162,7 +138,7 @@ mod generator_tests {
         
         "#;
 
-        std::fs::write(task_path.join("solution.cpp"), solution_contents).unwrap();
+        task.create_solution(solution_contents);
 
         // a = b
         let mut subtask1 = Subtask::new(20);
@@ -184,23 +160,14 @@ mod generator_tests {
         subtask1.add_test_str("2 2");
         subtask1.add_test_str("3 3");
 
-        task.add_subtask(subtask1);
+        task.task.add_subtask(subtask1);
 
-        for _ in 0..10 {
-            task.create_tests().unwrap();
-        }
+        task.test()
     }
 
     #[test]
     fn test_checker_fail2() {
-        initialize_test();
-
-        let task_name = "checker_fail2";
-        let task_path = PathBuf::from(TESTS_DIR).join(task_name);
-        let mut task = Task::new(task_name, &task_path);
-
-        // create directory
-        std::fs::create_dir_all(task_path.clone()).unwrap();
+        let mut task = Test::new();
 
         // create solution file
         let solution_contents = r#"
@@ -216,7 +183,7 @@ mod generator_tests {
         
         "#;
 
-        std::fs::write(task_path.join("solution.cpp"), solution_contents).unwrap();
+        task.create_solution(solution_contents);
 
         // a = b
         let mut subtask1 = Subtask::new(20);
@@ -238,23 +205,16 @@ mod generator_tests {
         subtask1.add_test_str("2 3");
         subtask1.add_test_str("3 3");
 
-        task.add_subtask(subtask1);
+        task.task.add_subtask(subtask1);
 
         for _ in 0..10 {
-            assert!(matches!(task.create_tests().unwrap_err(), Error::CustomError { .. }));
+            assert!(matches!(task.task.create_tests().unwrap_err(), Error::CustomError { .. }));
         }
     }
 
     #[test]
     fn test_checker_fail3() {
-        initialize_test();
-
-        let task_name = "checker_fail3";
-        let task_path = PathBuf::from(TESTS_DIR).join(task_name);
-        let mut task = Task::new(task_name, &task_path);
-
-        // create directory
-        std::fs::create_dir_all(task_path.clone()).unwrap();
+        let mut task = Test::new();
 
         // create solution file
         let solution_contents = r#"
@@ -270,7 +230,7 @@ mod generator_tests {
         
         "#;
 
-        std::fs::write(task_path.join("solution.cpp"), solution_contents).unwrap();
+        task.create_solution(solution_contents);
 
         // a = b
         let mut subtask1 = Subtask::new(20);
@@ -293,23 +253,16 @@ mod generator_tests {
         subtask1.add_test_str("3");
         subtask1.add_test_str("5 5");
 
-        task.add_subtask(subtask1);
+        task.task.add_subtask(subtask1);
 
         for _ in 0..10 {
-            assert!(matches!(task.create_tests().unwrap_err(), Error::InputExpectedInteger { .. }));
+            assert!(matches!(task.task.create_tests().unwrap_err(), Error::InputExpectedInteger { .. }));
         }
     }
 
     #[test]
     fn test_checker_fail4() {
-        initialize_test();
-
-        let task_name = "checker_fail4";
-        let task_path = PathBuf::from(TESTS_DIR).join(task_name);
-        let mut task = Task::new(task_name, &task_path);
-
-        // create directory
-        std::fs::create_dir_all(task_path.clone()).unwrap();
+        let mut task = Test::new();
 
         // create solution file
         let solution_contents = r#"
@@ -325,7 +278,7 @@ mod generator_tests {
         
         "#;
 
-        std::fs::write(task_path.join("solution.cpp"), solution_contents).unwrap();
+        task.create_solution(solution_contents);
 
         // a = b
         let mut subtask1 = Subtask::new(20);
@@ -348,23 +301,16 @@ mod generator_tests {
         subtask1.add_test_str("3 3 3");
         subtask1.add_test_str("5 5");
 
-        task.add_subtask(subtask1);
+        task.task.add_subtask(subtask1);
 
         for _ in 0..10 {
-            assert!(matches!(task.create_tests().unwrap_err(), Error::InputExpectedEnd { .. }));
+            assert!(matches!(task.task.create_tests().unwrap_err(), Error::InputExpectedEnd { .. }));
         }
     }
 
     #[test]
     fn test_checker3() {
-        initialize_test();
-
-        let task_name = "checker3";
-        let task_path = PathBuf::from(TESTS_DIR).join(task_name);
-        let mut task = Task::new(task_name, &task_path);
-
-        // create directory
-        std::fs::create_dir_all(task_path.clone()).unwrap();
+        let mut task = Test::new();
 
         // create solution file
         let solution_contents = r#"
@@ -380,7 +326,7 @@ mod generator_tests {
         
         "#;
 
-        std::fs::write(task_path.join("solution.cpp"), solution_contents).unwrap();
+        task.create_solution(solution_contents);
 
         // a = b
         let mut subtask1 = Subtask::new(20);
@@ -443,27 +389,18 @@ mod generator_tests {
         subtask3.add_test_str("4 1");
         subtask3.add_test_str("100 1");
 
-        let subtask1 = task.add_subtask(subtask1);
-        let subtask2 = task.add_subtask(subtask2);
-        task.add_subtask(subtask3);
+        let subtask1 = task.task.add_subtask(subtask1);
+        let subtask2 = task.task.add_subtask(subtask2);
+        task.task.add_subtask(subtask3);
 
-        task.add_subtask_dependency(subtask2, subtask1);
+        task.task.add_subtask_dependency(subtask2, subtask1);
 
-        for _ in 0..10 {
-            task.create_tests().unwrap();
-        }
+        task.test()
     }
 
     #[test]
     fn test_checker_fail5() {
-        initialize_test();
-
-        let task_name = "checker_fail5";
-        let task_path = PathBuf::from(TESTS_DIR).join(task_name);
-        let mut task = Task::new(task_name, &task_path);
-
-        // create directory
-        std::fs::create_dir_all(task_path.clone()).unwrap();
+        let mut task = Test::new();
 
         // create solution file
         let solution_contents = r#"
@@ -479,7 +416,7 @@ mod generator_tests {
         
         "#;
 
-        std::fs::write(task_path.join("solution.cpp"), solution_contents).unwrap();
+        task.create_solution(solution_contents);
 
         // a = b
         let mut subtask1 = Subtask::new(20);
@@ -542,18 +479,18 @@ mod generator_tests {
         subtask3.add_test_str("4 1");
         subtask3.add_test_str("100 1");
 
-        task.add_subtask(subtask1);
-        let subtask2 = task.add_subtask(subtask2);
-        let subtask3 = task.add_subtask(subtask3);
+        task.task.add_subtask(subtask1);
+        let subtask2 = task.task.add_subtask(subtask2);
+        let subtask3 = task.task.add_subtask(subtask3);
 
         for _ in 0..10 {
-            task.create_tests().unwrap();
+            task.task.create_tests().unwrap();
         }
 
-        task.add_subtask_dependency(subtask3, subtask2);
+        task.task.add_subtask_dependency(subtask3, subtask2);
 
         for _ in 0..10 {
-            assert!(matches!(task.create_tests().unwrap_err(), Error::CustomError { .. }));
+            assert!(matches!(task.task.create_tests().unwrap_err(), Error::CustomError { .. }));
         }
     }
 }

@@ -2,52 +2,53 @@
 #[allow(clippy::unwrap_used)]
 pub mod generic_tests {
     use crate::{Error, Subtask, Task};
-    use std::path::PathBuf;
-    use std::sync::Once;
+    use std::path::{Path};
+    use tempfile::TempDir;
 
-    pub const TESTS_DIR: &str = "test_tasks";
-    static INIT: Once = Once::new();
-
-    pub fn initialize_test() {
-        INIT.call_once(|| {
-            if PathBuf::from(TESTS_DIR).exists() {
-                std::fs::remove_dir_all(TESTS_DIR).unwrap();
-            }
-            std::fs::create_dir_all(TESTS_DIR).unwrap();
-        });
+    pub struct Test {
+        pub task: Task,
+        task_path: TempDir,
     }
 
-    #[test]
-    fn create_empty() {
-        initialize_test();
+    impl Test {
+        pub fn new() -> Self {
+            let task_path = TempDir::new().expect("Failed to create temporary directory");
+            let task = Task::new("Test task", task_path.path());
+            Test { task, task_path }
+        }
 
-        let task_name = "empty";
-        let task_path = PathBuf::from(TESTS_DIR).join(task_name);
-        let mut task = Task::new(task_name, &task_path);
+        pub fn create_solution(&mut self, contents: &str) {
+            std::fs::write(self.task_path.path().join("solution.cpp"), contents).unwrap();
+        }
 
-        // create directory
-        std::fs::create_dir_all(task_path.clone()).unwrap();
+        pub fn task_path(&self) -> &Path {
+            self.task_path.path()
+        }
 
-        // create solution file
-        let solution_contents = "int main() { return 0; }";
-        std::fs::write(task_path.join("solution.cpp"), solution_contents).unwrap();
-
-        for _ in 0..10 {
-            task.create_tests().unwrap();
-            task.create_tests_for_cps().unwrap();
+        pub fn test(mut self) {
+            for _ in 0..10 {
+                self.task.create_tests().unwrap();
+                self.task.create_tests_for_cps().unwrap();
+            }
+            // Clean up the temporary directory
+            drop(self.task_path);
         }
     }
 
     #[test]
+    fn create_empty() {
+        let task = Test::new();
+
+        // create solution file
+        let solution_contents = "int main() { return 0; }";
+        std::fs::write(task.task_path().join("solution.cpp"), solution_contents).unwrap();
+
+        task.test()
+    }
+
+    #[test]
     fn create_with_subtasks() {
-        initialize_test();
-
-        let task_name = "subtasks";
-        let task_path = PathBuf::from(TESTS_DIR).join(task_name);
-        let mut task = Task::new(task_name, &task_path);
-
-        // create directory
-        std::fs::create_dir_all(task_path.clone()).unwrap();
+        let mut task = Test::new();
 
         // create solution file
         let solution_contents = r#"
@@ -61,33 +62,23 @@ pub mod generic_tests {
         
         "#;
 
-        std::fs::write(task_path.join("solution.cpp"), solution_contents).unwrap();
+        task.create_solution(solution_contents);
 
         let subtask1 = Subtask::new(20);
         let subtask2 = Subtask::new(30);
         let subtask3 = Subtask::new(50);
 
         // create subtasks
-        task.add_subtask(subtask1);
-        task.add_subtask(subtask2);
-        task.add_subtask(subtask3);
+        task.task.add_subtask(subtask1);
+        task.task.add_subtask(subtask2);
+        task.task.add_subtask(subtask3);
 
-        for _ in 0..10 {
-            task.create_tests().unwrap();
-            task.create_tests_for_cps().unwrap();
-        }
+        task.test()
     }
 
     #[test]
     fn create_with_tests() {
-        initialize_test();
-
-        let task_name = "tests";
-        let task_path = PathBuf::from(TESTS_DIR).join(task_name);
-        let mut task = Task::new(task_name, &task_path);
-
-        // create directory
-        std::fs::create_dir_all(task_path.clone()).unwrap();
+        let mut task = Test::new();
 
         // create solution file
         let solution_contents = r#"
@@ -101,7 +92,7 @@ pub mod generic_tests {
         
         "#;
 
-        std::fs::write(task_path.join("solution.cpp"), solution_contents).unwrap();
+        task.create_solution(solution_contents);
 
         let mut subtask1 = Subtask::new(20);
         subtask1.add_test_str("1\n");
@@ -116,44 +107,27 @@ pub mod generic_tests {
         subtask3.add_test_str("2\n");
 
         // create subtasks
-        task.add_subtask(subtask1);
-        task.add_subtask(subtask2);
-        task.add_subtask(subtask3);
+        task.task.add_subtask(subtask1);
+        task.task.add_subtask(subtask2);
+        task.task.add_subtask(subtask3);
 
-        for _ in 0..10 {
-            task.create_tests().unwrap();
-            task.create_tests_for_cps().unwrap();
-        }
+        task.test()
     }
 
     #[test]
     fn test_fails_without_solution() {
-        initialize_test();
-
-        let task_name = "no_solution";
-        let task_path = PathBuf::from(TESTS_DIR).join(task_name);
-        let mut task = Task::new(task_name, &task_path);
-
-        // create directory
-        std::fs::create_dir_all(task_path).unwrap();
+        let mut task = Test::new();
 
         for _ in 0..10 {
-            assert!(matches!(task.create_tests(), Err(Error::MissingSolutionFile { .. })));
-            assert!(matches!(task.create_tests(), Err(Error::MissingSolutionFile { .. })));
+            assert!(matches!(task.task.create_tests(), Err(Error::MissingSolutionFile { .. })));
+            assert!(matches!(task.task.create_tests(), Err(Error::MissingSolutionFile { .. })));
         }
     }
 
     #[test]
     fn test_times_out() {
-        initialize_test();
-
-        let task_name = "times_out";
-        let task_path = PathBuf::from(TESTS_DIR).join(task_name);
-        let mut task = Task::new(task_name, &task_path);
-        task.time_limit = 0.5;
-
-        // create directory
-        std::fs::create_dir_all(task_path.clone()).unwrap();
+        let mut task = Test::new();
+        task.task.time_limit = 0.1;
 
         // create solution file
         let solution_contents = r#"
@@ -174,66 +148,52 @@ pub mod generic_tests {
         
         "#;
 
-        std::fs::write(task_path.join("solution.cpp"), solution_contents).unwrap();
+        task.create_solution(solution_contents);
 
         let mut subtask1 = Subtask::new(20);
         subtask1.add_test_str("1\n");
 
         // create subtasks
-        task.add_subtask(subtask1);
+        task.task.add_subtask(subtask1);
 
         for _ in 0..3 {
-            assert!(matches!(task.create_tests(), Err(Error::SolutionTimedOut { .. })));
-            assert!(matches!(task.create_tests_for_cps(), Err(Error::SolutionTimedOut { .. })));
+            assert!(matches!(task.task.create_tests(), Err(Error::SolutionTimedOut { .. })));
+            assert!(matches!(task.task.create_tests_for_cps(), Err(Error::SolutionTimedOut { .. })));
         }
     }
 
     #[test]
     fn test_compile_error() {
-        initialize_test();
-
-        let task_name = "compile_error";
-        let task_path = PathBuf::from(TESTS_DIR).join(task_name);
-        let mut task = Task::new(task_name, &task_path);
-
-        // create directory
-        std::fs::create_dir_all(task_path.clone()).unwrap();
+        let mut task = Test::new();
 
         // create solution file
         let solution_contents = "
         int main() {
-            this is a compile error muahahahahah
+            this is a compile error
             return 0;
         }
         ";
 
-        std::fs::write(task_path.join("solution.cpp"), solution_contents).unwrap();
+        task.create_solution(solution_contents);
 
         let mut subtask1 = Subtask::new(20);
         subtask1.add_test_str("1\n");
 
         // create subtasks
-        task.add_subtask(subtask1);
+        task.task.add_subtask(subtask1);
 
         for _ in 0..10 {
-            assert!(matches!(task.create_tests(), Err(Error::CompilerError { .. })));
-            assert!(matches!(task.create_tests_for_cps(), Err(Error::CompilerError { .. })));
+            assert!(matches!(task.task.create_tests(), Err(Error::CompilerError { .. })));
+            assert!(matches!(task.task.create_tests_for_cps(), Err(Error::CompilerError { .. })));
         }
     }
 
     #[test]
     fn create_with_custom_names() {
-        initialize_test();
+        let mut task = Test::new();
 
-        let task_name = "tests_with_custom_names";
-        let task_path = PathBuf::from(TESTS_DIR).join(task_name);
-        let mut task = Task::new(task_name, &task_path);
-
-        task.get_input_file_name = Box::new(|test_id: i32, subtask_id: i32, test_id_in_subtask: i32| format!("in_{subtask_id}_{test_id_in_subtask}_{test_id}.txt"));
-        task.get_output_file_name = Box::new(|test_id: i32, subtask_id: i32, test_id_in_subtask: i32| format!("out_{subtask_id}_{test_id_in_subtask}_{test_id}.txt"));
-
-        // create directory
-        std::fs::create_dir_all(task_path.clone()).unwrap();
+        task.task.get_input_file_name = Box::new(|test_id: i32, subtask_id: i32, test_id_in_subtask: i32| format!("in_{subtask_id}_{test_id_in_subtask}_{test_id}.txt"));
+        task.task.get_output_file_name = Box::new(|test_id: i32, subtask_id: i32, test_id_in_subtask: i32| format!("out_{subtask_id}_{test_id_in_subtask}_{test_id}.txt"));
 
         // create solution file
         let solution_contents = r#"
@@ -247,7 +207,7 @@ pub mod generic_tests {
         
         "#;
 
-        std::fs::write(task_path.join("solution.cpp"), solution_contents).unwrap();
+        task.create_solution(solution_contents);
 
         let mut subtask1 = Subtask::new(20);
         subtask1.add_test_str("1\n");
@@ -262,29 +222,19 @@ pub mod generic_tests {
         subtask3.add_test_str("2\n");
 
         // create subtasks
-        task.add_subtask(subtask1);
-        task.add_subtask(subtask2);
-        task.add_subtask(subtask3);
+        task.task.add_subtask(subtask1);
+        task.task.add_subtask(subtask2);
+        task.task.add_subtask(subtask3);
 
-        for _ in 0..10 {
-            task.create_tests().unwrap();
-            task.create_tests_for_cps().unwrap();
-        }
+        task.test()
     }
 
     #[test]
     fn create_with_custom_names2() {
-        initialize_test();
+        let mut task = Test::new();
 
-        let task_name = "tests_with_custom_names2";
-        let task_path = PathBuf::from(TESTS_DIR).join(task_name);
-        let mut task = Task::new(task_name, &task_path);
-
-        task.get_input_file_name = Box::new(|_test_id: i32, subtask_id: i32, test_id_in_subtask: i32| format!("in_{subtask_id}_{test_id_in_subtask}.txt"));
-        task.get_output_file_name = Box::new(|_test_id: i32, subtask_id: i32, test_id_in_subtask: i32| format!("out_{subtask_id}_{test_id_in_subtask}.txt"));
-
-        // create directory
-        std::fs::create_dir_all(task_path.clone()).unwrap();
+        task.task.get_input_file_name = Box::new(|_test_id: i32, subtask_id: i32, test_id_in_subtask: i32| format!("in_{subtask_id}_{test_id_in_subtask}.txt"));
+        task.task.get_output_file_name = Box::new(|_test_id: i32, subtask_id: i32, test_id_in_subtask: i32| format!("out_{subtask_id}_{test_id_in_subtask}.txt"));
 
         // create solution file
         let solution_contents = r#"
@@ -298,7 +248,7 @@ pub mod generic_tests {
         
         "#;
 
-        std::fs::write(task_path.join("solution.cpp"), solution_contents).unwrap();
+        task.create_solution(solution_contents);
 
         let mut subtask1 = Subtask::new(20);
         subtask1.add_test_str("1\n");
@@ -313,29 +263,19 @@ pub mod generic_tests {
         subtask3.add_test_str("2\n");
 
         // create subtasks
-        task.add_subtask(subtask1);
-        task.add_subtask(subtask2);
-        task.add_subtask(subtask3);
+        task.task.add_subtask(subtask1);
+        task.task.add_subtask(subtask2);
+        task.task.add_subtask(subtask3);
 
-        for _ in 0..10 {
-            task.create_tests().unwrap();
-            task.create_tests_for_cps().unwrap();
-        }
+        task.test()
     }
 
     #[test]
     fn create_with_custom_names3() {
-        initialize_test();
+        let mut task = Test::new();
 
-        let task_name = "tests_with_custom_names3";
-        let task_path = PathBuf::from(TESTS_DIR).join(task_name);
-        let mut task = Task::new(task_name, &task_path);
-
-        task.get_input_file_name = Box::new(|test_id: i32, _subtask_id: i32, _test_id_in_subtask: i32| format!("in_{test_id}.txt"));
-        task.get_output_file_name = Box::new(|test_id: i32, _subtask_id: i32, _test_id_in_subtask: i32| format!("out_{test_id}.txt"));
-
-        // create directory
-        std::fs::create_dir_all(task_path.clone()).unwrap();
+        task.task.get_input_file_name = Box::new(|test_id: i32, _subtask_id: i32, _test_id_in_subtask: i32| format!("in_{test_id}.txt"));
+        task.task.get_output_file_name = Box::new(|test_id: i32, _subtask_id: i32, _test_id_in_subtask: i32| format!("out_{test_id}.txt"));
 
         // create solution file
         let solution_contents = r#"
@@ -349,7 +289,7 @@ pub mod generic_tests {
         
         "#;
 
-        std::fs::write(task_path.join("solution.cpp"), solution_contents).unwrap();
+        task.create_solution(solution_contents);
 
         let mut subtask1 = Subtask::new(20);
         subtask1.add_test_str("1\n");
@@ -364,13 +304,10 @@ pub mod generic_tests {
         subtask3.add_test_str("2\n");
 
         // create subtasks
-        task.add_subtask(subtask1);
-        task.add_subtask(subtask2);
-        task.add_subtask(subtask3);
+        task.task.add_subtask(subtask1);
+        task.task.add_subtask(subtask2);
+        task.task.add_subtask(subtask3);
 
-        for _ in 0..10 {
-            task.create_tests().unwrap();
-            task.create_tests_for_cps().unwrap();
-        }
+        task.test()
     }
 }
