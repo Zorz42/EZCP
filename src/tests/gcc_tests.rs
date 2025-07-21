@@ -1,6 +1,7 @@
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 pub mod gcc_tests {
+    use crate::Error;
     use crate::gcc::Gcc;
 
     #[test]
@@ -34,6 +35,36 @@ pub mod gcc_tests {
 
         drop(tempdir);
     }
+
+    #[test]
+    fn test_gcc_compile_with_flags() {
+        let mut gcc = Gcc::new().unwrap();
+        gcc.add_flag("-std=c++20");
+        gcc.add_flag("-O2");
+        gcc.add_flag("-Wall");
+
+        let tempdir = tempfile::TempDir::new().unwrap();
+
+        let source_code = r#"
+        #include <iostream>
+        using namespace std;
+
+        int main() {
+            cout << "Hello, World!" << endl;
+            return 0;
+        }
+        "#;
+
+        let source_path = tempdir.path().join("test.cpp");
+        // Write the source code to a file
+        std::fs::write(&source_path, source_code).unwrap();
+        gcc.compile(&source_path, &(*tempdir.path()).join("test")).unwrap();
+
+        assert!(tempdir.path().join("test").exists());
+
+        drop(tempdir);
+    }
+
 
     #[test]
     fn test_gcc_compile_output() {
@@ -72,6 +103,56 @@ pub mod gcc_tests {
         let output_str = String::from_utf8_lossy(&output.stdout);
 
         assert!(output_str.contains(&key.to_string()));
+
+        drop(tempdir);
+    }
+
+    #[test]
+    fn test_compiler_runtime_error() {
+        let mut gcc = Gcc::new().unwrap();
+        gcc.add_flag("--dfsahgj"); // invalid flag to force a runtime error
+
+        let tempdir = tempfile::TempDir::new().unwrap();
+
+        let source_code = r#"
+        #include <iostream>
+        using namespace std;
+
+        int main() {
+            cout << "Hello, World!" << endl;
+            return 0;
+        }
+        "#;
+
+        let source_path = tempdir.path().join("test.cpp");
+        // Write the source code to a file
+        std::fs::write(&source_path, source_code).unwrap();
+        assert!(matches!(gcc.compile(&source_path, &(*tempdir.path()).join("test")), Err(Error::CompilerError { .. })));
+
+        drop(tempdir);
+    }
+
+    #[test]
+    fn test_compile_error() {
+        let gcc = Gcc::new().unwrap();
+
+        let tempdir = tempfile::TempDir::new().unwrap();
+
+        let source_code = r#"
+        #include <iostream>
+        using namespace std;
+
+        int main() {
+        fdsahfjkasfhjk;
+            cout << "Hello, World!" << endl;
+            return 0;
+        }
+        "#;
+
+        let source_path = tempdir.path().join("test.cpp");
+        // Write the source code to a file
+        std::fs::write(&source_path, source_code).unwrap();
+        assert!(matches!(gcc.compile(&source_path, &(*tempdir.path()).join("test")), Err(Error::CompilerError { .. })));
 
         drop(tempdir);
     }

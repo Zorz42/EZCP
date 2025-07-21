@@ -94,6 +94,7 @@ dependencies = [
  "bincode",
  "fs_extra",
  "num_cpus",
+ "once_cell",
  "rand",
  "snap",
  "tempfile",

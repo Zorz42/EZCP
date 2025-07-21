@@ -1,6 +1,6 @@
 use std::path::{Path, PathBuf};
 use crate::Error::{CompilerNotFound};
-use crate::Result;
+use crate::{Error, Result};
 
 fn find_gcc() -> Result<PathBuf> {
     if let Ok(gcc_path) = std::env::var("GCC_PATH") {
@@ -10,10 +10,7 @@ fn find_gcc() -> Result<PathBuf> {
     #[cfg(unix)]
     {
         // use which to find gcc in the PATH
-        match which::which("g++") {
-            Ok(path) => Ok(path),
-            Err(_) => Err(CompilerNotFound),
-        }
+        which::which("g++").map_or(Err(CompilerNotFound), Ok)
     }
     #[cfg(windows)]
     {
@@ -77,12 +74,21 @@ impl Gcc {
         self.flags.push(flag.into());
     }
 
-    pub fn compile(&self, source_file: &Path, output_file: &Path) -> std::io::Result<()> {
+    pub fn compile(&self, source_file: &Path, output_file: &Path) -> Result<()> {
         let mut command = std::process::Command::new(&self.path);
         command.arg(source_file).arg("-o").arg(output_file);
         for flag in &self.flags {
             command.arg(flag);
         }
-        command.status().map(|_| ())
+        let process = command.output().map_err(|err| Error::IOError { err, file: String::new() })?;
+
+        if !process.status.success() {
+            return Err(Error::CompilerError {
+                stderr: String::from_utf8_lossy(&process.stderr).to_string(),
+                stdout: String::from_utf8_lossy(&process.stdout).to_string(),
+            });
+        }
+
+        Ok(())
     }
 }
