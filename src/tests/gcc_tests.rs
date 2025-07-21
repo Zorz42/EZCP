@@ -31,6 +31,8 @@ pub mod gcc_tests {
         gcc.compile(&source_path, &(*tempdir.path()).join("test")).unwrap();
 
         assert!(tempdir.path().join("test").exists());
+
+        drop(tempdir);
     }
 
     #[test]
@@ -70,5 +72,7 @@ pub mod gcc_tests {
         let output_str = String::from_utf8_lossy(&output.stdout);
 
         assert!(output_str.contains(&key.to_string()));
+
+        drop(tempdir);
     }
 }
