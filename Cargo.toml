@@ -17,12 +17,12 @@ rand = { version = "0.9", default-features = false, features = ["thread_rng"] }
 termsize = { version = "0.1", default-features = false }
 fs_extra = { version = "1.3", default-features = false }
 zip = { version = "4.3", default-features = false, features = ["deflate"] }
-serde = { version = "1.0", features = ["derive"] }
 snap = { version = "1.1", default-features = false }
 bincode = { version = "2.0", default-features = false, features = ["serde", "std"] }
 thiserror = { version = "2.0", default-features = false }
 num_cpus = { version = "1.16", default-features = false }
 tempfile = { version = "3.20", default-features = false }
+which = { version = "8.0", default-features = false, features = ["real-sys"] }
 
 [lints.clippy]
 all = { level = "warn", priority = -1 }

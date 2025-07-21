@@ -107,7 +107,7 @@ pub fn build_solution(source_file: &PathBuf, executable_file: &PathBuf, logger: 
     {
         // check if g++ is installed
         if std::process::Command::new("g++").arg("--version").output().is_err() {
-            return Err(Error::CompilerNotFoundUnix);
+            return Err(Error::CompilerNotFound);
         }
 
         // invoke g++ to build solution

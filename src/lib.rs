@@ -11,6 +11,7 @@ mod tests;
 mod cpp_builder;
 mod partial_solution;
 mod archiver;
+mod gcc;
 
 pub use error::{Error, Result};
 pub use generators::{array_generator, array_generator_custom, array_to_string, Graph};

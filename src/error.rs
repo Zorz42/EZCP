@@ -35,11 +35,9 @@ pub enum Error {
     #[error("Expected {n} integers")]
     ExpectedIntegers { n: i32 },
 
-    #[error("C++ compiler is not found. Specify the path to g++ with the GCC_PATH environment variable.")]
-    CompilerNotFoundWindows,
-
-    #[error("C++ compiler is not found. Please install g++ and make sure, it is in the path.")]
-    CompilerNotFoundUnix,
+    #[error("C++ compiler is not found. Make sure to install it first. If it is already installed, \
+    specify the path to compiler with the GCC_PATH environment variable.")]
+    CompilerNotFound,
 
     #[error("Compiler error: {stderr}\n{stdout}")]
     CompilerError { stderr: String, stdout: String },
