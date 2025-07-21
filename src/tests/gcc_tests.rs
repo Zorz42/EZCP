@@ -12,7 +12,7 @@ pub mod gcc_tests {
 
     #[test]
     fn test_gcc_compile() {
-        let gcc = Gcc::new().unwrap();
+        let mut gcc = Gcc::new().unwrap();
 
         let tempdir = tempfile::TempDir::new().unwrap();
 
@@ -29,9 +29,9 @@ pub mod gcc_tests {
         let source_path = tempdir.path().join("test.cpp");
         // Write the source code to a file
         std::fs::write(&source_path, source_code).unwrap();
-        gcc.compile(&source_path, &(*tempdir.path()).join("test")).unwrap();
+        let out_file = gcc.compile(&source_path, None).unwrap();
 
-        assert!(tempdir.path().join("test").exists());
+        assert!(out_file.exists());
 
         drop(tempdir);
     }
@@ -58,9 +58,9 @@ pub mod gcc_tests {
         let source_path = tempdir.path().join("test.cpp");
         // Write the source code to a file
         std::fs::write(&source_path, source_code).unwrap();
-        gcc.compile(&source_path, &(*tempdir.path()).join("test")).unwrap();
+        let out_file = gcc.compile(&source_path, None).unwrap();
 
-        assert!(tempdir.path().join("test").exists());
+        assert!(out_file.exists());
 
         drop(tempdir);
     }
@@ -88,8 +88,7 @@ pub mod gcc_tests {
         // Write the source code to a file
         std::fs::write(&source_path, source_code).unwrap();
 
-        let output_path = tempdir.path().join("test_output");
-        gcc.compile(&source_path, &output_path).unwrap();
+        let output_path = gcc.compile(&source_path, None).unwrap();
 
         assert!(output_path.exists());
 
@@ -127,7 +126,7 @@ pub mod gcc_tests {
         let source_path = tempdir.path().join("test.cpp");
         // Write the source code to a file
         std::fs::write(&source_path, source_code).unwrap();
-        assert!(matches!(gcc.compile(&source_path, &(*tempdir.path()).join("test")), Err(Error::CompilerError { .. })));
+        assert!(matches!(gcc.compile(&source_path, None), Err(Error::CompilerError { .. })));
 
         drop(tempdir);
     }
@@ -152,7 +151,7 @@ pub mod gcc_tests {
         let source_path = tempdir.path().join("test.cpp");
         // Write the source code to a file
         std::fs::write(&source_path, source_code).unwrap();
-        assert!(matches!(gcc.compile(&source_path, &(*tempdir.path()).join("test")), Err(Error::CompilerError { .. })));
+        assert!(matches!(gcc.compile(&source_path, None), Err(Error::CompilerError { .. })));
 
         drop(tempdir);
     }

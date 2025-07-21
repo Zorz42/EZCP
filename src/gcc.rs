@@ -74,19 +74,28 @@ impl Gcc {
         self.flags.push(flag.into());
     }
 
-    pub fn compile(&self, source_file: &Path, output_file: &Path) -> Result<()> {
-        println!("Compiling {} {} {}", self.path.display(), source_file.display(), output_file.display());
+    /// Calls `gcc` to compile the source file.
+    /// If output_file is None, it will use the source file name with an appropriate extension.
+    pub fn compile(&self, source_file: &Path, output_file: Option<&Path>) -> Result<PathBuf> {
+        let mut output_file = output_file.map_or(source_file, |p| p).to_owned();
+        #[cfg(windows)]
+        {
+            output_file.set_extension("exe");
+        }
+        #[cfg(unix)]
+        {
+            output_file.set_extension("");
+        }
+
         let mut command = std::process::Command::new(&self.path);
         for flag in &self.flags {
             command.arg(flag);
         }
-        command.arg(source_file).arg("-o").arg(output_file);
+        command.arg(source_file).arg("-o").arg(&output_file);
         if let Some(parent) = self.path.parent() {
             command.current_dir(parent);
         }
-        println!("Spawning {:?}", command);
         let process = command.output().map_err(|err| Error::IOError { err, file: String::new() })?;
-        println!("done");
 
         if !process.status.success() {
             return Err(Error::CompilerError {
@@ -95,13 +104,13 @@ impl Gcc {
             });
         }
 
-        if exists(output_file).map_or(false, |exists| !exists) {
+        if exists(&output_file).map_or(false, |exists| !exists) {
             return Err(Error::CompilerError {
                 stderr: "Output file was not created".to_string(),
                 stdout: String::new(),
             });
         }
 
-        Ok(())
+        Ok(output_file)
     }
 }

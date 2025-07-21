@@ -43,7 +43,7 @@ pub fn build_solution(source_file: &PathBuf, executable_file: &PathBuf, logger: 
     let executable_file = working_dir.join(executable_file);
     let source_file = working_dir.join(source_file);
 
-    gcc.compile(&source_file, &executable_file)?;
+    gcc.compile(&source_file, Some(&executable_file))?;
 
     Ok(true)
 }
