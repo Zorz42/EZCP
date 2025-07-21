@@ -1,3 +1,4 @@
+use std::fs::exists;
 use std::path::{Path, PathBuf};
 use crate::Error::{CompilerNotFound};
 use crate::{Error, Result};
@@ -18,13 +19,12 @@ fn find_gcc() -> Result<PathBuf> {
             "g++",
             "mingw32-g++",
             "x86_64-w64-mingw32-g++",
-            "i686-w64-mingw32-g++",
             "c++",
-            "cl.exe",
+            "cl",
         ];
 
         for candidate in candidates {
-            if let Ok(gcc_path) = which::which("g++") {
+            if let Ok(gcc_path) = which::which(candidate) {
                 return Ok(gcc_path);
             }
         }
@@ -46,7 +46,7 @@ fn find_gcc() -> Result<PathBuf> {
 
         for dir in possible_dirs {
             for candidate in &candidates {
-                let path = PathBuf::from(dir).join(candidate);
+                let path = PathBuf::from(dir).join(format!("{candidate}.exe"));
                 if path.exists() {
                     return Ok(path);
                 }
@@ -75,17 +75,30 @@ impl Gcc {
     }
 
     pub fn compile(&self, source_file: &Path, output_file: &Path) -> Result<()> {
+        println!("Compiling {} {} {}", self.path.display(), source_file.display(), output_file.display());
         let mut command = std::process::Command::new(&self.path);
-        command.arg(source_file).arg("-o").arg(output_file);
         for flag in &self.flags {
             command.arg(flag);
         }
+        command.arg(source_file).arg("-o").arg(output_file);
+        if let Some(parent) = self.path.parent() {
+            command.current_dir(parent);
+        }
+        println!("Spawning {:?}", command);
         let process = command.output().map_err(|err| Error::IOError { err, file: String::new() })?;
+        println!("done");
 
         if !process.status.success() {
             return Err(Error::CompilerError {
                 stderr: String::from_utf8_lossy(&process.stderr).to_string(),
                 stdout: String::from_utf8_lossy(&process.stdout).to_string(),
+            });
+        }
+
+        if exists(output_file).map_or(false, |exists| !exists) {
+            return Err(Error::CompilerError {
+                stderr: "Output file was not created".to_string(),
+                stdout: String::new(),
             });
         }
 

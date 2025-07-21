@@ -39,7 +39,7 @@ pub mod gcc_tests {
     #[test]
     fn test_gcc_compile_with_flags() {
         let mut gcc = Gcc::new().unwrap();
-        gcc.add_flag("-std=c++20");
+        gcc.add_flag("-std=c++17");
         gcc.add_flag("-O2");
         gcc.add_flag("-Wall");
 

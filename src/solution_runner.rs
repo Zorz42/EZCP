@@ -110,16 +110,6 @@ pub fn run_solution(executable_file: &PathBuf, input_file: &PathBuf, output_file
     let mut solution_process = std::process::Command::new(timer_path);
     let solution_process = solution_process.arg(executable_file).arg(format!("{}", (time_limit * 1000.0) as i32));
 
-    #[cfg(windows)]
-    {
-        use crate::cpp_builder::{get_gcc_path, WindowsCompiler};
-        let gcc_path = get_gcc_path()?;
-        if let WindowsCompiler::FullPath(gcc_path) = &gcc_path {
-            let working_dir = std::path::Path::new(gcc_path).parent().unwrap_or_else(|| std::path::Path::new("/")).to_path_buf();
-            solution_process.current_dir(working_dir);
-        }
-    }
-
     let input_file = working_dir.join(input_file);
     let output_file = working_dir.join(output_file);
 
