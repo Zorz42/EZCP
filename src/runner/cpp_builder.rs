@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 use std::sync::LazyLock;
 use crate::Error;
-use crate::gcc::{Gcc, GccOptimization, GccStandard};
+use crate::runner::gcc::{Gcc, GccOptimization, GccStandard};
 use crate::logger::Logger;
 use crate::Result;
 

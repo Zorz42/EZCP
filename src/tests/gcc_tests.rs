@@ -2,7 +2,7 @@
 #[allow(clippy::unwrap_used)]
 pub mod gcc_tests {
     use crate::Error;
-    use crate::gcc::{Gcc, GccOptimization, GccStandard};
+    use crate::runner::gcc::{Gcc, GccOptimization, GccStandard};
 
     #[test]
     fn test_gcc_new() {
@@ -12,7 +12,7 @@ pub mod gcc_tests {
 
     #[test]
     fn test_gcc_compile() {
-        let mut gcc = Gcc::new().unwrap();
+        let gcc = Gcc::new().unwrap();
 
         let tempdir = tempfile::TempDir::new().unwrap();
 

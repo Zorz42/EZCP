@@ -1,13 +1,13 @@
 use crate::progress_bar::{ANSI_GREEN, ANSI_RED};
 use crate::logger::Logger;
 use crate::progress_bar::{clear_progress_bar, print_progress_bar, ANSI_BLUE, ANSI_BOLD, ANSI_RESET, ANSI_YELLOW};
-use crate::solution_runner::{build_timer, SolutionRunner, TestResult};
+use crate::runner::solution_runner::{build_timer, SolutionRunner, TestResult};
 use crate::subtask::Subtask;
 use crate::{Error, Input, Result};
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use crate::archiver::archive_files;
-use crate::cpp_builder::build_solution;
+use crate::runner::cpp_builder::build_solution;
 use crate::partial_solution::run_partial_solution;
 
 /// This struct represents an entire task.

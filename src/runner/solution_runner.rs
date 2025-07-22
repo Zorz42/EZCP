@@ -4,7 +4,7 @@ use crate::{Error, Result};
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::thread::spawn;
-use crate::cpp_builder::build_solution;
+use crate::runner::cpp_builder::build_solution;
 use crate::logger::Logger;
 use crate::progress_bar::{clear_progress_bar, print_progress_bar};
 
@@ -87,11 +87,11 @@ pub fn build_timer(build_dir: &Path, logger: &Logger) -> Result<()> {
     let timer_executable = build_dir.join("timer");
     if timer_executable.exists() {
         let timer_source_content = std::fs::read_to_string(&timer_source).unwrap();
-        if timer_source_content != include_str!("timer.cpp") {
-            std::fs::write(&timer_source, include_str!("timer.cpp")).unwrap();
+        if timer_source_content != include_str!("../timer.cpp") {
+            std::fs::write(&timer_source, include_str!("../timer.cpp")).unwrap();
         }
     } else {
-        std::fs::write(&timer_source, include_str!("timer.cpp")).unwrap();
+        std::fs::write(&timer_source, include_str!("../timer.cpp")).unwrap();
     }
     
     build_solution(&timer_source, &timer_executable, logger)?;
