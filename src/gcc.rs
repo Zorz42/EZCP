@@ -91,6 +91,10 @@ impl Gcc {
         for flag in &self.flags {
             command.arg(flag);
         }
+        #[cfg(windows)]
+        {
+            command.arg("-static"); // Use static linking on Windows to avoid DLL issues
+        }
         command.arg(source_file).arg("-o").arg(&output_file);
         if let Some(parent) = self.path.parent() {
             command.current_dir(parent);
