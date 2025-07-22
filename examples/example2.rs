@@ -8,7 +8,7 @@ fn main() {
     let mut task = ezcp::Task::new("Coins", &PathBuf::from("task2"));
 
     // Constraint: n = 1
-    let mut subtask1 = ezcp::Subtask::new(10);
+    let mut subtask1 = ezcp::Subtask::new();
 
     subtask1.set_checker(|mut input| {
         let array = input.get_array()?;
@@ -28,7 +28,7 @@ fn main() {
     subtask1.add_test_str("1\n 1\n".to_owned());
 
     // Constraint: elements in the array are powers of 2 and n <= 30
-    let mut subtask2 = ezcp::Subtask::new(20);
+    let mut subtask2 = ezcp::Subtask::new();
 
     subtask2.set_checker(|mut input| {
         let array = input.get_array()?;
@@ -56,7 +56,7 @@ fn main() {
     });
 
     // Constraint: n <= 1000
-    let mut subtask3 = ezcp::Subtask::new(50);
+    let mut subtask3 = ezcp::Subtask::new();
 
     subtask3.set_checker(|mut input| {
         let array = input.get_array()?;
@@ -81,7 +81,7 @@ fn main() {
     subtask3.add_test(1, ezcp::array_generator(1000, 1000, 1, 1));
 
     // Constraint: n <= 200_000
-    let mut subtask4 = ezcp::Subtask::new(20);
+    let mut subtask4 = ezcp::Subtask::new();
 
     subtask4.set_checker(|mut input| {
         let array = input.get_array()?;

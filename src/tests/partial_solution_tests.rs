@@ -51,13 +51,13 @@ mod partial_solution_tests {
         std::fs::write(task.task_path().join("solution1.cpp"), partial_solution_contents).unwrap();
 
         // subtask 1, the sum is less than 10^6
-        let mut subtask1 = crate::Subtask::new(50);
+        let mut subtask1 = crate::Subtask::new();
 
         subtask1.add_test(5, array_generator(1, 100, 1, 100));
 
         // subtask 2, the sum is less than 10^18
 
-        let mut subtask2 = crate::Subtask::new(50);
+        let mut subtask2 = crate::Subtask::new();
         subtask2.add_test(5, array_generator(1, 100, 1, 1_000_000_000));
 
         // create subtasks
@@ -120,13 +120,13 @@ mod partial_solution_tests {
         std::fs::write(task.task_path().join("solution1.cpp"), partial_solution_contents).unwrap();
 
         // subtask 1, the sum is less than 10^6
-        let mut subtask1 = crate::Subtask::new(50);
+        let mut subtask1 = crate::Subtask::new();
 
         subtask1.add_test(5, array_generator(1, 100, 1, 100));
 
         // subtask 2, the sum is less than 10^18
 
-        let mut subtask2 = crate::Subtask::new(50);
+        let mut subtask2 = crate::Subtask::new();
         subtask2.add_test(5, array_generator(1, 100, 1, 1_000_000_000));
 
         // create subtasks
@@ -191,13 +191,13 @@ mod partial_solution_tests {
         std::fs::write(task.task_path().join("solution1.cpp"), partial_solution_contents).unwrap();
 
         // subtask 1, the sum is less than 10^6
-        let mut subtask1 = crate::Subtask::new(50);
+        let mut subtask1 = crate::Subtask::new();
 
         subtask1.add_test(5, array_generator(1, 100, 1, 100));
 
         // subtask 2, the sum is less than 10^18
 
-        let mut subtask2 = crate::Subtask::new(50);
+        let mut subtask2 = crate::Subtask::new();
         subtask2.add_test(5, array_generator(1, 100, 1, 1_000_000_000));
 
         // create subtasks
@@ -263,13 +263,13 @@ mod partial_solution_tests {
         std::fs::write(task.task_path().join("solution1.cpp"), partial_solution_contents).unwrap();
 
         // subtask 1, the sum is less than 10^6
-        let mut subtask1 = crate::Subtask::new(50);
+        let mut subtask1 = crate::Subtask::new();
 
         subtask1.add_test(5, array_generator(1, 100, 1, 100));
 
         // subtask 2, the sum is less than 10^18
 
-        let mut subtask2 = crate::Subtask::new(50);
+        let mut subtask2 = crate::Subtask::new();
         subtask2.add_test(5, array_generator(1, 100, 1, 1_000_000_000));
 
         // create subtasks
@@ -325,13 +325,13 @@ mod partial_solution_tests {
         std::fs::write(task.task_path().join("solution1.cpp"), partial_solution_contents).unwrap();
 
         // subtask 1, the sum is less than 10^6
-        let mut subtask1 = crate::Subtask::new(50);
+        let mut subtask1 = crate::Subtask::new();
 
         subtask1.add_test(5, array_generator(1, 100, 1, 100));
 
         // subtask 2, the sum is less than 10^18
 
-        let mut subtask2 = crate::Subtask::new(50);
+        let mut subtask2 = crate::Subtask::new();
         subtask2.add_test(5, array_generator(1, 100, 1, 1_000_000_000));
 
         // create subtasks
@@ -395,13 +395,13 @@ mod partial_solution_tests {
         std::fs::write(task.task_path().join("solution1.cpp"), partial_solution_contents).unwrap();
 
         // subtask 1, the sum is less than 10^6
-        let mut subtask1 = crate::Subtask::new(50);
+        let mut subtask1 = crate::Subtask::new();
 
         subtask1.add_test(5, array_generator(1, 100, 1, 100));
 
         // subtask 2, the sum is less than 10^18
 
-        let mut subtask2 = crate::Subtask::new(50);
+        let mut subtask2 = crate::Subtask::new();
         subtask2.add_test(5, array_generator(1, 100, 1, 1_000_000_000));
 
         // create subtasks

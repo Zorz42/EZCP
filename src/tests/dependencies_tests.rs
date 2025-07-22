@@ -22,15 +22,15 @@ mod dependencies_tests {
 
         task.create_solution(solution_contents);
 
-        let mut subtask1 = Subtask::new(20);
+        let mut subtask1 = Subtask::new();
         subtask1.add_test_str("1\n");
         subtask1.add_test_str("2\n");
         subtask1.add_test_str("3\n");
-        let mut subtask2 = Subtask::new(30);
+        let mut subtask2 = Subtask::new();
         subtask2.add_test_str("4\n");
         subtask2.add_test_str("5\n");
         subtask2.add_test_str("6\n");
-        let mut subtask3 = Subtask::new(50);
+        let mut subtask3 = Subtask::new();
         subtask3.add_test_str("7\n");
         subtask3.add_test_str("8\n");
         subtask3.add_test_str("9\n");
@@ -64,23 +64,23 @@ mod dependencies_tests {
 
         task.create_solution(solution_contents);
 
-        let mut subtask1 = Subtask::new(20);
+        let mut subtask1 = Subtask::new();
         subtask1.add_test_str("1 1\n");
         subtask1.add_test_str("1 2\n");
         subtask1.add_test_str("1 3\n");
-        let mut subtask2 = Subtask::new(20);
+        let mut subtask2 = Subtask::new();
         subtask2.add_test_str("2 1\n");
         subtask2.add_test_str("2 2\n");
         subtask2.add_test_str("2 3\n");
-        let mut subtask3 = Subtask::new(20);
+        let mut subtask3 = Subtask::new();
         subtask3.add_test_str("3 1\n");
         subtask3.add_test_str("3 2\n");
         subtask3.add_test_str("3 3\n");
-        let mut subtask4 = Subtask::new(20);
+        let mut subtask4 = Subtask::new();
         subtask4.add_test_str("4 1\n");
         subtask4.add_test_str("4 2\n");
         subtask4.add_test_str("4 3\n");
-        let mut subtask5 = Subtask::new(20);
+        let mut subtask5 = Subtask::new();
         subtask5.add_test_str("5 1\n");
         subtask5.add_test_str("5 2\n");
         subtask5.add_test_str("5 3\n");

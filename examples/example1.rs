@@ -8,7 +8,7 @@ fn main() {
     let mut task = ezcp::Task::new("Coupon", &PathBuf::from("task1"));
 
     // Constraint: n = 1
-    let mut subtask1 = ezcp::Subtask::new(20);
+    let mut subtask1 = ezcp::Subtask::new();
 
     // This checker is optional and can be omitted.
     subtask1.set_checker(|mut input| {
@@ -37,7 +37,7 @@ fn main() {
     //subtask1.add_test_str("1\n 0 0\n".to_owned());
 
     // Constraint: all values are the same
-    let mut subtask2 = ezcp::Subtask::new(30);
+    let mut subtask2 = ezcp::Subtask::new();
 
     subtask2.set_checker(|mut input| {
         let array = input.get_array()?;
@@ -81,7 +81,7 @@ fn main() {
     subtask2.add_test_str(ezcp::array_to_string(&vec![1_000_000_000; 200_000], true));
 
     // No additional constraints
-    let mut subtask3 = ezcp::Subtask::new(50);
+    let mut subtask3 = ezcp::Subtask::new();
 
     subtask3.set_checker(|mut input| {
         let array = input.get_array()?;

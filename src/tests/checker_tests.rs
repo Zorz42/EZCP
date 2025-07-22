@@ -29,7 +29,7 @@ mod generator_tests {
         task.create_solution(solution_contents);
 
         // create subtasks
-        let mut subtask1 = Subtask::new(20);
+        let mut subtask1 = Subtask::new();
 
         subtask1.set_checker(|mut input| {
             let array = input.get_array()?;
@@ -86,7 +86,7 @@ mod generator_tests {
         task.create_solution(solution_contents);
 
         // create subtasks
-        let mut subtask1 = Subtask::new(20);
+        let mut subtask1 = Subtask::new();
 
         subtask1.set_checker(|mut input| {
             let array = input.get_array()?;
@@ -141,7 +141,7 @@ mod generator_tests {
         task.create_solution(solution_contents);
 
         // a = b
-        let mut subtask1 = Subtask::new(20);
+        let mut subtask1 = Subtask::new();
 
         subtask1.set_checker(|mut input| {
             let a = input.get_int()?;
@@ -186,7 +186,7 @@ mod generator_tests {
         task.create_solution(solution_contents);
 
         // a = b
-        let mut subtask1 = Subtask::new(20);
+        let mut subtask1 = Subtask::new();
 
         subtask1.set_checker(|mut input| {
             let a = input.get_int()?;
@@ -233,7 +233,7 @@ mod generator_tests {
         task.create_solution(solution_contents);
 
         // a = b
-        let mut subtask1 = Subtask::new(20);
+        let mut subtask1 = Subtask::new();
 
         subtask1.set_checker(|mut input| {
             let a = input.get_int()?;
@@ -281,7 +281,7 @@ mod generator_tests {
         task.create_solution(solution_contents);
 
         // a = b
-        let mut subtask1 = Subtask::new(20);
+        let mut subtask1 = Subtask::new();
 
         subtask1.set_checker(|mut input| {
             let a = input.get_int()?;
@@ -329,7 +329,7 @@ mod generator_tests {
         task.create_solution(solution_contents);
 
         // a = b
-        let mut subtask1 = Subtask::new(20);
+        let mut subtask1 = Subtask::new();
 
         subtask1.set_checker(|mut input| {
             let a = input.get_int()?;
@@ -348,7 +348,7 @@ mod generator_tests {
         subtask1.add_test_str("2 2");
         subtask1.add_test_str("3 3");
 
-        let mut subtask2 = Subtask::new(80);
+        let mut subtask2 = Subtask::new();
         subtask2.set_checker(|mut input| {
             let a = input.get_int()?;
             let b = input.get_int()?;
@@ -369,7 +369,7 @@ mod generator_tests {
         subtask2.add_test_str("100 100");
 
         // b == 1
-        let mut subtask3 = Subtask::new(100);
+        let mut subtask3 = Subtask::new();
         subtask3.set_checker(|mut input| {
             let a = input.get_int()?;
             let b = input.get_int()?;
@@ -419,7 +419,7 @@ mod generator_tests {
         task.create_solution(solution_contents);
 
         // a = b
-        let mut subtask1 = Subtask::new(20);
+        let mut subtask1 = Subtask::new();
 
         subtask1.set_checker(|mut input| {
             let a = input.get_int()?;
@@ -438,7 +438,7 @@ mod generator_tests {
         subtask1.add_test_str("2 2");
         subtask1.add_test_str("3 3");
 
-        let mut subtask2 = Subtask::new(80);
+        let mut subtask2 = Subtask::new();
         subtask2.set_checker(|mut input| {
             let a = input.get_int()?;
             let b = input.get_int()?;
@@ -459,7 +459,7 @@ mod generator_tests {
         subtask2.add_test_str("100 100");
 
         // b == 1
-        let mut subtask3 = Subtask::new(100);
+        let mut subtask3 = Subtask::new();
         subtask3.set_checker(|mut input| {
             let a = input.get_int()?;
             let b = input.get_int()?;

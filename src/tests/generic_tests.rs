@@ -63,9 +63,9 @@ pub mod generic_tests {
 
         task.create_solution(solution_contents);
 
-        let subtask1 = Subtask::new(20);
-        let subtask2 = Subtask::new(30);
-        let subtask3 = Subtask::new(50);
+        let subtask1 = Subtask::new();
+        let subtask2 = Subtask::new();
+        let subtask3 = Subtask::new();
 
         // create subtasks
         task.task.add_subtask(subtask1);
@@ -93,15 +93,15 @@ pub mod generic_tests {
 
         task.create_solution(solution_contents);
 
-        let mut subtask1 = Subtask::new(20);
+        let mut subtask1 = Subtask::new();
         subtask1.add_test_str("1\n");
         subtask1.add_test_str("2\n");
         subtask1.add_test_str("3\n");
-        let mut subtask2 = Subtask::new(30);
+        let mut subtask2 = Subtask::new();
         subtask2.add_test_str("1\n");
         subtask2.add_test_str("2\n");
         subtask2.add_test_str("3\n");
-        let mut subtask3 = Subtask::new(50);
+        let mut subtask3 = Subtask::new();
         subtask3.add_test_str("1\n");
         subtask3.add_test_str("2\n");
 
@@ -149,7 +149,7 @@ pub mod generic_tests {
 
         task.create_solution(solution_contents);
 
-        let mut subtask1 = Subtask::new(20);
+        let mut subtask1 = Subtask::new();
         subtask1.add_test_str("1\n");
 
         // create subtasks
@@ -174,7 +174,7 @@ pub mod generic_tests {
 
         task.create_solution(solution_contents);
 
-        let mut subtask1 = Subtask::new(20);
+        let mut subtask1 = Subtask::new();
         subtask1.add_test_str("1\n");
 
         // create subtasks
@@ -206,15 +206,15 @@ pub mod generic_tests {
 
         task.create_solution(solution_contents);
 
-        let mut subtask1 = Subtask::new(20);
+        let mut subtask1 = Subtask::new();
         subtask1.add_test_str("1\n");
         subtask1.add_test_str("2\n");
         subtask1.add_test_str("3\n");
-        let mut subtask2 = Subtask::new(30);
+        let mut subtask2 = Subtask::new();
         subtask2.add_test_str("1\n");
         subtask2.add_test_str("2\n");
         subtask2.add_test_str("3\n");
-        let mut subtask3 = Subtask::new(50);
+        let mut subtask3 = Subtask::new();
         subtask3.add_test_str("1\n");
         subtask3.add_test_str("2\n");
 
@@ -247,15 +247,15 @@ pub mod generic_tests {
 
         task.create_solution(solution_contents);
 
-        let mut subtask1 = Subtask::new(20);
+        let mut subtask1 = Subtask::new();
         subtask1.add_test_str("1\n");
         subtask1.add_test_str("2\n");
         subtask1.add_test_str("3\n");
-        let mut subtask2 = Subtask::new(30);
+        let mut subtask2 = Subtask::new();
         subtask2.add_test_str("1\n");
         subtask2.add_test_str("2\n");
         subtask2.add_test_str("3\n");
-        let mut subtask3 = Subtask::new(50);
+        let mut subtask3 = Subtask::new();
         subtask3.add_test_str("1\n");
         subtask3.add_test_str("2\n");
 
@@ -288,15 +288,15 @@ pub mod generic_tests {
 
         task.create_solution(solution_contents);
 
-        let mut subtask1 = Subtask::new(20);
+        let mut subtask1 = Subtask::new();
         subtask1.add_test_str("1\n");
         subtask1.add_test_str("2\n");
         subtask1.add_test_str("3\n");
-        let mut subtask2 = Subtask::new(30);
+        let mut subtask2 = Subtask::new();
         subtask2.add_test_str("1\n");
         subtask2.add_test_str("2\n");
         subtask2.add_test_str("3\n");
-        let mut subtask3 = Subtask::new(50);
+        let mut subtask3 = Subtask::new();
         subtask3.add_test_str("1\n");
         subtask3.add_test_str("2\n");
 

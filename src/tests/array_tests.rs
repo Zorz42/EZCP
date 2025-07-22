@@ -29,7 +29,7 @@ mod array_tests {
         task.create_solution(solution_contents);
 
         // create subtasks
-        let mut subtask1 = Subtask::new(20);
+        let mut subtask1 = Subtask::new();
 
         subtask1.set_checker(|mut input| {
             let array = input.get_array()?;
@@ -53,7 +53,7 @@ mod array_tests {
         subtask1.add_test(1, array_generator(100, 100, 1, 1));
 
         // n = 42
-        let mut subtask2 = Subtask::new(40);
+        let mut subtask2 = Subtask::new();
 
         subtask2.set_checker(|mut input| {
             let array = input.get_array()?;
@@ -75,7 +75,7 @@ mod array_tests {
         subtask2.add_test(5, array_generator(42, 42, 100, 100));
 
         // all values are 47
-        let mut subtask3 = Subtask::new(40);
+        let mut subtask3 = Subtask::new();
 
         subtask3.set_checker(|mut input| {
             let array = input.get_array()?;

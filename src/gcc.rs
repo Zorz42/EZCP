@@ -58,6 +58,7 @@ fn find_gcc() -> Result<PathBuf> {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[allow(dead_code)]
 pub enum GccStandard {
     Cpp98,
     Cpp11,
@@ -68,6 +69,7 @@ pub enum GccStandard {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[allow(dead_code)]
 pub enum GccOptimization {
     O1,
     O2,
@@ -78,7 +80,6 @@ pub enum GccOptimization {
 
 pub struct Gcc {
     path: PathBuf,
-    flags: Vec<String>,
     pub standard: Option<GccStandard>,
     pub optimization: Option<GccOptimization>,
 
@@ -88,14 +89,13 @@ impl Gcc {
     pub fn new() -> Result<Self> {
         Ok(Self {
             path: find_gcc()?,
-            flags: Vec::new(),
             standard: None,
             optimization: None,
         })
     }
 
     /// Calls `gcc` to compile the source file.
-    /// If output_file is None, it will use the source file name with an appropriate extension.
+    /// If `output_file` is None, it will use the source file name with an appropriate extension.
     pub fn compile(&self, source_file: &Path, output_file: Option<&Path>) -> Result<PathBuf> {
         let mut output_file = output_file.map_or(source_file, |p| p).to_owned();
         #[cfg(windows)]
@@ -149,9 +149,9 @@ impl Gcc {
             });
         }
 
-        if exists(&output_file).map_or(false, |exists| !exists) {
+        if exists(&output_file).is_ok_and(|exists| !exists) {
             return Err(Error::CompilerError {
-                stderr: "Output file was not created".to_string(),
+                stderr: "Output file was not created".to_owned(),
                 stdout: String::new(),
             });
         }
