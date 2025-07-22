@@ -1,14 +1,14 @@
 use std::path::PathBuf;
 use std::sync::LazyLock;
 use crate::Error;
-use crate::gcc::Gcc;
+use crate::gcc::{Gcc, GccOptimization, GccStandard};
 use crate::logger::Logger;
 use crate::Result;
 
 static GCC: LazyLock<Result<Gcc>> = LazyLock::new(|| {
     Gcc::new().map(|mut gcc| {
-        gcc.add_flag("-O2");
-        gcc.add_flag("-std=c++20");
+        gcc.optimization = Some(GccOptimization::O2);
+        gcc.standard = Some(GccStandard::Cpp17);
         gcc
     })
 });

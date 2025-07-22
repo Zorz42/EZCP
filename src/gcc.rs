@@ -57,9 +57,31 @@ fn find_gcc() -> Result<PathBuf> {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum GccStandard {
+    Cpp98,
+    Cpp11,
+    Cpp14,
+    Cpp17,
+    Cpp20,
+    Cpp23,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum GccOptimization {
+    O1,
+    O2,
+    O3,
+    Os,
+    Ofast,
+}
+
 pub struct Gcc {
     path: PathBuf,
     flags: Vec<String>,
+    pub standard: Option<GccStandard>,
+    pub optimization: Option<GccOptimization>,
+
 }
 
 impl Gcc {
@@ -67,11 +89,9 @@ impl Gcc {
         Ok(Self {
             path: find_gcc()?,
             flags: Vec::new(),
+            standard: None,
+            optimization: None,
         })
-    }
-
-    pub fn add_flag<S: Into<String>>(&mut self, flag: S) {
-        self.flags.push(flag.into());
     }
 
     /// Calls `gcc` to compile the source file.
@@ -88,9 +108,30 @@ impl Gcc {
         }
 
         let mut command = std::process::Command::new(&self.path);
-        for flag in &self.flags {
-            command.arg(flag);
+
+        if let Some(standard) = self.standard {
+            let standard_flag = match standard {
+                GccStandard::Cpp98 => "-std=c++98",
+                GccStandard::Cpp11 => "-std=c++11",
+                GccStandard::Cpp14 => "-std=c++14",
+                GccStandard::Cpp17 => "-std=c++17",
+                GccStandard::Cpp20 => "-std=c++20",
+                GccStandard::Cpp23 => "-std=c++23",
+            };
+            command.arg(standard_flag);
         }
+
+        if let Some(optimization) = self.optimization {
+            let optimization_flag = match optimization {
+                GccOptimization::O1 => "-O1",
+                GccOptimization::O2 => "-O2",
+                GccOptimization::O3 => "-O3",
+                GccOptimization::Os => "-Os",
+                GccOptimization::Ofast => "-Ofast",
+            };
+            command.arg(optimization_flag);
+        }
+
         #[cfg(windows)]
         {
             command.arg("-static"); // Use static linking on Windows to avoid DLL issues

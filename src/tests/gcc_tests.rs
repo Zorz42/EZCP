@@ -2,7 +2,7 @@
 #[allow(clippy::unwrap_used)]
 pub mod gcc_tests {
     use crate::Error;
-    use crate::gcc::Gcc;
+    use crate::gcc::{Gcc, GccOptimization, GccStandard};
 
     #[test]
     fn test_gcc_new() {
@@ -39,9 +39,8 @@ pub mod gcc_tests {
     #[test]
     fn test_gcc_compile_with_flags() {
         let mut gcc = Gcc::new().unwrap();
-        gcc.add_flag("-std=c++17");
-        gcc.add_flag("-O2");
-        gcc.add_flag("-Wall");
+        gcc.optimization = Some(GccOptimization::O2);
+        gcc.standard = Some(GccStandard::Cpp17);
 
         let tempdir = tempfile::TempDir::new().unwrap();
 
@@ -102,31 +101,6 @@ pub mod gcc_tests {
         let output_str = String::from_utf8_lossy(&output.stdout);
 
         assert!(output_str.contains(&key.to_string()));
-
-        drop(tempdir);
-    }
-
-    #[test]
-    fn test_compiler_runtime_error() {
-        let mut gcc = Gcc::new().unwrap();
-        gcc.add_flag("--dfsahgj"); // invalid flag to force a runtime error
-
-        let tempdir = tempfile::TempDir::new().unwrap();
-
-        let source_code = r#"
-        #include <iostream>
-        using namespace std;
-
-        int main() {
-            cout << "Hello, World!" << endl;
-            return 0;
-        }
-        "#;
-
-        let source_path = tempdir.path().join("test.cpp");
-        // Write the source code to a file
-        std::fs::write(&source_path, source_code).unwrap();
-        assert!(matches!(gcc.compile(&source_path, None), Err(Error::CompilerError { .. })));
 
         drop(tempdir);
     }
