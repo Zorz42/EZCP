@@ -183,8 +183,6 @@ impl Task {
         let print_progress = |curr, total| {
             logger.log(format!("[{ANSI_BOLD}{curr}{ANSI_RESET}/{ANSI_BOLD}{total}{ANSI_RESET}] "));
         };
-        
-        build_timer(&self.build_folder_path, logger)?;
 
         print_progress(1,5);
         logger.logln(format!("{ANSI_BLUE}{ANSI_BOLD}Generating tests{ANSI_RESET}"));
@@ -307,8 +305,9 @@ impl Task {
             }
             test_tasks.push(subtask_tasks);
         }
-        
-        solution_runner.run_tasks(logger, &self.build_folder_path);
+
+        let timer_path = build_timer(&self.build_folder_path, logger)?;
+        solution_runner.run_tasks(logger, &timer_path);
 
         let mut max_elapsed_time = 0;
         for (subtask, tasks) in test_files.iter().zip(test_tasks) {

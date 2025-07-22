@@ -93,10 +93,9 @@ impl Gcc {
             optimization: None,
         })
     }
-
-    /// Calls `gcc` to compile the source file.
-    /// If `output_file` is None, it will use the source file name with an appropriate extension.
-    pub fn compile(&self, source_file: &Path, output_file: Option<&Path>) -> Result<PathBuf> {
+    
+    /// Transforms the output file path based on the source file and the specified output file.
+    pub fn transform_output_file(&self, source_file: &Path, output_file: Option<&Path>) -> PathBuf {
         let mut output_file = output_file.map_or(source_file, |p| p).to_owned();
         #[cfg(windows)]
         {
@@ -106,6 +105,13 @@ impl Gcc {
         {
             output_file.set_extension("");
         }
+        output_file
+    }
+
+    /// Calls `gcc` to compile the source file.
+    /// If `output_file` is None, it will use the source file name with an appropriate extension.
+    pub fn compile(&self, source_file: &Path, output_file: Option<&Path>) -> Result<PathBuf> {
+        let output_file = self.transform_output_file(source_file, output_file);
 
         let mut command = std::process::Command::new(&self.path);
 

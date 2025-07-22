@@ -29,7 +29,7 @@ impl SolutionRunner {
         self.tasks.len() - 1
     }
     
-    pub fn run_tasks(&mut self, logger: &Logger, build_dir: &Path) {
+    pub fn run_tasks(&mut self, logger: &Logger, timer_path: &Path) {
         let loading_progress_max = self.tasks.len() as i32;
         let mut loading_progress = 0;
 
@@ -48,8 +48,8 @@ impl SolutionRunner {
                 loading_progress += 1;
                 print_progress_bar((loading_progress as f32) / (loading_progress_max as f32), logger);
 
-                let build_dir = build_dir.to_owned();
-                threads.push((spawn(move || run_solution(&executable_file, &input_file, &output_file, time_limit, &build_dir)), it - 1));
+                let timer_path = timer_path.to_owned();
+                threads.push((spawn(move || run_solution(&executable_file, &input_file, &output_file, time_limit, &timer_path)), it - 1));
             }
 
             let mut new_threads = Vec::new();
@@ -82,7 +82,7 @@ impl SolutionRunner {
     }
 }
 
-pub fn build_timer(build_dir: &Path, logger: &Logger) -> Result<()> {
+pub fn build_timer(build_dir: &Path, logger: &Logger) -> Result<PathBuf> {
     let timer_source = build_dir.join("timer.cpp");
     let timer_executable = build_dir.join("timer");
     if timer_executable.exists() {
@@ -94,17 +94,16 @@ pub fn build_timer(build_dir: &Path, logger: &Logger) -> Result<()> {
         std::fs::write(&timer_source, include_str!("../timer.cpp")).unwrap();
     }
     
-    build_solution(&timer_source, &timer_executable, logger)?;
+    let (_, timer_path) = build_solution(&timer_source, &timer_executable, logger)?;
     
-    Ok(())
+    Ok(timer_path)
 }
 
 /// This function takes an executable file and runs it with the input file.
 /// It writes the output to the output file, and returns the result of the test.
 /// Build dir is needed, so that timer can be built if it's not already.
-pub fn run_solution(executable_file: &PathBuf, input_file: &PathBuf, output_file: &PathBuf, time_limit: f32, build_dir: &Path) -> Result<TestResult> {
+pub fn run_solution(executable_file: &PathBuf, input_file: &PathBuf, output_file: &PathBuf, time_limit: f32, timer_path: &Path) -> Result<TestResult> {
     let working_dir = std::env::current_dir().map_err(|err| Error::IOError { err, file: "Error1".to_owned() })?;
-    let timer_path = build_dir.join("timer");
 
     let executable_file = working_dir.join(executable_file);
     let mut solution_process = std::process::Command::new(timer_path);

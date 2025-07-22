@@ -2,7 +2,7 @@ use crate::progress_bar::{ANSI_RESET, ANSI_GREEN, ANSI_BOLD, ANSI_RED};
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use crate::logger::Logger;
-use crate::runner::solution_runner::{SolutionRunner, TestResult};
+use crate::runner::solution_runner::{build_timer, SolutionRunner, TestResult};
 use crate::{Error, Result};
 
 /// This function takes an executable file and a list of test files.
@@ -25,7 +25,8 @@ pub fn run_partial_solution(test_files: &Vec<Vec<(PathBuf, PathBuf)>>, exe_path:
         test_handles.push(test_handles_element);
     }
 
-    solution_runner.run_tasks(logger, build_folder);
+    let timer_path = build_timer(build_folder, logger)?;
+    solution_runner.run_tasks(logger, &timer_path);
 
     for (subtask_id, subtask_test_handles) in test_handles.iter().enumerate() {
         let mut subtask_failed = false;

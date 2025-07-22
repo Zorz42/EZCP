@@ -16,8 +16,9 @@ static GCC: LazyLock<Result<Gcc>> = LazyLock::new(|| {
 /// The only job of this function is to build the solution.
 /// It takes a c++ source file and produces an executable file.
 /// It returns true if the executable was built and false if it was up to date.
-pub fn build_solution(source_file: &PathBuf, executable_file: &PathBuf, logger: &Logger) -> Result<bool> {
+pub fn build_solution(source_file: &PathBuf, executable_file: &PathBuf, logger: &Logger) -> Result<(bool, PathBuf)> {
     // if solution executable exists, check if it's up to date
+    let gcc = GCC.as_ref().map_err(|_err| Error::CompilerNotFound { })?;
     if executable_file.exists() {
         let executable_file_str1 = executable_file.to_str().unwrap_or("???").to_owned();
         let executable_file_str2 = executable_file_str1.clone();
@@ -32,18 +33,18 @@ pub fn build_solution(source_file: &PathBuf, executable_file: &PathBuf, logger: 
             .map_err(|err| Error::IOError { err, file: executable_file_str4 })?;
 
         if solution_exe_last_modified > solution_last_modified {
-            return Ok(false);
+            let timer_path = gcc.transform_output_file(source_file, Some(executable_file));
+            return Ok((false, timer_path));
         }
     }
-
-    let gcc = GCC.as_ref().map_err(|_err| Error::CompilerNotFound { })?;
+    
     logger.logln(format!("Building file: {}", source_file.display()));
 
     let working_dir = std::env::current_dir().map_err(|err| Error::IOError { err, file: String::new() })?;
     let executable_file = working_dir.join(executable_file);
     let source_file = working_dir.join(source_file);
 
-    gcc.compile(&source_file, Some(&executable_file))?;
+    let timer_path = gcc.compile(&source_file, Some(&executable_file))?;
 
-    Ok(true)
+    Ok((true, timer_path))
 }
