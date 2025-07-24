@@ -1,5 +1,5 @@
 use crate::progress_bar::{ANSI_GREEN, ANSI_RED};
-use crate::logger::Logger;
+use crate::logger::{DebugLevel, Logger};
 use crate::progress_bar::{clear_progress_bar, print_progress_bar, ANSI_BLUE, ANSI_BOLD, ANSI_RESET, ANSI_YELLOW};
 use crate::runner::solution_runner::{build_timer, SolutionRunner, TestResult};
 use crate::subtask::Subtask;
@@ -32,6 +32,11 @@ pub struct Task {
     pub(crate) build_folder_path: PathBuf,
     pub(crate) subtasks: Vec<Subtask>,
     pub(crate) partial_solutions: Vec<(PathBuf, HashSet<usize>)>,
+    // useful for using it in scripts and making sure
+    // that the output is not cluttered
+    pub print_to_console: bool,
+    // useful for debugging ezcp (for developers)
+    pub debug_level: DebugLevel,
 }
 
 impl Task {
@@ -54,6 +59,8 @@ impl Task {
             time_limit: 5.0,
             subtasks: Vec::new(),
             partial_solutions: Vec::new(),
+            print_to_console: true,
+            debug_level: DebugLevel::None,
         }
     }
 
@@ -94,20 +101,11 @@ impl Task {
         self.partial_solutions.push((self.path.join(solution_path), set));
     }
 
-    /// This function does all the work.
-    /// It builds the solution and all partial solutions, generates tests and checks them.
-    pub fn create_tests(&mut self) -> Result<()> {
-        self.create_tests_inner1(true)
-    }
-
-    /// This is the same as `create_tests` but it doesn't print anything.
-    pub fn create_tests_no_print(&mut self) -> Result<()> {
-        self.create_tests_inner1(false)
-    }
-
     /// This creates tests and prints the error message if there is an error.
-    fn create_tests_inner1(&mut self, print_output: bool) -> Result<()> {
-        let logger = Logger::new(print_output);
+    pub fn create_tests(&mut self) -> Result<()> {
+        let mut logger = Logger::new();
+        logger.print_to_console = self.print_to_console;
+        logger.debug_level = self.debug_level;
 
         let start_time = std::time::Instant::now();
         let res = self.create_tests_inner2(&logger);

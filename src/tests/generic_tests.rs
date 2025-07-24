@@ -4,6 +4,7 @@ pub mod generic_tests {
     use crate::{Error, Subtask, Task};
     use std::path::{Path};
     use tempfile::TempDir;
+    use crate::logger::DebugLevel;
 
     pub struct Test {
         pub task: Task,
@@ -13,7 +14,8 @@ pub mod generic_tests {
     impl Test {
         pub fn new() -> Self {
             let task_path = TempDir::new().expect("Failed to create temporary directory");
-            let task = Task::new("Test task", task_path.path());
+            let mut task = Task::new("Test task", task_path.path());
+            task.debug_level = DebugLevel::Detailed;
             Test { task, task_path }
         }
 

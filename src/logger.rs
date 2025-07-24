@@ -1,11 +1,22 @@
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DebugLevel {
+    None,
+    Basic,
+    Detailed,
+}
+
 pub struct Logger {
-    print_to_console: bool,
+    pub print_to_console: bool,
+    pub debug_level: DebugLevel,
 }
 
 /// A simple println wrapper that can be turned off.
 impl Logger {
-    pub const fn new(print_to_console: bool) -> Self {
-        Self { print_to_console }
+    pub const fn new() -> Self {
+        Self { 
+            print_to_console: true,
+            debug_level: DebugLevel::None,
+        }
     }
 
     pub fn logln<S: Into<String>>(&self, message: S) {
