@@ -1,14 +1,33 @@
-use crate::progress_bar::{ANSI_GREEN, ANSI_RED};
-use crate::logger::{DebugLevel, Logger};
-use crate::progress_bar::{clear_progress_bar, print_progress_bar, ANSI_BLUE, ANSI_BOLD, ANSI_RESET, ANSI_YELLOW};
-use crate::runner::solution_runner::{build_timer, SolutionRunner, TestResult};
+use crate::runner::solution_runner::{build_timer, SolutionRunner, RunResult};
 use crate::subtask::Subtask;
 use crate::{Error, Input, Result};
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
+use colog::format::CologStyle;
+use console::style;
+use indicatif::{MultiProgress, ProgressBar};
+use indicatif_log_bridge::LogWrapper;
+use log::{error, info, warn, Level};
 use crate::archiver::archive_files;
 use crate::runner::cpp_builder::build_solution;
 use crate::partial_solution::run_partial_solution;
+
+pub struct CustomPrefixToken;
+
+impl CologStyle for CustomPrefixToken {
+    fn prefix_token(&self, level: &Level) -> String {
+        format!(
+            "[{}]",
+            match level {
+                Level::Error => style("ERROR").red().bright().bold(),
+                Level::Warn => style("WARN").yellow().bright().bold(),
+                Level::Info => style("*").bold(),
+                Level::Debug => style("DEBUG").cyan().bold(),
+                Level::Trace => style("TRACE").magenta().bold(),
+            }
+        )
+    }
+}
 
 /// This struct represents an entire task.
 /// You can add subtasks, partial solutions and set the time limit.
@@ -32,11 +51,9 @@ pub struct Task {
     pub(crate) build_folder_path: PathBuf,
     pub(crate) subtasks: Vec<Subtask>,
     pub(crate) partial_solutions: Vec<(PathBuf, HashSet<usize>)>,
-    // useful for using it in scripts and making sure
-    // that the output is not cluttered
-    pub print_to_console: bool,
-    // useful for debugging ezcp (for developers)
-    pub debug_level: DebugLevel,
+
+    pub debug_level: Level,
+    logger: MultiProgress,
 }
 
 impl Task {
@@ -59,8 +76,8 @@ impl Task {
             time_limit: 5.0,
             subtasks: Vec::new(),
             partial_solutions: Vec::new(),
-            print_to_console: true,
-            debug_level: DebugLevel::None,
+            debug_level: Level::Info,
+            logger: MultiProgress::new(),
         }
     }
 
@@ -103,18 +120,22 @@ impl Task {
 
     /// This creates tests and prints the error message if there is an error.
     pub fn create_tests(&mut self) -> Result<()> {
-        let mut logger = Logger::new();
-        logger.print_to_console = self.print_to_console;
-        logger.debug_level = self.debug_level;
+        let mut builder = colog::default_builder();
+        builder.format(colog::formatter(CustomPrefixToken));
+        let colog_logger = builder.build();
+        let level = colog_logger.filter();
+
+        LogWrapper::new(self.logger.clone(), colog_logger).try_init().ok();
+        log::set_max_level(level);
 
         let start_time = std::time::Instant::now();
-        let res = self.create_tests_inner2(&logger);
+        let res = self.create_tests_inner();
         if let Err(err) = res {
-            logger.logln(format!("\n{ANSI_RED}{ANSI_BOLD}Error: {err}{ANSI_RESET}"));
+            error!("{}", style(&err).red().bright());
             Err(err)
         } else {
-            logger.logln(format!("\n{ANSI_GREEN}{ANSI_BOLD}Success!{ANSI_RESET}"));
-            logger.logln(format!("Elapsed time: {ANSI_BOLD}{:.2}s{ANSI_RESET}\n", start_time.elapsed().as_secs_f32()));
+            info!("Elapsed time: {}", style(format!("{:.2}s", start_time.elapsed().as_secs_f32())).bold());
+            self.logger.println(format!("{}", style("Success!").green().bright().bold())).ok();
             Ok(())
         }
     }
@@ -128,25 +149,28 @@ impl Task {
         num_tests
     }
 
+    fn print_progress(&self, curr: i32, total: i32, text: &str) {
+        self.logger.println(format!("[{}/{}] {}", style(curr).bold(), style(total).bold(), style(text).cyan().bold())).ok();
+    }
+
     /// This function builds solution and then calls `generate_tests`.
-    fn create_tests_inner2(&mut self, logger: &Logger) -> Result<()> {
-        logger.logln("");
+    fn create_tests_inner(&mut self) -> Result<()> {
+        self.logger.println("").ok();
         let text = format!("Creating tests for task \"{}\"", self.name);
         // print title with ===== before and after text
-        logger.log(" ");
-        for _ in 0..text.len() + 6 {
-            logger.log("=");
-        }
-        logger.logln(format!("\n || {ANSI_BOLD}{text}{ANSI_RESET} ||"));
-        logger.log(" ");
-        for _ in 0..text.len() + 6 {
-            logger.log("=");
-        }
-        logger.logln("\n");
+        let border_text = {
+            let mut res = " ".to_owned();
+            for _ in 0..text.len() + 6 {
+                res.push('=');
+            }
+            res
+        };
+        self.logger.println(&border_text).ok();
+        self.logger.println(format!(" || {} ||", style(text).bold())).ok();
+        self.logger.println(&border_text).ok();
 
-        // if there are no subtasks, print a warning in bold yellow
         if self.subtasks.is_empty() {
-            logger.logln(format!("{ANSI_YELLOW}{ANSI_BOLD}Warning: no subtasks{ANSI_RESET}"));
+            warn!("No subtasks defined.");
         }
 
         // create build directory if it doesn't exist
@@ -158,6 +182,12 @@ impl Task {
         if !self.solution_path.exists() {
             return Err(Error::MissingSolutionFile { path: self.solution_path.to_str().unwrap_or("???").to_owned() });
         }
+        // check if partial solutions exist
+        for (solution_path, _) in &self.partial_solutions {
+            if !solution_path.exists() {
+                return Err(Error::MissingSolutionFile { path: solution_path.to_str().unwrap_or("???").to_owned() });
+            }
+        }
 
         // reset subtask input files
         for subtask in &mut self.subtasks {
@@ -166,10 +196,10 @@ impl Task {
             }
         }
         
-        build_solution(&self.solution_path, &self.solution_exe_path, logger)?;
+        build_solution(&self.solution_path, &self.solution_exe_path)?;
 
         for (i, partial_solution) in self.partial_solutions.iter().enumerate() {
-            build_solution(&partial_solution.0, &self.build_folder_path.join(format!("partial_solution_{}", i + 1)), logger)?;
+            build_solution(&partial_solution.0, &self.build_folder_path.join(format!("partial_solution_{}", i + 1)))?;
         }
 
         // create tests directory if it doesn't exist and clear it
@@ -177,44 +207,31 @@ impl Task {
         for entry in std::fs::read_dir(&self.tests_path).map_err(|err| Error::IOError { err, file: String::new() })? {
             std::fs::remove_file(entry.map_err(|err| Error::IOError { err, file: String::new() })?.path()).map_err(|err| Error::IOError { err, file: String::new() })?;
         }
-        
-        let print_progress = |curr, total| {
-            logger.log(format!("[{ANSI_BOLD}{curr}{ANSI_RESET}/{ANSI_BOLD}{total}{ANSI_RESET}] "));
-        };
 
-        print_progress(1,5);
-        logger.logln(format!("{ANSI_BLUE}{ANSI_BOLD}Generating tests{ANSI_RESET}"));
-        let test_files = self.generate_tests(logger)?;
-        print_progress(2,5);
-        logger.logln(format!("{ANSI_BLUE}{ANSI_BOLD}Checking generated tests{ANSI_RESET}"));
-        self.check_tests(logger)?;
-        print_progress(3,5);
-        logger.logln(format!("{ANSI_BLUE}{ANSI_BOLD}Generating test solutions{ANSI_RESET}"));
-        self.generate_test_solutions(logger, &test_files)?;
-        print_progress(4,5);
-        logger.logln(format!("{ANSI_BLUE}{ANSI_BOLD}Checking partial solutions{ANSI_RESET}"));
-        self.check_partial_solutions(logger, &test_files)?;
+        self.print_progress(1,5, "Generating tests");
+        let test_files = self.generate_tests()?;
+        self.print_progress(2,5, "Checking generated tests");
+        self.check_tests()?;
+        self.print_progress(3,5, "Generating test solutions");
+        self.generate_test_solutions(&test_files)?;
+        self.print_progress(4,5, "Checking partial solutions");
+        self.check_partial_solutions(&test_files)?;
 
-        print_progress(5,5);
-        logger.logln(format!("{ANSI_BLUE}{ANSI_BOLD}Archiving tests{ANSI_RESET}"));
-        self.archive_tests(logger, &test_files)?;
+        self.print_progress(5,5, "Archiving tests");
+        self.archive_tests(&test_files)?;
 
         let tests_size = fs_extra::dir::get_size(&self.tests_path).unwrap_or(0) as f32 / 1_000_000.0;
-        logger.logln(format!("Tests size: {ANSI_BOLD}{tests_size:.2}MB{ANSI_RESET}"));
+        info!("Tests size: {}", style(format!("{tests_size:.2}MB")).bold());
 
         Ok(())
     }
     
-    fn generate_tests(&mut self, logger: &Logger) -> Result<Vec<Vec<(PathBuf, PathBuf)>>> {
+    fn generate_tests(&mut self) -> Result<Vec<Vec<(PathBuf, PathBuf)>>> {
         let num_tests = self.get_num_all_tests();
-
-        // calculate how many steps there are in total for the progress bar.
-        let loading_progress_max = num_tests;
-        let mut loading_progress = 0;
 
         // Generate and write tests for each subtask
         let mut curr_test_id = 0;
-        print_progress_bar(0.0, logger);
+        let progress_bar = self.logger.add(ProgressBar::new(num_tests as u64));
         let mut test_files = Vec::new();
         for master_subtask in 0..self.subtasks.len() {
             let mut curr_local_test_id = 0;
@@ -237,22 +254,19 @@ impl Task {
                 // generate input files for all tests
                 for (test, input_file) in &mut self.subtasks[subtask_number].tests.iter_mut().zip(tests_input_files) {
                     test.generate_input(input_file)?;
-                    print_progress_bar((loading_progress as f32) / (loading_progress_max as f32), logger);
-                    loading_progress += 1;
+                    progress_bar.inc(1);
                 }
             }
 
             test_files.push(tests_written);
         }
 
-        clear_progress_bar(logger);
-        
-        assert_eq!(loading_progress, loading_progress_max);
+        self.logger.remove(&progress_bar);
 
         Ok(test_files)
     }
     
-    fn check_tests(&self, logger: &Logger) -> Result<()> {
+    fn check_tests(&self) -> Result<()> {
         // calculate how many steps there are in total for the progress bar.
         let mut loading_progress_max = 0;
         for subtask in &self.subtasks {
@@ -261,10 +275,9 @@ impl Task {
                 loading_progress_max += self.get_total_tests(subtask);
             }
         }
-        let mut loading_progress = 0;
+        let progress_bar = self.logger.add(ProgressBar::new(loading_progress_max as u64));
 
         let mut curr_test_id = 0;
-        print_progress_bar((loading_progress as f32) / (loading_progress_max as f32), logger);
         for (subtask_id, subtask) in self.subtasks.iter().enumerate() {
             let checker = &subtask.checker;
             if let Some(checker) = checker {
@@ -273,24 +286,20 @@ impl Task {
                     let input_str = std::fs::read_to_string(input_test_path).map_err(|err| Error::IOError { err, file: String::new() })?;
                     checker(Input::new(&input_str))?;
                     curr_test_id += 1;
-                    loading_progress += 1;
-                    print_progress_bar((loading_progress as f32) / (loading_progress_max as f32), logger);
+                    progress_bar.inc(1);
                 }
             } else {
-                clear_progress_bar(logger);
-                logger.logln(format!("{ANSI_YELLOW}{ANSI_BOLD}Warning{ANSI_RESET}: No checker for subtask {}.", subtask.number + 1));
-                print_progress_bar((loading_progress as f32) / (loading_progress_max as f32), logger);
+                warn!("No checker defined for subtask {}.", subtask.number + 1);
                 curr_test_id += self.get_total_tests(subtask);
             }
         }
-        clear_progress_bar(logger);
 
-        assert_eq!(loading_progress, loading_progress_max);
+        self.logger.remove(&progress_bar);
         
         Ok(())
     }
     
-    fn generate_test_solutions(&self, logger: &Logger, test_files: &Vec<Vec<(PathBuf, PathBuf)>>) -> Result<()> {
+    fn generate_test_solutions(&self, test_files: &Vec<Vec<(PathBuf, PathBuf)>>) -> Result<()> {
         let mut solution_runner = SolutionRunner::new();
         let mut test_tasks = Vec::new();
         
@@ -304,23 +313,21 @@ impl Task {
             test_tasks.push(subtask_tasks);
         }
 
-        let timer_path = build_timer(&self.build_folder_path, logger)?;
-        solution_runner.run_tasks(logger, &timer_path);
+        let timer_path = build_timer(&self.build_folder_path)?;
+        solution_runner.run_tasks(&self.logger, &timer_path);
 
         let mut max_elapsed_time = 0;
         for (subtask, tasks) in test_files.iter().zip(test_tasks) {
             for ((input_file, _output_file), task) in subtask.iter().zip(tasks) {
                 let test_result = solution_runner.get_result(task)?;
                 let elapsed_time = match test_result {
-                    TestResult::Ok(elapsed_time) => { elapsed_time }
-                    TestResult::TimedOut => {
-                        clear_progress_bar(logger);
+                    RunResult::Ok(elapsed_time) => { elapsed_time }
+                    RunResult::TimedOut => {
                         return Err(Error::SolutionTimedOut {
                             test_path: input_file.to_str().unwrap_or("?").to_owned(),
                         });
                     }
-                    TestResult::Crashed => {
-                        clear_progress_bar(logger);
+                    RunResult::Crashed => {
                         return Err(Error::SolutionFailed {
                             test_path: input_file.to_str().unwrap_or("?").to_owned(),
                         });
@@ -329,18 +336,18 @@ impl Task {
                 max_elapsed_time = max_elapsed_time.max(elapsed_time);
             }
         }
-        logger.logln(format!("Solution time: {max_elapsed_time}ms"));
+        info!("Solution time: {max_elapsed_time}ms");
         
         Ok(())
     }
     
-    fn check_partial_solutions(&self, logger: &Logger, test_files: &Vec<Vec<(PathBuf, PathBuf)>>) -> Result<()> {
+    fn check_partial_solutions(&self, test_files: &Vec<Vec<(PathBuf, PathBuf)>>) -> Result<()> {
         for (partial_id, partial_solution) in self.partial_solutions.iter().enumerate() {
-            logger.logln(format!("Testing partial solution {}: {}", partial_id + 1, partial_solution.0.display()));
+            info!("Running partial solution {} ({}):", partial_id + 1, partial_solution.0.display());
 
             let exe_path = self.build_folder_path.join(format!("partial_solution_{}", partial_id + 1));
             
-            let subtasks_passed = run_partial_solution(test_files, &exe_path, logger, &self.build_folder_path, self.time_limit)?;
+            let subtasks_passed = run_partial_solution(test_files, &exe_path, &self.logger, &self.build_folder_path, self.time_limit)?;
 
             for subtask_id in 0..self.subtasks.len() {
                 let subtask_failed = !subtasks_passed.contains(&subtask_id);
@@ -365,7 +372,7 @@ impl Task {
     }
     
     /// Archive all tests into a zip file
-    fn archive_tests(&self, logger: &Logger, test_files: &Vec<Vec<(PathBuf, PathBuf)>>) -> Result<()> {
+    fn archive_tests(&self, test_files: &Vec<Vec<(PathBuf, PathBuf)>>) -> Result<()> {
         let mut test_files_vec = Vec::new();
         for subtask in test_files {
             for (input_file, output_file) in subtask {
@@ -374,7 +381,7 @@ impl Task {
             }
         }
         
-        archive_files(&test_files_vec, &self.tests_archive_path, logger)?;
+        archive_files(&test_files_vec, &self.tests_archive_path, &self.logger)?;
 
         Ok(())
     }

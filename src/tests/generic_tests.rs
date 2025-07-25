@@ -3,8 +3,8 @@
 pub mod generic_tests {
     use crate::{Error, Subtask, Task};
     use std::path::{Path};
+    use log::Level;
     use tempfile::TempDir;
-    use crate::logger::DebugLevel;
 
     pub struct Test {
         pub task: Task,
@@ -15,7 +15,7 @@ pub mod generic_tests {
         pub fn new() -> Self {
             let task_path = TempDir::new().expect("Failed to create temporary directory");
             let mut task = Task::new("Test task", task_path.path());
-            task.debug_level = DebugLevel::Detailed;
+            task.debug_level = Level::Trace;
             Test { task, task_path }
         }
 
@@ -308,5 +308,37 @@ pub mod generic_tests {
         task.task.add_subtask(subtask3);
 
         task.test()
+    }
+
+    #[test]
+    fn missing_partial_solution() {
+        let mut task = Test::new();
+
+        // create solution file
+        let solution_contents = r#"
+        #include <iostream>
+        using namespace std;
+
+        int main() {
+            cout<<"1\n";
+            return 0;
+        }
+
+        "#;
+
+        task.create_solution(solution_contents);
+
+        let mut subtask1 = Subtask::new();
+        subtask1.add_test_str("1\n");
+        subtask1.add_test_str("2\n");
+        subtask1.add_test_str("3\n");
+
+        // create subtasks
+        task.task.add_subtask(subtask1);
+
+        task.task.add_partial_solution("solution1.cpp", &[]);
+
+        // Test without creating partial solution
+        assert!(matches!(task.task.create_tests(), Err(Error::MissingSolutionFile { .. })));
     }
 }

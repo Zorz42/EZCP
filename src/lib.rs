@@ -1,8 +1,6 @@
 mod error;
 mod generators;
 mod input;
-mod logger;
-mod progress_bar;
 mod subtask;
 mod task;
 mod test;

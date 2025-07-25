@@ -4,19 +4,18 @@ use crate::{Error, Result};
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::thread::spawn;
+use indicatif::{MultiProgress, ProgressBar};
 use crate::runner::cpp_builder::build_solution;
-use crate::logger::Logger;
-use crate::progress_bar::{clear_progress_bar, print_progress_bar};
 
 #[derive(Clone, PartialEq, Eq)]
-pub enum TestResult {
+pub enum RunResult {
     Ok(i32), // elapsed time in milliseconds
     TimedOut,
     Crashed,
 }
 
 pub struct SolutionRunner {
-    tasks: Vec<(PathBuf, PathBuf, PathBuf, f32, Option<Result<TestResult>>)>,
+    tasks: Vec<(PathBuf, PathBuf, PathBuf, f32, Option<Result<RunResult>>)>,
 }
 
 impl SolutionRunner {
@@ -29,15 +28,14 @@ impl SolutionRunner {
         self.tasks.len() - 1
     }
     
-    pub fn run_tasks(&mut self, logger: &Logger, timer_path: &Path) {
-        let loading_progress_max = self.tasks.len() as i32;
-        let mut loading_progress = 0;
-
+    pub fn run_tasks(&mut self, logger: &MultiProgress, timer_path: &Path) {
         let num_threads = num_cpus::get();
         let mut threads = Vec::new();
 
         let mut it = 0;
-        
+
+        let progress_bar = logger.add(ProgressBar::new(self.tasks.len() as u64));
+
         loop {
             while threads.len() < num_threads && it < self.tasks.len() {
                 let executable_file = self.tasks[it].0.clone();
@@ -45,8 +43,7 @@ impl SolutionRunner {
                 let output_file = self.tasks[it].2.clone();
                 let time_limit = self.tasks[it].3;
                 it += 1;
-                loading_progress += 1;
-                print_progress_bar((loading_progress as f32) / (loading_progress_max as f32), logger);
+                progress_bar.inc(1);
 
                 let timer_path = timer_path.to_owned();
                 threads.push((spawn(move || run_solution(&executable_file, &input_file, &output_file, time_limit, &timer_path)), it - 1));
@@ -71,18 +68,17 @@ impl SolutionRunner {
             }
         }
     
-        assert_eq!(loading_progress, loading_progress_max);
-        clear_progress_bar(logger);
+        logger.remove(&progress_bar);
     }
     
-    pub fn get_result(&mut self, task_id: usize) -> Result<TestResult> {
+    pub fn get_result(&mut self, task_id: usize) -> Result<RunResult> {
         let mut res = None;
         swap(&mut res, &mut self.tasks.get_mut(task_id).as_mut().unwrap().4);
         res.unwrap()
     }
 }
 
-pub fn build_timer(build_dir: &Path, logger: &Logger) -> Result<PathBuf> {
+pub fn build_timer(build_dir: &Path) -> Result<PathBuf> {
     let timer_source = build_dir.join("timer.cpp");
     let timer_executable = build_dir.join("timer");
     if timer_executable.exists() {
@@ -94,7 +90,7 @@ pub fn build_timer(build_dir: &Path, logger: &Logger) -> Result<PathBuf> {
         std::fs::write(&timer_source, include_str!("../timer.cpp")).unwrap();
     }
     
-    let (_, timer_path) = build_solution(&timer_source, &timer_executable, logger)?;
+    let (_, timer_path) = build_solution(&timer_source, &timer_executable)?;
     
     Ok(timer_path)
 }
@@ -102,7 +98,7 @@ pub fn build_timer(build_dir: &Path, logger: &Logger) -> Result<PathBuf> {
 /// This function takes an executable file and runs it with the input file.
 /// It writes the output to the output file, and returns the result of the test.
 /// Build dir is needed, so that timer can be built if it's not already.
-pub fn run_solution(executable_file: &PathBuf, input_file: &PathBuf, output_file: &PathBuf, time_limit: f32, timer_path: &Path) -> Result<TestResult> {
+pub fn run_solution(executable_file: &PathBuf, input_file: &PathBuf, output_file: &PathBuf, time_limit: f32, timer_path: &Path) -> Result<RunResult> {
     let working_dir = std::env::current_dir().map_err(|err| Error::IOError { err, file: "Error1".to_owned() })?;
 
     let executable_file = working_dir.join(executable_file);
@@ -126,11 +122,11 @@ pub fn run_solution(executable_file: &PathBuf, input_file: &PathBuf, output_file
     let return_code = solution_process.wait().map_err(|err| Error::IOError { err, file: "Error3".to_owned() })?;
     
     if return_code.code() == Some(1) {
-        return Ok(TestResult::TimedOut);
+        return Ok(RunResult::TimedOut);
     }
     
     if !return_code.success() {
-        return Ok(TestResult::Crashed);
+        return Ok(RunResult::Crashed);
     }
 
     let elapsed_time_ms = {
@@ -143,8 +139,8 @@ pub fn run_solution(executable_file: &PathBuf, input_file: &PathBuf, output_file
     };
 
     if elapsed_time_ms as f32 * 0.001 > time_limit {
-        return Ok(TestResult::TimedOut);
+        return Ok(RunResult::TimedOut);
     }
     
-    Ok(TestResult::Ok(elapsed_time_ms))
+    Ok(RunResult::Ok(elapsed_time_ms))
 }

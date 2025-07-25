@@ -1,14 +1,40 @@
-use crate::progress_bar::{ANSI_RESET, ANSI_GREEN, ANSI_BOLD, ANSI_RED};
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
-use crate::logger::Logger;
-use crate::runner::solution_runner::{build_timer, SolutionRunner, TestResult};
+use console::style;
+use indicatif::MultiProgress;
+use log::info;
+use crate::runner::solution_runner::{build_timer, SolutionRunner, RunResult};
 use crate::{Error, Result};
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+enum TestResult {
+    Ok,
+    TimedOut,
+    Crashed,
+    WrongAnswer,
+}
+
+fn test_result_to_string(result: &TestResult) -> String {
+    match result {
+        TestResult::Ok => style("OK").green().bright().bold(),
+        TestResult::TimedOut => style("TLE").red().bright().bold(),
+        TestResult::Crashed => style("RTE").red().bright().bold(),
+        TestResult::WrongAnswer => style("WA").red().bright().bold(),
+    }.to_string()
+}
+
+fn run_result_to_test_result(result: &RunResult) -> TestResult {
+    match result {
+        RunResult::Ok(_) => TestResult::Ok,
+        RunResult::TimedOut => TestResult::TimedOut,
+        RunResult::Crashed => TestResult::Crashed,
+    }
+}
 
 /// This function takes an executable file and a list of test files.
 /// It runs the executable on each test file and compares the output with the expected output.
 /// It returns a set of subtasks that passed.
-pub fn run_partial_solution(test_files: &Vec<Vec<(PathBuf, PathBuf)>>, exe_path: &Path, logger: &Logger, build_folder: &Path, time_limit: f32) -> Result<HashSet<usize>> {
+pub fn run_partial_solution(test_files: &Vec<Vec<(PathBuf, PathBuf)>>, exe_path: &Path, logger: &MultiProgress, build_folder: &Path, time_limit: f32) -> Result<HashSet<usize>> {
     let mut test_handles = Vec::new();
     let mut solution_runner = SolutionRunner::new();
     let mut passed_subtasks = HashSet::new();
@@ -25,45 +51,57 @@ pub fn run_partial_solution(test_files: &Vec<Vec<(PathBuf, PathBuf)>>, exe_path:
         test_handles.push(test_handles_element);
     }
 
-    let timer_path = build_timer(build_folder, logger)?;
+    let timer_path = build_timer(build_folder)?;
     solution_runner.run_tasks(logger, &timer_path);
 
+    let mut results_text = String::new();
     for (subtask_id, subtask_test_handles) in test_handles.iter().enumerate() {
-        let mut subtask_failed = false;
         let mut max_time = Some(0);
-        let mut verdict = format!("{ANSI_BOLD}{ANSI_GREEN}OK{ANSI_RESET}");
+        // count, which result was returned by how many tests
+        let mut results = HashMap::new();
         for (handle, output_file, program_output_file) in subtask_test_handles {
-            let result = solution_runner.get_result(*handle)?;
+            let run_result = solution_runner.get_result(*handle)?;
+            let mut test_result = run_result_to_test_result(&run_result);
 
-            match result {
-                TestResult::Ok(time) => {
+            match run_result {
+                RunResult::Ok(time) => {
                     if max_time.is_some() {
                         max_time = Some(i32::max(max_time.unwrap(), time));
                     }
                 }
-                TestResult::TimedOut | TestResult::Crashed => {
-                    verdict = if result == TestResult::TimedOut { format!("{ANSI_BOLD}{ANSI_RED}TLE{ANSI_RESET}") } else { format!("{ANSI_BOLD}{ANSI_RED}RTE{ANSI_RESET}") };
+                RunResult::TimedOut | RunResult::Crashed => {
                     max_time = None;
-                    subtask_failed = true;
                 }
             }
 
-            if !subtask_failed && !are_files_equal(program_output_file, output_file)? {
-                verdict = format!("{ANSI_BOLD}{ANSI_RED}WA{ANSI_RESET}");
-                subtask_failed = true;
+            if !are_files_equal(program_output_file, output_file)? {
+                test_result = TestResult::WrongAnswer;
             }
+
+            // increment the count for the result
+            // keys are strings, because enum has time in the Ok variant
+            results
+                .entry(test_result)
+                .and_modify(|count| *count += 1)
+                .or_insert(1);
         }
 
-        logger.log(format!("- Subtask {}: {verdict} ", subtask_id + 1));
-        if let Some(max_time) = max_time {
-            logger.log(format!("{max_time}ms"));
+        results_text += "\n";
+        results_text += &format!("- Subtask {}: ", subtask_id + 1);
+        for (result, count) in results.iter() {
+            results_text += &format!("{} ({}) ", test_result_to_string(result), count);
         }
-        logger.log("\n");
-        
-        if !subtask_failed {
+
+        if let Some(max_time) = max_time {
+            results_text += &format!("{max_time}ms");
+        }
+
+        if results.len() == 1 && results.contains_key(&TestResult::Ok) {
             passed_subtasks.insert(subtask_id);
         }
     }
+
+    info!("Results: {}", results_text);
     
     Ok(passed_subtasks)
 }

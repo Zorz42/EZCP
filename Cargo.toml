@@ -23,7 +23,11 @@ thiserror = { version = "2.0", default-features = false }
 num_cpus = { version = "1.16", default-features = false }
 tempfile = { version = "3.20", default-features = false }
 which = { version = "8.0", default-features = false, features = ["real-sys"] }
-once_cell = "1.21.3"
+console = { version = "0.16", default-features = false, features = ["unicode-width", "ansi-parsing", "std"] }
+indicatif = { version = "0.18", default-features = false, features = [] }
+indicatif-log-bridge = { version = "0.2", default-features = false, features = [] }
+colog = { version = "1.3", default-features = false, features = [] }
+log = { version = "0.4", default-features = false, features = [] }
 
 [lints.clippy]
 all = { level = "warn", priority = -1 }

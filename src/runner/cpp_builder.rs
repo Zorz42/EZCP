@@ -1,8 +1,8 @@
 use std::path::PathBuf;
 use std::sync::LazyLock;
+use log::info;
 use crate::Error;
 use crate::runner::gcc::{Gcc, GccOptimization, GccStandard};
-use crate::logger::Logger;
 use crate::Result;
 
 static GCC: LazyLock<Result<Gcc>> = LazyLock::new(|| {
@@ -16,7 +16,7 @@ static GCC: LazyLock<Result<Gcc>> = LazyLock::new(|| {
 /// The only job of this function is to build the solution.
 /// It takes a c++ source file and produces an executable file.
 /// It returns true if the executable was built and false if it was up to date.
-pub fn build_solution(source_file: &PathBuf, executable_file: &PathBuf, logger: &Logger) -> Result<(bool, PathBuf)> {
+pub fn build_solution(source_file: &PathBuf, executable_file: &PathBuf) -> Result<(bool, PathBuf)> {
     // if solution executable exists, check if it's up to date
     let gcc = GCC.as_ref().map_err(|_err| Error::CompilerNotFound { })?;
     if executable_file.exists() {
@@ -37,8 +37,8 @@ pub fn build_solution(source_file: &PathBuf, executable_file: &PathBuf, logger: 
             return Ok((false, timer_path));
         }
     }
-    
-    logger.logln(format!("Building file: {}", source_file.display()));
+
+    info!("Building solution: {}", executable_file.to_str().unwrap_or("???"));
 
     let working_dir = std::env::current_dir().map_err(|err| Error::IOError { err, file: String::new() })?;
     let executable_file = working_dir.join(executable_file);
