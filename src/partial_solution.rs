@@ -1,26 +1,31 @@
 use std::collections::{HashMap, HashSet};
+use std::fmt::Display;
 use std::path::{Path, PathBuf};
 use console::style;
 use indicatif::MultiProgress;
 use log::info;
 use crate::runner::solution_runner::{build_timer, SolutionRunner, RunResult};
 use crate::{Error, Result};
+use itertools::Itertools;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 enum TestResult {
-    Ok,
-    TimedOut,
-    Crashed,
-    WrongAnswer,
+    Ok = 0,
+    TimedOut = 1,
+    Crashed = 2,
+    WrongAnswer = 3,
 }
 
-fn test_result_to_string(result: &TestResult) -> String {
-    match result {
-        TestResult::Ok => style("OK").green().bright().bold(),
-        TestResult::TimedOut => style("TLE").red().bright().bold(),
-        TestResult::Crashed => style("RTE").red().bright().bold(),
-        TestResult::WrongAnswer => style("WA").red().bright().bold(),
-    }.to_string()
+impl Display for TestResult {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let val = match self {
+            TestResult::Ok => style("OK").green().bright().bold(),
+            TestResult::TimedOut => style("TLE").red().bright().bold(),
+            TestResult::Crashed => style("RTE").red().bright().bold(),
+            TestResult::WrongAnswer => style("WA").red().bright().bold(),
+        };
+        write!(f, "{}", val)
+    }
 }
 
 fn run_result_to_test_result(result: &RunResult) -> TestResult {
@@ -88,8 +93,8 @@ pub fn run_partial_solution(test_files: &Vec<Vec<(PathBuf, PathBuf)>>, exe_path:
 
         results_text += "\n";
         results_text += &format!("- Subtask {}: ", subtask_id + 1);
-        for (result, count) in results.iter() {
-            results_text += &format!("{} ({}) ", test_result_to_string(result), count);
+        for (result, count) in results.iter().sorted() {
+            results_text += &format!("{} ({}) ", result, count);
         }
 
         if let Some(max_time) = max_time {
@@ -108,7 +113,7 @@ pub fn run_partial_solution(test_files: &Vec<Vec<(PathBuf, PathBuf)>>, exe_path:
 
 /// Compares if two file have equal contents.
 /// It ignores whitespace.
-pub fn are_files_equal(file1: &PathBuf, file2: &PathBuf) -> Result<bool> {
+fn are_files_equal(file1: &PathBuf, file2: &PathBuf) -> Result<bool> {
     let file1_str = file1.to_str().unwrap_or("???").to_owned();
     let file2_str = file2.to_str().unwrap_or("???").to_owned();
     let file1 = std::fs::read_to_string(file1).map_err(|err| Error::IOError { err, file: file1_str })?;
