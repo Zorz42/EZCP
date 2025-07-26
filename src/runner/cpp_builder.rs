@@ -7,7 +7,7 @@ use crate::Result;
 
 static GCC: LazyLock<Result<Gcc>> = LazyLock::new(|| {
     Gcc::new().map(|mut gcc| {
-        gcc.optimization = Some(GccOptimization::O2);
+        gcc.optimization = Some(GccOptimization::Level2);
         gcc.standard = Some(GccStandard::Cpp17);
         gcc
     })

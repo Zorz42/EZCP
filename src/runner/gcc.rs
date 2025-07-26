@@ -1,5 +1,6 @@
 use std::fs::exists;
 use std::path::{Path, PathBuf};
+use log::debug;
 use crate::Error::{CompilerNotFound};
 use crate::{Error, Result};
 
@@ -68,14 +69,39 @@ pub enum GccStandard {
     Cpp23,
 }
 
+impl GccStandard {
+    pub const fn as_str(&self) -> &str {
+        match self {
+            Self::Cpp98 => "c++98",
+            Self::Cpp11 => "c++11",
+            Self::Cpp14 => "c++14",
+            Self::Cpp17 => "c++17",
+            Self::Cpp20 => "c++20",
+            Self::Cpp23 => "c++23",
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(dead_code)]
 pub enum GccOptimization {
-    O1,
-    O2,
-    O3,
-    Os,
-    Ofast,
+    Level1,
+    Level2,
+    Level3,
+    Small,
+    Fast,
+}
+
+impl GccOptimization {
+    pub const fn as_str(&self) -> &str {
+        match self {
+            Self::Level1 => "1",
+            Self::Level2 => "2",
+            Self::Level3 => "3",
+            Self::Small => "s",
+            Self::Fast => "fast",
+        }
+    }
 }
 
 pub struct Gcc {
@@ -116,26 +142,11 @@ impl Gcc {
         let mut command = std::process::Command::new(&self.path);
 
         if let Some(standard) = self.standard {
-            let standard_flag = match standard {
-                GccStandard::Cpp98 => "-std=c++98",
-                GccStandard::Cpp11 => "-std=c++11",
-                GccStandard::Cpp14 => "-std=c++14",
-                GccStandard::Cpp17 => "-std=c++17",
-                GccStandard::Cpp20 => "-std=c++20",
-                GccStandard::Cpp23 => "-std=c++23",
-            };
-            command.arg(standard_flag);
+            command.arg(format!("-std={}", standard.as_str()));
         }
 
         if let Some(optimization) = self.optimization {
-            let optimization_flag = match optimization {
-                GccOptimization::O1 => "-O1",
-                GccOptimization::O2 => "-O2",
-                GccOptimization::O3 => "-O3",
-                GccOptimization::Os => "-Os",
-                GccOptimization::Ofast => "-Ofast",
-            };
-            command.arg(optimization_flag);
+            command.arg(format!("-O{}", optimization.as_str()));
         }
 
         #[cfg(windows)]
@@ -144,8 +155,11 @@ impl Gcc {
         }
         command.arg(source_file).arg("-o").arg(&output_file);
         if let Some(parent) = self.path.parent() {
+            debug!("Setting command current directory to: {}", parent.display());
             command.current_dir(parent);
         }
+
+        debug!("Running command: {command:?}");
         let process = command.output().map_err(|err| Error::IOError { err, file: String::new() })?;
 
         if !process.status.success() {

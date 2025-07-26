@@ -27,11 +27,13 @@ impl Display for TestResult {
     }
 }
 
-const fn run_result_to_test_result(result: &RunResult) -> TestResult {
-    match result {
-        RunResult::Ok(_) => TestResult::Ok,
-        RunResult::TimedOut => TestResult::TimedOut,
-        RunResult::Crashed => TestResult::Crashed,
+impl TestResult {
+    pub const fn from(result: &RunResult) -> Self {
+        match result {
+            RunResult::Ok(_) => Self::Ok,
+            RunResult::TimedOut => Self::TimedOut,
+            RunResult::Crashed => Self::Crashed,
+        }
     }
 }
 
@@ -65,7 +67,7 @@ pub fn run_partial_solution(test_files: &Vec<Vec<(PathBuf, PathBuf)>>, exe_path:
         let mut results = BTreeMap::new();
         for (handle, output_file, program_output_file) in subtask_test_handles {
             let run_result = solution_runner.get_result(*handle)?;
-            let mut test_result = run_result_to_test_result(&run_result);
+            let mut test_result = TestResult::from(&run_result);
 
             match run_result {
                 RunResult::Ok(time) => {

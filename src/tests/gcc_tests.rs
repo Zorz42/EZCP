@@ -39,7 +39,7 @@ pub mod gcc_tests {
     #[test]
     fn test_gcc_compile_with_flags() {
         let mut gcc = Gcc::new().unwrap();
-        gcc.optimization = Some(GccOptimization::O2);
+        gcc.optimization = Some(GccOptimization::Level2);
         gcc.standard = Some(GccStandard::Cpp17);
 
         let tempdir = tempfile::TempDir::new().unwrap();
