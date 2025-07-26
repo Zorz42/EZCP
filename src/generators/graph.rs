@@ -162,7 +162,7 @@ impl Graph {
     #[must_use]
     pub fn create_output(&self) -> String {
         let mut result = String::new();
-        result += &format!("{} {}", self.get_num_nodes(), self.get_num_edges());
+        result += &format!("{} {}\n", self.get_num_nodes(), self.get_num_edges());
         let edges_str = self.create_output_edges();
         result += &edges_str;
         result
