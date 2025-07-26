@@ -33,7 +33,7 @@ pub fn build_solution(source_file: &PathBuf, executable_file: &PathBuf) -> Resul
             .map_err(|err| Error::IOError { err, file: executable_file_str4 })?;
 
         if solution_exe_last_modified > solution_last_modified {
-            let timer_path = gcc.transform_output_file(source_file, Some(executable_file));
+            let timer_path = Gcc::transform_output_file(source_file, Some(executable_file));
             return Ok((false, timer_path));
         }
     }

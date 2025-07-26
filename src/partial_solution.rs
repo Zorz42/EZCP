@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, HashSet};
 use std::fmt::Display;
 use std::path::{Path, PathBuf};
 use console::style;
@@ -6,7 +6,6 @@ use indicatif::MultiProgress;
 use log::info;
 use crate::runner::solution_runner::{build_timer, SolutionRunner, RunResult};
 use crate::{Error, Result};
-use itertools::Itertools;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 enum TestResult {
@@ -19,16 +18,16 @@ enum TestResult {
 impl Display for TestResult {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let val = match self {
-            TestResult::Ok => style("OK").green().bright().bold(),
-            TestResult::TimedOut => style("TLE").red().bright().bold(),
-            TestResult::Crashed => style("RTE").red().bright().bold(),
-            TestResult::WrongAnswer => style("WA").red().bright().bold(),
+            Self::Ok => style("OK").green().bright().bold(),
+            Self::TimedOut => style("TLE").red().bright().bold(),
+            Self::Crashed => style("RTE").red().bright().bold(),
+            Self::WrongAnswer => style("WA").red().bright().bold(),
         };
-        write!(f, "{}", val)
+        write!(f, "{val}")
     }
 }
 
-fn run_result_to_test_result(result: &RunResult) -> TestResult {
+const fn run_result_to_test_result(result: &RunResult) -> TestResult {
     match result {
         RunResult::Ok(_) => TestResult::Ok,
         RunResult::TimedOut => TestResult::TimedOut,
@@ -63,7 +62,7 @@ pub fn run_partial_solution(test_files: &Vec<Vec<(PathBuf, PathBuf)>>, exe_path:
     for (subtask_id, subtask_test_handles) in test_handles.iter().enumerate() {
         let mut max_time = Some(0);
         // count, which result was returned by how many tests
-        let mut results = HashMap::new();
+        let mut results = BTreeMap::new();
         for (handle, output_file, program_output_file) in subtask_test_handles {
             let run_result = solution_runner.get_result(*handle)?;
             let mut test_result = run_result_to_test_result(&run_result);
@@ -93,8 +92,8 @@ pub fn run_partial_solution(test_files: &Vec<Vec<(PathBuf, PathBuf)>>, exe_path:
 
         results_text += "\n";
         results_text += &format!("- Subtask {}: ", subtask_id + 1);
-        for (result, count) in results.iter().sorted() {
-            results_text += &format!("{} ({}) ", result, count);
+        for (result, count) in &results {
+            results_text += &format!("{result} ({count}) ");
         }
 
         if let Some(max_time) = max_time {
@@ -106,7 +105,7 @@ pub fn run_partial_solution(test_files: &Vec<Vec<(PathBuf, PathBuf)>>, exe_path:
         }
     }
 
-    info!("Results: {}", results_text);
+    info!("Results: {results_text}");
     
     Ok(passed_subtasks)
 }

@@ -27,7 +27,6 @@ indicatif = { version = "0.18", default-features = false, features = [] }
 indicatif-log-bridge = { version = "0.2", default-features = false, features = [] }
 colog = { version = "1.3", default-features = false, features = [] }
 log = { version = "0.4", default-features = false, features = [] }
-itertools = { version = "0.14", default-features = false, features = ["use_alloc"] }
 
 [lints.clippy]
 all = { level = "warn", priority = -1 }
@@ -166,3 +165,4 @@ zero_ptr = "allow"
 indexing_slicing = "allow"
 allow_attributes_without_reason = "allow"
 assigning_clones = "allow"
+format-push-string = "allow"
