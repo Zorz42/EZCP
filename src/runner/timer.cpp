@@ -62,7 +62,7 @@ int run_command_with_timeout(const string& command, int timeout_ms) {
     CloseHandle(pi.hProcess);
     CloseHandle(pi.hThread);
 
-    return 1; // Timeout occurred
+    return 175; // Timeout occurred
 }
 
 int main(int argc, const char* argv[]) {
@@ -78,7 +78,7 @@ int main(int argc, const char* argv[]) {
     auto elapsed = end - start;
 
     if (elapsed.count() > time_limit_ms)
-        return 543678;
+        return 175;
 
     cerr << elapsed.count() << endl;
     return exit_status;
@@ -124,7 +124,13 @@ int run_command_with_timeout(const string& command, int timeout_ms) {
     while (elapsed < timeout_ms) {
         pid_t result = waitpid(pid, &status, WNOHANG);
         if (result == pid) {
-            return WEXITSTATUS(status);
+            if (WIFEXITED(status)) {
+                int exit_code = WEXITSTATUS(status);
+                return exit_code;
+            } else if (WIFSIGNALED(status)) {
+                int signal = WTERMSIG(status);
+                return signal;
+            }
         }
 
         this_thread::sleep_for(chrono::milliseconds(wait_time_ms));
@@ -134,23 +140,24 @@ int run_command_with_timeout(const string& command, int timeout_ms) {
     kill(pid, SIGKILL);
     waitpid(pid, &status, 0);
 
-    return 1;
+    return 175;
 }
 
 int main(int argc, const char* argv[]) {
     string command = argv[1];
     int time_limit_ms = stoi(argv[2]);
-    
+
     long long start = get_rusage();
     int exit_status = run_command_with_timeout(command, time_limit_ms * 2);
     long long end = get_rusage();
-    
+
     long long elapsed = end - start;
 
-    if(elapsed > time_limit_ms)
-        return 543678;
-    
+    if(elapsed >= time_limit_ms)
+        return 175;
+
     cerr << end - start;
     return exit_status;
 }
+
 #endif

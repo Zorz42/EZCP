@@ -1,6 +1,5 @@
 use rand::Rng;
 use std::path::PathBuf;
-use log::LevelFilter;
 
 const SOLUTION: &str = r#"
 #include<iostream>

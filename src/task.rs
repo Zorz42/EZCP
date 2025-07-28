@@ -11,7 +11,7 @@ use log::{debug, error, info, warn, LevelFilter};
 use crate::archiver::archive_files;
 use crate::partial_solution::run_partial_solution;
 use crate::runner::cpp_runner::{CppRunner, ProgramHandle};
-use crate::runner::runner::RunResult;
+use crate::runner::exec_runner::RunResult;
 
 pub static LOGGER_INIT: Once = Once::new();
 
@@ -20,7 +20,6 @@ pub static LOGGER_INIT: Once = Once::new();
 /// Once you are done, you can create tests for the task.
 pub struct Task {
     name: String,
-    path: PathBuf,
     // path to the folder with tests
     pub tests_path: PathBuf,
     // time limit in seconds
@@ -50,7 +49,6 @@ impl Task {
     pub fn new(name: &str, path: &Path) -> Self {
         let build_folder_path = path.join("build");
         Self {
-            path: path.to_owned(),
             name: name.to_owned(),
             tests_path: path.join("tests"),
             tests_archive_path: path.join("tests.zip"),

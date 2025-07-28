@@ -2,13 +2,13 @@ use std::collections::{HashMap, HashSet};
 use std::hash::{DefaultHasher, Hash, Hasher};
 use std::path::PathBuf;
 use std::thread::spawn;
-use std::time::{Duration, SystemTime};
+use std::time::Duration;
 use indicatif::{MultiProgress, ProgressBar};
 use log::{debug, trace};
 use crate::runner::gcc::{Gcc, GccOptimization, GccStandard};
-use crate::{Error, Result};
+use crate::Result;
 use crate::Error::IOError;
-use crate::runner::runner::{run_solution, RunResult};
+use crate::runner::exec_runner::{run_solution, RunResult};
 
 #[derive(Clone, Copy)]
 pub struct ProgramHandle {
@@ -25,15 +25,6 @@ struct Task {
 #[derive(Clone, Copy)]
 pub struct TaskHandle {
     id: usize,
-}
-
-fn get_file_modified_time(file: &PathBuf) -> Result<SystemTime> {
-    let file_str1 = file.to_str().unwrap_or("???").to_owned();
-    let file_str2 = file_str1.clone();
-    std::fs::metadata(file)
-        .map_err(|err| IOError { err, file: file_str1 })?
-        .modified()
-        .map_err(|err| IOError { err, file: file_str2 })
 }
 
 /// This struct is responsible for running C++ code.

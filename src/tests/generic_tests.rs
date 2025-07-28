@@ -2,7 +2,6 @@
 #[allow(clippy::unwrap_used)]
 pub mod generic_tests {
     use crate::{Error, Subtask, Task};
-    use std::path::{Path};
     use log::LevelFilter;
     use tempfile::TempDir;
 
@@ -17,10 +16,6 @@ pub mod generic_tests {
             let mut task = Task::new("Test task", task_path.path());
             task.debug_level = LevelFilter::Trace;
             Test { task, task_path }
-        }
-
-        pub fn task_path(&self) -> &Path {
-            self.task_path.path()
         }
 
         pub fn test(mut self) {
@@ -138,7 +133,7 @@ pub mod generic_tests {
         }
 
         int main() {
-            cout<<fib(1000)<<"\n";
+            cout<<fib(100)<<"\n";
             return 0;
         }
         "#;

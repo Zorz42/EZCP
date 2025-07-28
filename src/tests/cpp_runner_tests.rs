@@ -1,11 +1,11 @@
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
-pub mod runner_tests {
+pub mod cpp_runner_tests {
     use std::time::Instant;
     use tempfile::TempDir;
     use crate::Error::CompilerError;
     use crate::runner::cpp_runner::CppRunner;
-    use crate::runner::runner::RunResult;
+    use crate::runner::exec_runner::RunResult;
     use crate::tests::test_shared::initialize_logger;
 
     const HELLO_WORLD_PROGRAM: &str = r#"

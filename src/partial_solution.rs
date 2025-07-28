@@ -1,13 +1,13 @@
 use std::collections::{BTreeMap, HashSet};
 use std::fmt::Display;
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use console::style;
 use indicatif::MultiProgress;
 use log::info;
 use crate::{Error, Result};
 use crate::runner::cpp_runner::{CppRunner, ProgramHandle};
-use crate::runner::runner::RunResult;
+use crate::runner::exec_runner::RunResult;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 enum TestResult {

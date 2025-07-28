@@ -6,12 +6,11 @@ mod graph_tests;
 mod input_tests;
 mod partial_solution_tests;
 mod gcc_tests;
-mod runner_tests;
+mod cpp_runner_tests;
 
 #[cfg(test)]
 mod test_shared {
-    use indicatif_log_bridge::LogWrapper;
-    use log::{debug, LevelFilter};
+    use log::LevelFilter;
     use crate::task::LOGGER_INIT;
 
     #[cfg(test)]
@@ -21,7 +20,6 @@ mod test_shared {
             builder.filter(None, LevelFilter::Trace);
             let _env_logger_instance = builder.build();
             log::set_max_level(LevelFilter::Trace);
-            debug!("Logger initialized with level: {}", LevelFilter::Trace);
         });
     }
 }

@@ -39,11 +39,13 @@ pub fn run_solution(executable_file: &PathBuf, input_data: &str, time_limit: f32
 
     let return_code = solution_process.wait().map_err(|err| Error::IOError { err, file: String::new() })?;
 
-    if return_code.code() == Some(543678) {
+    if return_code.code() == Some(175) {
+        trace!("Solution timed out with signal 175");
         return Ok(RunResult::TimedOut);
     }
 
-    if !return_code.success() {
+    if !return_code.success() || return_code.code() != Some(0) {
+        trace!("Solution crashed with return code: {:?}", return_code.code());
         return Ok(RunResult::Crashed);
     }
 
@@ -55,6 +57,7 @@ pub fn run_solution(executable_file: &PathBuf, input_data: &str, time_limit: f32
         // parse output from timer command
         stderr_str.parse::<i32>().unwrap()
     };
+    trace!("Elapsed time from timer: {} ms", elapsed_time_ms);
 
     let output = {
         let stdout = solution_process.stdout.as_mut().unwrap();
