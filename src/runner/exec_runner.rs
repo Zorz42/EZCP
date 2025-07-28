@@ -20,7 +20,7 @@ pub fn run_solution(executable_file: &PathBuf, input_data: &str, time_limit: f32
     solution_process.arg(executable_file);
     solution_process.arg(format!("{}", (time_limit * 1000.0) as i32));
 
-    trace!("Running command: {:?}", solution_process);
+    trace!("Running command: {solution_process:?}");
     // spawn the solution process
     let mut solution_process = solution_process
         .stdin(Stdio::piped())
@@ -57,7 +57,7 @@ pub fn run_solution(executable_file: &PathBuf, input_data: &str, time_limit: f32
         // parse output from timer command
         stderr_str.parse::<i32>().unwrap()
     };
-    trace!("Elapsed time from timer: {} ms", elapsed_time_ms);
+    trace!("Elapsed time from timer: {elapsed_time_ms} ms");
 
     let output = {
         let stdout = solution_process.stdout.as_mut().unwrap();

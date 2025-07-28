@@ -1,6 +1,6 @@
 use std::collections::{HashMap, HashSet};
 use std::hash::{DefaultHasher, Hash, Hasher};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::thread::spawn;
 use std::time::Duration;
 use indicatif::{MultiProgress, ProgressBar};
@@ -46,11 +46,11 @@ pub struct CppRunner {
 }
 
 impl CppRunner {
-    pub fn new(build_folder: PathBuf) -> Result<Self> {
+    pub fn new(build_folder: &Path) -> Result<Self> {
         trace!("Creating CppRunner with build folder: {}", build_folder.to_string_lossy());
         if !build_folder.exists() {
             trace!("Build folder does not exist, creating: {}", build_folder.to_string_lossy());
-            std::fs::create_dir_all(&build_folder)
+            std::fs::create_dir_all(build_folder)
                 .map_err(|err| IOError { err, file: build_folder.to_string_lossy().to_string() })?;
         }
         let mut gcc = Gcc::new()?;
@@ -92,7 +92,7 @@ impl CppRunner {
 
         self.hash_to_handle.insert(hash, handle);
         trace!("Program handle created with id: {} and hash: {hash}", handle.id);
-        let source_file = self.build_folder.join(format!("p{}.cpp", hash));
+        let source_file = self.build_folder.join(format!("p{hash}.cpp"));
         let executable_file = Gcc::transform_output_file(&source_file, None)?;
         trace!("Source file: {}, Executable file: {}", source_file.to_string_lossy(), executable_file.to_string_lossy());
         self.necessary_files.insert(source_file.clone());
@@ -120,7 +120,7 @@ impl CppRunner {
         Ok(handle)
     }
 
-    pub fn add_task(&mut self, program: ProgramHandle, input: String, time_limit: f32) -> Result<TaskHandle> {
+    pub fn add_task(&mut self, program: ProgramHandle, input: String, time_limit: f32) -> TaskHandle {
         trace!("Adding task for program id: {}, time limit: {}", program.id, time_limit);
         let handle = TaskHandle { id: self.tasks.len() };
         self.tasks.push(Task {
@@ -129,7 +129,7 @@ impl CppRunner {
             time_limit,
             result: None,
         });
-        Ok(handle)
+        handle
     }
 
     pub fn clear_tasks(&mut self) {
@@ -137,7 +137,7 @@ impl CppRunner {
         self.tasks.clear();
     }
 
-    pub fn get_result(&mut self, task_handle: TaskHandle) -> RunResult {
+    pub fn get_result(&self, task_handle: TaskHandle) -> RunResult {
         trace!("Getting result for task id: {}", task_handle.id);
         self.tasks[task_handle.id].result.clone().unwrap()
     }
@@ -191,7 +191,7 @@ impl CppRunner {
             for (thread, idx) in threads {
                 if thread.is_finished() {
                     let result = thread.join().unwrap()?;
-                    trace!("Task {} finished with result: {:?}", idx, result);
+                    trace!("Task {idx} finished with result: {result:?}");
                     self.tasks[idx].result = Some(result);
                 } else {
                     threads_upd.push((thread, idx));

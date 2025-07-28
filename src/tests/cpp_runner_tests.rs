@@ -23,7 +23,7 @@ pub mod cpp_runner_tests {
 
         let tempdir = TempDir::new().unwrap();
 
-        let _runner = CppRunner::new(tempdir.path().to_owned()).unwrap();
+        let _runner = CppRunner::new(&tempdir.path()).unwrap();
 
         drop(tempdir);
     }
@@ -33,7 +33,7 @@ pub mod cpp_runner_tests {
         initialize_logger();
 
         let tempdir = TempDir::new().unwrap();
-        let mut runner = CppRunner::new(tempdir.path().to_owned()).unwrap();
+        let mut runner = CppRunner::new(tempdir.path()).unwrap();
 
         let _handle = runner.add_program(HELLO_WORLD_PROGRAM).unwrap();
 
@@ -45,7 +45,7 @@ pub mod cpp_runner_tests {
         initialize_logger();
 
         let tempdir = TempDir::new().unwrap();
-        let mut runner = CppRunner::new(tempdir.path().to_owned()).unwrap();
+        let mut runner = CppRunner::new(tempdir.path()).unwrap();
 
         let faulty_program_source = r#"
         #include <iostream>
@@ -67,10 +67,10 @@ pub mod cpp_runner_tests {
         initialize_logger();
 
         let tempdir = TempDir::new().unwrap();
-        let mut runner = CppRunner::new(tempdir.path().to_owned()).unwrap();
+        let mut runner = CppRunner::new(tempdir.path()).unwrap();
 
         let program_handle = runner.add_program(HELLO_WORLD_PROGRAM).unwrap();
-        let task_handle = runner.add_task(program_handle, "".to_owned(), 1.0).unwrap();
+        let task_handle = runner.add_task(program_handle, "".to_owned(), 1.0);
 
         runner.run_tasks(None).unwrap();
 
@@ -90,7 +90,7 @@ pub mod cpp_runner_tests {
         initialize_logger();
 
         let tempdir = TempDir::new().unwrap();
-        let mut runner = CppRunner::new(tempdir.path().to_owned()).unwrap();
+        let mut runner = CppRunner::new(tempdir.path()).unwrap();
 
         let mut program_handles = Vec::new();
         for _ in 0..5 {
@@ -111,7 +111,7 @@ pub mod cpp_runner_tests {
         let mut task_handles = Vec::new();
         for i in 0..100 {
             let input = format!("{}\n", i);
-            let task_handle = runner.add_task(program_handles[i % program_handles.len()], input, 1.0).unwrap();
+            let task_handle = runner.add_task(program_handles[i % program_handles.len()], input, 1.0);
             task_handles.push(task_handle);
         }
 
@@ -134,7 +134,7 @@ pub mod cpp_runner_tests {
         initialize_logger();
 
         let tempdir = TempDir::new().unwrap();
-        let mut runner = CppRunner::new(tempdir.path().to_owned()).unwrap();
+        let mut runner = CppRunner::new(tempdir.path()).unwrap();
 
         let time = Instant::now();
 
@@ -153,7 +153,7 @@ pub mod cpp_runner_tests {
         initialize_logger();
 
         let tempdir = TempDir::new().unwrap();
-        let mut runner = CppRunner::new(tempdir.path().to_owned()).unwrap();
+        let mut runner = CppRunner::new(tempdir.path()).unwrap();
 
         let program_source = r#"
         int main() {
@@ -165,7 +165,7 @@ pub mod cpp_runner_tests {
         "#;
 
         let program_handle = runner.add_program(program_source).unwrap();
-        let task_handle = runner.add_task(program_handle, "1\n".to_owned(), 1.0).unwrap();
+        let task_handle = runner.add_task(program_handle, "1\n".to_owned(), 1.0);
 
         runner.run_tasks(None).unwrap();
 
@@ -181,7 +181,7 @@ pub mod cpp_runner_tests {
         initialize_logger();
 
         let tempdir = TempDir::new().unwrap();
-        let mut runner = CppRunner::new(tempdir.path().to_owned()).unwrap();
+        let mut runner = CppRunner::new(tempdir.path()).unwrap();
 
         let program_source = r#"
         int main() {
@@ -195,7 +195,7 @@ pub mod cpp_runner_tests {
         "#;
 
         let program_handle = runner.add_program(program_source).unwrap();
-        let task_handle = runner.add_task(program_handle, "1\n".to_owned(), 1.0).unwrap();
+        let task_handle = runner.add_task(program_handle, "1\n".to_owned(), 1.0);
 
         runner.run_tasks(None).unwrap();
 
@@ -218,10 +218,10 @@ pub mod cpp_runner_tests {
                 // After the first iteration, we should have a cache
                 start = Instant::now();
             }
-            let mut runner = CppRunner::new(tempdir.path().to_owned()).unwrap();
+            let mut runner = CppRunner::new(tempdir.path()).unwrap();
 
             let program_handle = runner.add_program(HELLO_WORLD_PROGRAM).unwrap();
-            let task_handle = runner.add_task(program_handle, "".to_owned(), 1.0).unwrap();
+            let task_handle = runner.add_task(program_handle, "".to_owned(), 1.0);
 
             runner.run_tasks(None).unwrap();
 

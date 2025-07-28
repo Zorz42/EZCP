@@ -175,7 +175,7 @@ impl Task {
             }
         }
 
-        let mut cpp_runner = CppRunner::new(self.build_folder_path.clone())?;
+        let mut cpp_runner = CppRunner::new(&self.build_folder_path)?;
         let solution_handle = cpp_runner.add_program(&self.solution_source)?;
 
         let mut partial_solution_handles = Vec::new();
@@ -288,7 +288,7 @@ impl Task {
             let mut subtask_tasks = Vec::new();
             for (input_file, _output_file) in subtask {
                 let test_contents = fs::read_to_string(input_file).map_err(|err| Error::IOError { err, file: input_file.to_str().unwrap_or("?").to_owned() })?;
-                let task_handle = cpp_runner.add_task(solution_handle, test_contents, self.time_limit)?;
+                let task_handle = cpp_runner.add_task(solution_handle, test_contents, self.time_limit);
                 subtask_tasks.push(task_handle);
             }
             test_tasks.push(subtask_tasks);

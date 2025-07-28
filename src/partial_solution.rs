@@ -51,7 +51,7 @@ pub fn run_partial_solution(test_files: &Vec<Vec<(PathBuf, PathBuf)>>, cpp_runne
         for (input_file, output_file) in subtask_tests {
             let input_data = fs::read_to_string(input_file)
                 .map_err(|err| Error::IOError { err, file: input_file.to_str().unwrap_or("???").to_owned() })?;
-            let handle = cpp_runner.add_task(program_handle, input_data, time_limit)?;
+            let handle = cpp_runner.add_task(program_handle, input_data, time_limit);
 
             test_handles_element.push((handle, output_file.clone()));
         }

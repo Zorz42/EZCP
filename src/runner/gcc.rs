@@ -1,5 +1,5 @@
 use std::fs::exists;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use log::debug;
 use crate::Error::{CompilerNotFound};
 use crate::{Error, Result};
@@ -157,7 +157,7 @@ impl Gcc {
 
     /// Calls `gcc` to compile the source file.
     /// If `output_file` is None, it will use the source file name with an appropriate extension.
-    pub fn compile(&self, source_file: &PathBuf, output_file: Option<&PathBuf>) -> Result<PathBuf> {
+    pub fn compile(&self, source_file: &Path, output_file: Option<&PathBuf>) -> Result<PathBuf> {
         // transform the path to absolute path
         let source_file = source_file.canonicalize().map_err(|err| Error::IOError { err, file: source_file.to_string_lossy().to_string() })?;
 
