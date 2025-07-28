@@ -8,6 +8,7 @@ mod tests;
 mod partial_solution;
 mod archiver;
 mod runner;
+mod logger_format;
 
 pub use error::{Error, Result};
 pub use generators::{array_generator, array_generator_custom, array_to_string, Graph};

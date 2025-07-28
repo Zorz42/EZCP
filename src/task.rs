@@ -9,6 +9,7 @@ use indicatif::{MultiProgress, ProgressBar};
 use indicatif_log_bridge::LogWrapper;
 use log::{debug, error, info, warn, LevelFilter};
 use crate::archiver::archive_files;
+use crate::logger_format::logger_format;
 use crate::partial_solution::run_partial_solution;
 use crate::runner::cpp_runner::{CppRunner, ProgramHandle};
 use crate::runner::exec_runner::RunResult;
@@ -106,6 +107,7 @@ impl Task {
         LOGGER_INIT.call_once(|| {
             let mut builder = env_logger::builder();
             builder.filter(None, self.debug_level);
+            builder.format(logger_format);
             let env_logger_instance = builder.build();
 
             LogWrapper::new(self.logger.clone(), env_logger_instance).try_init().ok();
