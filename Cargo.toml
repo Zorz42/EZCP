@@ -25,7 +25,7 @@ which = { version = "8.0", default-features = false, features = ["real-sys"] }
 console = { version = "0.16", default-features = false, features = ["unicode-width", "ansi-parsing", "std"] }
 indicatif = { version = "0.18", default-features = false, features = [] }
 indicatif-log-bridge = { version = "0.2", default-features = false, features = [] }
-colog = { version = "1.3", default-features = false, features = [] }
+env_logger = { version = "0.11", default-features = false, features = [] }
 log = { version = "0.4", default-features = false, features = [] }
 
 [lints.clippy]

@@ -10,20 +10,18 @@ mod runner_tests;
 
 #[cfg(test)]
 mod test_shared {
-    use std::sync::Once;
-    use log::LevelFilter;
-    use crate::task::CustomPrefixToken;
-
-    #[cfg(test)]
-    static INIT: Once = Once::new();
+    use indicatif_log_bridge::LogWrapper;
+    use log::{debug, LevelFilter};
+    use crate::task::LOGGER_INIT;
 
     #[cfg(test)]
     pub fn initialize_logger() {
-        INIT.call_once(|| {
-            let mut builder = colog::default_builder();
-            builder.filter_level(LevelFilter::Trace);
-            builder.format(colog::formatter(CustomPrefixToken));
-            builder.init();
+        LOGGER_INIT.call_once(|| {
+            let mut builder = env_logger::builder();
+            builder.filter(None, LevelFilter::Trace);
+            let _env_logger_instance = builder.build();
+            log::set_max_level(LevelFilter::Trace);
+            debug!("Logger initialized with level: {}", LevelFilter::Trace);
         });
     }
 }

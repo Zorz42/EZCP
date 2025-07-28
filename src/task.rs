@@ -4,7 +4,6 @@ use crate::{Error, Input, Result};
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::sync::Once;
-use colog::format::CologStyle;
 use console::style;
 use indicatif::{MultiProgress, ProgressBar};
 use indicatif_log_bridge::LogWrapper;
@@ -13,22 +12,7 @@ use crate::archiver::archive_files;
 use crate::runner::cpp_builder::build_solution;
 use crate::partial_solution::run_partial_solution;
 
-pub struct CustomPrefixToken;
-
-impl CologStyle for CustomPrefixToken {
-    fn prefix_token(&self, level: &Level) -> String {
-        format!(
-            "[{}]",
-            match level {
-                Level::Error => style("ERROR").red().bright().bold(),
-                Level::Warn => style("WARN").yellow().bright().bold(),
-                Level::Info => style("*").bold(),
-                Level::Debug => style("DEBUG").cyan().bold(),
-                Level::Trace => style("TRACE").magenta().bold(),
-            }
-        )
-    }
-}
+pub static LOGGER_INIT: Once = Once::new();
 
 /// This struct represents an entire task.
 /// You can add subtasks, partial solutions and set the time limit.
@@ -121,15 +105,12 @@ impl Task {
 
     /// This creates tests and prints the error message if there is an error.
     pub fn create_tests(&mut self) -> Result<()> {
-        static INIT: Once = Once::new();
-
-        INIT.call_once(|| {
-            let mut builder = colog::default_builder();
+        LOGGER_INIT.call_once(|| {
+            let mut builder = env_logger::builder();
             builder.filter(None, self.debug_level);
-            builder.format(colog::formatter(CustomPrefixToken));
-            let colog_logger = builder.build();
+            let env_logger_instance = builder.build();
 
-            LogWrapper::new(self.logger.clone(), colog_logger).try_init().ok();
+            LogWrapper::new(self.logger.clone(), env_logger_instance).try_init().ok();
             log::set_max_level(self.debug_level);
             debug!("Logger initialized with level: {}", self.debug_level);
         });
