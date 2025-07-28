@@ -20,11 +20,31 @@ Minimal example: (see `examples/` for more complete examples)
 use rand::Rng;
 use std::path::PathBuf;
 
+const SOURCE: &str = r#"
+#include<iostream>
+using namespace std;
+
+int main(){
+    int n;
+    cin>>n;
+    long long sum=0;
+    int big=0;
+    while(n--){
+        int a;
+        cin>>a;
+        big=max(big,a);
+        sum+=a;
+    }
+    cout<<sum-big/2<<"\n";
+}
+"#;
+
 fn main() {
     // For the first task you get an array of even integers. 
     // You need to find the sum of all elements in the array minus the half of the maximum element.
 
     let mut task = ezcp::Task::new("Coupon", &PathBuf::from("coupon"));
+    task.solution_source = SOURCE.to_owned();
 
     // Constraint: n = 1
     let mut subtask1 = ezcp::Subtask::new();
@@ -51,25 +71,5 @@ fn main() {
     
     // Finally, create the tests.
     task.create_tests();
-}
-```
-
-And `coupon/solution.cpp`:
-```cpp
-#include<iostream>
-using namespace std;
-
-int main(){
-    int n;
-    cin>>n;
-    long long sum=0;
-    int big=0;
-    while(n--){
-        int a;
-        cin>>a;
-        big=max(big,a);
-        sum+=a;
-    }
-    cout<<sum-big/2<<"\n";
 }
 ```
