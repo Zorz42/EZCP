@@ -39,10 +39,10 @@ fn main() {
     // Also all elements in the array are even.
 
     let mut task = ezcp::Task::new("Coupon", &PathBuf::from("task1"));
-    task.debug_level = LevelFilter::Trace;
+    //task.debug_level = LevelFilter::Trace;
 
     task.solution_source = SOLUTION.to_owned();
-    
+
     // Constraint: n = 1
     let mut subtask1 = ezcp::Subtask::new();
 

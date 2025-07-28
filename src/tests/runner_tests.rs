@@ -206,4 +206,38 @@ pub mod runner_tests {
 
         drop(tempdir);
     }
+
+    #[test]
+    fn test_runner_pickup_cache() {
+        initialize_logger();
+
+        let tempdir = TempDir::new().unwrap();
+        let mut start = Instant::now();
+
+        for it in 0..20 {
+            if it == 1 {
+                // After the first iteration, we should have a cache
+                start = Instant::now();
+            }
+            let mut runner = CppRunner::new(tempdir.path().to_owned()).unwrap();
+
+            let program_handle = runner.add_program(HELLO_WORLD_PROGRAM).unwrap();
+            let task_handle = runner.add_task(program_handle, "".to_owned(), 1.0).unwrap();
+
+            runner.run_tasks(None).unwrap();
+
+            let result = runner.get_result(task_handle);
+
+            assert!(matches!(result, RunResult::Ok( .. )));
+
+            if let RunResult::Ok(_, output) = result {
+                assert_eq!(output.trim(), "Hello, World!");
+            }
+        }
+
+        let elapsed = start.elapsed();
+        assert!(elapsed.as_secs() < 5, "Cache pickup took too long: {:?}", elapsed);
+
+        drop(tempdir);
+    }
 }

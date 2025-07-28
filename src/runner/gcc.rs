@@ -139,6 +139,7 @@ impl Gcc {
             }
         }
 
+        let output_existed = output_file.exists();
         if !output_file.exists() {
             std::fs::File::create(&output_file).map_err(|err| Error::IOError { err, file: output_file.to_string_lossy().to_string() })?;
         }
@@ -146,8 +147,8 @@ impl Gcc {
         // convert to absolute path
         let output_file = output_file.canonicalize().map_err(|err| Error::IOError { err, file: output_file.to_string_lossy().to_string() })?;
 
-        // lastly, remove the file
-        if output_file.exists() {
+
+        if !output_existed {
             std::fs::remove_file(&output_file).map_err(|err| Error::IOError { err, file: output_file.to_string_lossy().to_string() })?;
         }
 

@@ -112,9 +112,9 @@ impl CppRunner {
             std::fs::write(&source_file, source_code)
                 .map_err(|err| IOError { err, file: source_file.to_string_lossy().to_string() })?;
         }
-
-        if !executable_file.exists() || get_file_modified_time(&executable_file)? < get_file_modified_time(&source_file)? {
-            trace!("Executable file does not exist or is outdated, compiling: {}", executable_file.to_string_lossy());
+        
+        if !executable_file.exists() {
+            trace!("Executable file does not exist. Compiling: {}", executable_file.to_string_lossy());
             let compiled_executable = self.gcc.compile(&source_file, Some(&executable_file))?;
 
             // this should never happen, but just in case
