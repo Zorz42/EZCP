@@ -1,11 +1,13 @@
 use rand::Rng;
 use std::path::PathBuf;
+use log::LevelFilter;
 
 fn main() {
     // The first task you get an array of integers. You need to find the sum of all elements in the array minus the half of the maximum element.
     // Also all elements in the array are even.
 
     let mut task = ezcp::Task::new("Coupon", &PathBuf::from("task1"));
+    task.debug_level = LevelFilter::Trace;
 
     // Constraint: n = 1
     let mut subtask1 = ezcp::Subtask::new();

@@ -3,11 +3,12 @@ use crate::subtask::Subtask;
 use crate::{Error, Input, Result};
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
+use std::sync::Once;
 use colog::format::CologStyle;
 use console::style;
 use indicatif::{MultiProgress, ProgressBar};
 use indicatif_log_bridge::LogWrapper;
-use log::{error, info, warn, Level};
+use log::{debug, error, info, warn, Level, LevelFilter};
 use crate::archiver::archive_files;
 use crate::runner::cpp_builder::build_solution;
 use crate::partial_solution::run_partial_solution;
@@ -33,8 +34,8 @@ impl CologStyle for CustomPrefixToken {
 /// You can add subtasks, partial solutions and set the time limit.
 /// Once you are done, you can create tests for the task.
 pub struct Task {
-    pub(crate) name: String,
-    pub(crate) path: PathBuf,
+    name: String,
+    path: PathBuf,
     // path to the folder with tests
     pub tests_path: PathBuf,
     // path to cpp file with solution
@@ -47,12 +48,12 @@ pub struct Task {
     // input to the closure is (test_id, subtask_id, test_id_in_subtask)
     pub get_input_file_name: Box<dyn Fn(i32, i32, i32) -> String>,
     pub get_output_file_name: Box<dyn Fn(i32, i32, i32) -> String>,
-    pub(crate) solution_exe_path: PathBuf,
-    pub(crate) build_folder_path: PathBuf,
-    pub(crate) subtasks: Vec<Subtask>,
-    pub(crate) partial_solutions: Vec<(PathBuf, HashSet<usize>)>,
+    solution_exe_path: PathBuf,
+    build_folder_path: PathBuf,
+    subtasks: Vec<Subtask>,
+    partial_solutions: Vec<(PathBuf, HashSet<usize>)>,
 
-    pub debug_level: Level,
+    pub debug_level: LevelFilter,
     logger: MultiProgress,
 }
 
@@ -76,7 +77,7 @@ impl Task {
             time_limit: 5.0,
             subtasks: Vec::new(),
             partial_solutions: Vec::new(),
-            debug_level: Level::Info,
+            debug_level: LevelFilter::Info,
             logger: MultiProgress::new(),
         }
     }
@@ -120,13 +121,18 @@ impl Task {
 
     /// This creates tests and prints the error message if there is an error.
     pub fn create_tests(&mut self) -> Result<()> {
-        let mut builder = colog::default_builder();
-        builder.format(colog::formatter(CustomPrefixToken));
-        let colog_logger = builder.build();
-        let level = colog_logger.filter();
+        static INIT: Once = Once::new();
 
-        LogWrapper::new(self.logger.clone(), colog_logger).try_init().ok();
-        log::set_max_level(level);
+        INIT.call_once(|| {
+            let mut builder = colog::default_builder();
+            builder.filter(None, self.debug_level);
+            builder.format(colog::formatter(CustomPrefixToken));
+            let colog_logger = builder.build();
+
+            LogWrapper::new(self.logger.clone(), colog_logger).try_init().ok();
+            log::set_max_level(self.debug_level);
+            debug!("Logger initialized with level: {}", self.debug_level);
+        });
 
         let start_time = std::time::Instant::now();
         let res = self.create_tests_inner();
@@ -196,10 +202,10 @@ impl Task {
             }
         }
         
-        build_solution(&self.solution_path, &self.solution_exe_path)?;
+        build_solution(&self.solution_path, Some(&self.solution_exe_path))?;
 
         for (i, partial_solution) in self.partial_solutions.iter().enumerate() {
-            build_solution(&partial_solution.0, &self.build_folder_path.join(format!("partial_solution_{}", i + 1)))?;
+            build_solution(&partial_solution.0, Some(&self.build_folder_path.join(format!("partial_solution_{}", i + 1))))?;
         }
 
         // create tests directory if it doesn't exist and clear it

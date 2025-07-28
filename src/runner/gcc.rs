@@ -1,5 +1,5 @@
 use std::fs::exists;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use log::debug;
 use crate::Error::{CompilerNotFound};
 use crate::{Error, Result};
@@ -121,7 +121,7 @@ impl Gcc {
     }
     
     /// Transforms the output file path based on the source file and the specified output file.
-    pub fn transform_output_file(source_file: &Path, output_file: Option<&Path>) -> PathBuf {
+    pub fn transform_output_file(source_file: &PathBuf, output_file: Option<&PathBuf>) -> PathBuf {
         let mut output_file = output_file.map_or(source_file, |p| p).to_owned();
         #[cfg(windows)]
         {
@@ -136,7 +136,7 @@ impl Gcc {
 
     /// Calls `gcc` to compile the source file.
     /// If `output_file` is None, it will use the source file name with an appropriate extension.
-    pub fn compile(&self, source_file: &Path, output_file: Option<&Path>) -> Result<PathBuf> {
+    pub fn compile(&self, source_file: &PathBuf, output_file: Option<&PathBuf>) -> Result<PathBuf> {
         let output_file = Self::transform_output_file(source_file, output_file);
 
         let mut command = std::process::Command::new(&self.path);

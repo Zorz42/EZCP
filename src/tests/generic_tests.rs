@@ -3,7 +3,7 @@
 pub mod generic_tests {
     use crate::{Error, Subtask, Task};
     use std::path::{Path};
-    use log::Level;
+    use log::LevelFilter;
     use tempfile::TempDir;
 
     pub struct Test {
@@ -15,7 +15,7 @@ pub mod generic_tests {
         pub fn new() -> Self {
             let task_path = TempDir::new().expect("Failed to create temporary directory");
             let mut task = Task::new("Test task", task_path.path());
-            task.debug_level = Level::Trace;
+            task.debug_level = LevelFilter::Trace;
             Test { task, task_path }
         }
 
