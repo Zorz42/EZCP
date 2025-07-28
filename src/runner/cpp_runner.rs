@@ -200,6 +200,7 @@ impl CppRunner {
             for (thread, idx) in threads {
                 if thread.is_finished() {
                     let result = thread.join().unwrap()?;
+                    trace!("Task {} finished with result: {:?}", idx, result);
                     self.tasks[idx].result = Some(result);
                 } else {
                     threads_upd.push((thread, idx));

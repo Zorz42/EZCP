@@ -201,7 +201,6 @@ pub mod runner_tests {
 
         // Check that the result is indeed a crash
         let result = runner.get_result(task_handle);
-        println!("Result: {:?}", result);
         assert!(matches!(result, RunResult::Crashed));
 
         drop(tempdir);

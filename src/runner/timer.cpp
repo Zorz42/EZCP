@@ -78,7 +78,7 @@ int main(int argc, const char* argv[]) {
     auto elapsed = end - start;
 
     if (elapsed.count() > time_limit_ms)
-        return 1;
+        return 543678;
 
     cerr << elapsed.count() << endl;
     return exit_status;
@@ -148,7 +148,7 @@ int main(int argc, const char* argv[]) {
     long long elapsed = end - start;
 
     if(elapsed > time_limit_ms)
-        return 1;
+        return 543678;
     
     cerr << end - start;
     return exit_status;

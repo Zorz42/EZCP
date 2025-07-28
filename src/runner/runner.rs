@@ -39,7 +39,7 @@ pub fn run_solution(executable_file: &PathBuf, input_data: &str, time_limit: f32
 
     let return_code = solution_process.wait().map_err(|err| Error::IOError { err, file: String::new() })?;
 
-    if return_code.code() == Some(1) {
+    if return_code.code() == Some(543678) {
         return Ok(RunResult::TimedOut);
     }
 
