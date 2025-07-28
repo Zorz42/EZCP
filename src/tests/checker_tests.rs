@@ -22,11 +22,9 @@ mod generator_tests {
             }
             cout<<"1\n";
             return 0; 
-        }
-        
-        "#;
+        }"#;
 
-        task.create_solution(solution_contents);
+        task.task.solution_source = solution_contents.to_owned();
 
         // create subtasks
         let mut subtask1 = Subtask::new();
@@ -83,7 +81,7 @@ mod generator_tests {
         
         "#;
 
-        task.create_solution(solution_contents);
+        task.task.solution_source = solution_contents.to_owned();
 
         // create subtasks
         let mut subtask1 = Subtask::new();
@@ -138,7 +136,7 @@ mod generator_tests {
         
         "#;
 
-        task.create_solution(solution_contents);
+        task.task.solution_source = solution_contents.to_owned();
 
         // a = b
         let mut subtask1 = Subtask::new();
@@ -183,7 +181,7 @@ mod generator_tests {
         
         "#;
 
-        task.create_solution(solution_contents);
+        task.task.solution_source = solution_contents.to_owned();
 
         // a = b
         let mut subtask1 = Subtask::new();
@@ -230,7 +228,7 @@ mod generator_tests {
         
         "#;
 
-        task.create_solution(solution_contents);
+        task.task.solution_source = solution_contents.to_owned();
 
         // a = b
         let mut subtask1 = Subtask::new();
@@ -278,7 +276,7 @@ mod generator_tests {
         
         "#;
 
-        task.create_solution(solution_contents);
+        task.task.solution_source = solution_contents.to_owned();
 
         // a = b
         let mut subtask1 = Subtask::new();
@@ -326,7 +324,7 @@ mod generator_tests {
         
         "#;
 
-        task.create_solution(solution_contents);
+        task.task.solution_source = solution_contents.to_owned();
 
         // a = b
         let mut subtask1 = Subtask::new();
@@ -416,7 +414,7 @@ mod generator_tests {
         
         "#;
 
-        task.create_solution(solution_contents);
+        task.task.solution_source = solution_contents.to_owned();
 
         // a = b
         let mut subtask1 = Subtask::new();

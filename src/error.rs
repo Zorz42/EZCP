@@ -54,8 +54,8 @@ pub enum Error {
     #[error("Partial solution {partial_number} does not pass subtask {subtask_number}.")]
     PartialSolutionFailsSubtask { subtask_number: usize, partial_number: usize },
 
-    #[error("Missing solution file: {path}")]
-    MissingSolutionFile { path: String },
+    #[error("Missing solution")]
+    MissingSolution { },
 }
 
 pub type Result<T, E = Error> = std::result::Result<T, E>;

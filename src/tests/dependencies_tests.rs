@@ -20,7 +20,7 @@ mod dependencies_tests {
         
         "#;
 
-        task.create_solution(solution_contents);
+        task.task.solution_source = solution_contents.to_owned();
 
         let mut subtask1 = Subtask::new();
         subtask1.add_test_str("1\n");
@@ -62,7 +62,7 @@ mod dependencies_tests {
         
         "#;
 
-        task.create_solution(solution_contents);
+        task.task.solution_source = solution_contents.to_owned();
 
         let mut subtask1 = Subtask::new();
         subtask1.add_test_str("1 1\n");

@@ -2,6 +2,38 @@ use rand::Rng;
 use std::path::PathBuf;
 use log::LevelFilter;
 
+const SOLUTION: &str = r#"
+#include<iostream>
+using namespace std;
+
+int main(){
+    int n;
+    cin>>n;
+    long long sum=0;
+    int big=0;
+    while(n--){
+        int a;
+        cin>>a;
+        big=max(big,a);
+        sum+=a;
+    }
+    cout<<sum-big/2<<"\n";
+}
+"#;
+
+const PARTIAL_SOLUTION: &str = r#"
+#include<iostream>
+using namespace std;
+
+int main(){
+    int n;
+    cin>>n;
+    int x;
+    cin>>x;
+    cout<<x/2<<"\n";
+}
+"#;
+
 fn main() {
     // The first task you get an array of integers. You need to find the sum of all elements in the array minus the half of the maximum element.
     // Also all elements in the array are even.
@@ -9,6 +41,8 @@ fn main() {
     let mut task = ezcp::Task::new("Coupon", &PathBuf::from("task1"));
     task.debug_level = LevelFilter::Trace;
 
+    task.solution_source = SOLUTION.to_owned();
+    
     // Constraint: n = 1
     let mut subtask1 = ezcp::Subtask::new();
 
@@ -119,7 +153,7 @@ fn main() {
     task.add_subtask_dependency(subtask3, subtask2);
 
     // there is a partial solution that only reads 2 integers: n, x and prints x / 2 which is correct for subtask1 but should fail for subtask2 and subtask3
-    task.add_partial_solution("solution1.cpp", &[subtask1]);
+    task.add_partial_solution(PARTIAL_SOLUTION.to_owned(), &[subtask1]);
 
     // finally create the tests
     task.create_tests().ok();

@@ -19,10 +19,6 @@ pub mod generic_tests {
             Test { task, task_path }
         }
 
-        pub fn create_solution(&mut self, contents: &str) {
-            std::fs::write(self.task_path.path().join("solution.cpp"), contents).unwrap();
-        }
-
         pub fn task_path(&self) -> &Path {
             self.task_path.path()
         }
@@ -38,11 +34,11 @@ pub mod generic_tests {
 
     #[test]
     fn create_empty() {
-        let task = Test::new();
+        let mut task = Test::new();
 
         // create solution file
         let solution_contents = "int main() { return 0; }";
-        std::fs::write(task.task_path().join("solution.cpp"), solution_contents).unwrap();
+        task.task.solution_source = solution_contents.to_owned();
 
         task.test()
     }
@@ -63,7 +59,7 @@ pub mod generic_tests {
         
         "#;
 
-        task.create_solution(solution_contents);
+        task.task.solution_source = solution_contents.to_owned();
 
         let subtask1 = Subtask::new();
         let subtask2 = Subtask::new();
@@ -93,7 +89,7 @@ pub mod generic_tests {
         
         "#;
 
-        task.create_solution(solution_contents);
+        task.task.solution_source = solution_contents.to_owned();
 
         let mut subtask1 = Subtask::new();
         subtask1.add_test_str("1\n");
@@ -120,8 +116,8 @@ pub mod generic_tests {
         let mut task = Test::new();
 
         for _ in 0..10 {
-            assert!(matches!(task.task.create_tests(), Err(Error::MissingSolutionFile { .. })));
-            assert!(matches!(task.task.create_tests(), Err(Error::MissingSolutionFile { .. })));
+            assert!(matches!(task.task.create_tests(), Err(Error::MissingSolution { .. })));
+            assert!(matches!(task.task.create_tests(), Err(Error::MissingSolution { .. })));
         }
     }
 
@@ -145,11 +141,9 @@ pub mod generic_tests {
             cout<<fib(1000)<<"\n";
             return 0;
         }
-
-        
         "#;
 
-        task.create_solution(solution_contents);
+        task.task.solution_source = solution_contents.to_owned();
 
         let mut subtask1 = Subtask::new();
         subtask1.add_test_str("1\n");
@@ -174,7 +168,7 @@ pub mod generic_tests {
         }
         ";
 
-        task.create_solution(solution_contents);
+        task.task.solution_source = solution_contents.to_owned();
 
         let mut subtask1 = Subtask::new();
         subtask1.add_test_str("1\n");
@@ -203,10 +197,9 @@ pub mod generic_tests {
             cout<<"1\n";
             return 0; 
         }
-        
         "#;
 
-        task.create_solution(solution_contents);
+        task.task.solution_source = solution_contents.to_owned();
 
         let mut subtask1 = Subtask::new();
         subtask1.add_test_str("1\n");
@@ -247,7 +240,7 @@ pub mod generic_tests {
         
         "#;
 
-        task.create_solution(solution_contents);
+        task.task.solution_source = solution_contents.to_owned();
 
         let mut subtask1 = Subtask::new();
         subtask1.add_test_str("1\n");
@@ -288,7 +281,7 @@ pub mod generic_tests {
         
         "#;
 
-        task.create_solution(solution_contents);
+        task.task.solution_source = solution_contents.to_owned();
 
         let mut subtask1 = Subtask::new();
         subtask1.add_test_str("1\n");
@@ -310,35 +303,4 @@ pub mod generic_tests {
         task.test()
     }
 
-    #[test]
-    fn missing_partial_solution() {
-        let mut task = Test::new();
-
-        // create solution file
-        let solution_contents = r#"
-        #include <iostream>
-        using namespace std;
-
-        int main() {
-            cout<<"1\n";
-            return 0;
-        }
-
-        "#;
-
-        task.create_solution(solution_contents);
-
-        let mut subtask1 = Subtask::new();
-        subtask1.add_test_str("1\n");
-        subtask1.add_test_str("2\n");
-        subtask1.add_test_str("3\n");
-
-        // create subtasks
-        task.task.add_subtask(subtask1);
-
-        task.task.add_partial_solution("solution1.cpp", &[]);
-
-        // Test without creating partial solution
-        assert!(matches!(task.task.create_tests(), Err(Error::MissingSolutionFile { .. })));
-    }
 }

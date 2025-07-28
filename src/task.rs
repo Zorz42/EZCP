@@ -1,16 +1,17 @@
-use crate::runner::solution_runner::{build_timer, SolutionRunner, RunResult};
 use crate::subtask::Subtask;
 use crate::{Error, Input, Result};
 use std::collections::HashSet;
+use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Once;
 use console::style;
 use indicatif::{MultiProgress, ProgressBar};
 use indicatif_log_bridge::LogWrapper;
-use log::{debug, error, info, warn, Level, LevelFilter};
+use log::{debug, error, info, warn, LevelFilter};
 use crate::archiver::archive_files;
-use crate::runner::cpp_builder::build_solution;
 use crate::partial_solution::run_partial_solution;
+use crate::runner::cpp_runner::{CppRunner, ProgramHandle};
+use crate::runner::runner::RunResult;
 
 pub static LOGGER_INIT: Once = Once::new();
 
@@ -22,8 +23,6 @@ pub struct Task {
     path: PathBuf,
     // path to the folder with tests
     pub tests_path: PathBuf,
-    // path to cpp file with solution
-    pub solution_path: PathBuf,
     // time limit in seconds
     pub time_limit: f32,
     // path to the zip file with tests
@@ -32,10 +31,12 @@ pub struct Task {
     // input to the closure is (test_id, subtask_id, test_id_in_subtask)
     pub get_input_file_name: Box<dyn Fn(i32, i32, i32) -> String>,
     pub get_output_file_name: Box<dyn Fn(i32, i32, i32) -> String>,
-    solution_exe_path: PathBuf,
     build_folder_path: PathBuf,
     subtasks: Vec<Subtask>,
-    partial_solutions: Vec<(PathBuf, HashSet<usize>)>,
+    // source code of the solution
+    pub solution_source: String,
+    // Source of the solution and set of subtasks that the solution passes.
+    partial_solutions: Vec<(String, HashSet<usize>)>,
 
     pub debug_level: LevelFilter,
     logger: MultiProgress,
@@ -52,8 +53,6 @@ impl Task {
             path: path.to_owned(),
             name: name.to_owned(),
             tests_path: path.join("tests"),
-            solution_path: path.join("solution.cpp"),
-            solution_exe_path: build_folder_path.join("solution"),
             tests_archive_path: path.join("tests.zip"),
             get_input_file_name: Box::new(|test_id, subtask_id, _test_id_in_subtask| format!("test.{:02}.{:03}.in", subtask_id+1, test_id+1)),
             get_output_file_name: Box::new(|test_id, subtask_id, _test_id_in_subtask| format!("test.{:02}.{:03}.out", subtask_id+1, test_id+1)),
@@ -63,6 +62,7 @@ impl Task {
             partial_solutions: Vec::new(),
             debug_level: LevelFilter::Info,
             logger: MultiProgress::new(),
+            solution_source: String::new(),
         }
     }
 
@@ -98,9 +98,9 @@ impl Task {
     /// A partial solution is a solution that only solves a subset of subtasks.
     /// When the task is generated, the partial solution will be run on all tests of the subtasks it solves.
     /// If the partial solution does not solve the exact subtasks it should, an error will be thrown.
-    pub fn add_partial_solution(&mut self, solution_path: &str, passes_subtasks: &[usize]) {
+    pub fn add_partial_solution(&mut self, solution_source: String, passes_subtasks: &[usize]) {
         let set = passes_subtasks.iter().copied().collect::<HashSet<_>>();
-        self.partial_solutions.push((self.path.join(solution_path), set));
+        self.partial_solutions.push((solution_source, set));
     }
 
     /// This creates tests and prints the error message if there is an error.
@@ -162,18 +162,12 @@ impl Task {
 
         // create build directory if it doesn't exist
         if !self.build_folder_path.exists() {
-            std::fs::create_dir_all(&self.build_folder_path).map_err(|err| Error::IOError { err, file: String::new() })?;
+            fs::create_dir_all(&self.build_folder_path).map_err(|err| Error::IOError { err, file: String::new() })?;
         }
 
-        // check if solution file exists
-        if !self.solution_path.exists() {
-            return Err(Error::MissingSolutionFile { path: self.solution_path.to_str().unwrap_or("???").to_owned() });
-        }
-        // check if partial solutions exist
-        for (solution_path, _) in &self.partial_solutions {
-            if !solution_path.exists() {
-                return Err(Error::MissingSolutionFile { path: solution_path.to_str().unwrap_or("???").to_owned() });
-            }
+        // check if solution source exists
+        if self.solution_source.is_empty() {
+            return Err(Error::MissingSolution { });
         }
 
         // reset subtask input files
@@ -182,17 +176,19 @@ impl Task {
                 test.reset_input_file();
             }
         }
-        
-        build_solution(&self.solution_path, Some(&self.solution_exe_path))?;
 
-        for (i, partial_solution) in self.partial_solutions.iter().enumerate() {
-            build_solution(&partial_solution.0, Some(&self.build_folder_path.join(format!("partial_solution_{}", i + 1))))?;
+        let mut cpp_runner = CppRunner::new(self.build_folder_path.clone())?;
+        let solution_handle = cpp_runner.add_program(&self.solution_source)?;
+
+        let mut partial_solution_handles = Vec::new();
+        for (source, _subtasks) in &mut self.partial_solutions {
+            partial_solution_handles.push(cpp_runner.add_program(source)?);
         }
 
         // create tests directory if it doesn't exist and clear it
-        std::fs::create_dir_all(&self.tests_path).map_err(|err| Error::IOError { err, file: String::new() })?;
-        for entry in std::fs::read_dir(&self.tests_path).map_err(|err| Error::IOError { err, file: String::new() })? {
-            std::fs::remove_file(entry.map_err(|err| Error::IOError { err, file: String::new() })?.path()).map_err(|err| Error::IOError { err, file: String::new() })?;
+        fs::create_dir_all(&self.tests_path).map_err(|err| Error::IOError { err, file: String::new() })?;
+        for entry in fs::read_dir(&self.tests_path).map_err(|err| Error::IOError { err, file: String::new() })? {
+            fs::remove_file(entry.map_err(|err| Error::IOError { err, file: String::new() })?.path()).map_err(|err| Error::IOError { err, file: String::new() })?;
         }
 
         self.print_progress(1,5, "Generating tests");
@@ -200,9 +196,9 @@ impl Task {
         self.print_progress(2,5, "Checking generated tests");
         self.check_tests()?;
         self.print_progress(3,5, "Generating test solutions");
-        self.generate_test_solutions(&test_files)?;
+        self.generate_test_solutions(&test_files, &mut cpp_runner, solution_handle)?;
         self.print_progress(4,5, "Checking partial solutions");
-        self.check_partial_solutions(&test_files)?;
+        self.check_partial_solutions(&test_files, &mut cpp_runner, &partial_solution_handles)?;
 
         self.print_progress(5,5, "Archiving tests");
         self.archive_tests(&test_files)?;
@@ -286,29 +282,30 @@ impl Task {
         Ok(())
     }
     
-    fn generate_test_solutions(&self, test_files: &Vec<Vec<(PathBuf, PathBuf)>>) -> Result<()> {
-        let mut solution_runner = SolutionRunner::new();
+    fn generate_test_solutions(&self, test_files: &Vec<Vec<(PathBuf, PathBuf)>>, cpp_runner: &mut CppRunner, solution_handle: ProgramHandle) -> Result<()> {
         let mut test_tasks = Vec::new();
         
         // invoke solution on each test
         for subtask in test_files {
             let mut subtask_tasks = Vec::new();
-            for (input_file, output_file) in subtask {
-                
-                subtask_tasks.push(solution_runner.add_task(self.solution_exe_path.clone(), input_file.clone(), output_file.clone(), self.time_limit));
+            for (input_file, _output_file) in subtask {
+                let test_contents = fs::read_to_string(input_file).map_err(|err| Error::IOError { err, file: input_file.to_str().unwrap_or("?").to_owned() })?;
+                let task_handle = cpp_runner.add_task(solution_handle, test_contents, self.time_limit)?;
+                subtask_tasks.push(task_handle);
             }
             test_tasks.push(subtask_tasks);
         }
 
-        let timer_path = build_timer(&self.build_folder_path)?;
-        solution_runner.run_tasks(&self.logger, &timer_path);
+        cpp_runner.run_tasks(Some(&self.logger))?;
 
         let mut max_elapsed_time = 0;
         for (subtask, tasks) in test_files.iter().zip(test_tasks) {
-            for ((input_file, _output_file), task) in subtask.iter().zip(tasks) {
-                let test_result = solution_runner.get_result(task)?;
-                let elapsed_time = match test_result {
-                    RunResult::Ok(elapsed_time) => { elapsed_time }
+            for ((input_file, output_file), task_handle) in subtask.iter().zip(tasks) {
+                let test_result = cpp_runner.get_result(task_handle);
+                let (elapsed_time, output) = match test_result {
+                    RunResult::Ok(elapsed_time, output) => {
+                        (elapsed_time, output)
+                    }
                     RunResult::TimedOut => {
                         return Err(Error::SolutionTimedOut {
                             test_path: input_file.to_str().unwrap_or("?").to_owned(),
@@ -321,32 +318,33 @@ impl Task {
                     }
                 };
                 max_elapsed_time = max_elapsed_time.max(elapsed_time);
+                // write output to the output file
+                fs::write(output_file, output).map_err(|err| Error::IOError { err, file: output_file.to_str().unwrap_or("?").to_owned() })?;
             }
         }
         info!("Solution time: {max_elapsed_time}ms");
+        cpp_runner.clear_tasks();
         
         Ok(())
     }
     
-    fn check_partial_solutions(&self, test_files: &Vec<Vec<(PathBuf, PathBuf)>>) -> Result<()> {
-        for (partial_id, partial_solution) in self.partial_solutions.iter().enumerate() {
-            info!("Running partial solution {} ({}):", partial_id + 1, partial_solution.0.display());
-
-            let exe_path = self.build_folder_path.join(format!("partial_solution_{}", partial_id + 1));
+    fn check_partial_solutions(&self, test_files: &Vec<Vec<(PathBuf, PathBuf)>>, cpp_runner: &mut CppRunner, partial_solution_handles: &Vec<ProgramHandle>) -> Result<()> {
+        for ((partial_id, (_source, passing_subtasks)), program_handle) in self.partial_solutions.iter().enumerate().zip(partial_solution_handles) {
+            info!("Running partial solution {}:", partial_id + 1);
             
-            let subtasks_passed = run_partial_solution(test_files, &exe_path, &self.logger, &self.build_folder_path, self.time_limit)?;
+            let subtasks_passed = run_partial_solution(test_files, cpp_runner, *program_handle, &self.logger, self.time_limit)?;
 
             for subtask_id in 0..self.subtasks.len() {
                 let subtask_failed = !subtasks_passed.contains(&subtask_id);
                 
-                if subtask_failed && partial_solution.1.contains(&subtask_id) {
+                if subtask_failed && passing_subtasks.contains(&subtask_id) {
                     return Err(Error::PartialSolutionFailsSubtask {
                         partial_number: partial_id + 1,
                         subtask_number: subtask_id + 1,
                     });
                 }
 
-                if !subtask_failed && !partial_solution.1.contains(&subtask_id) {
+                if !subtask_failed && !passing_subtasks.contains(&subtask_id) {
                     return Err(Error::PartialSolutionPassesExtraSubtask {
                         partial_number: partial_id + 1,
                         subtask_number: subtask_id + 1,

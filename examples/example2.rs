@@ -1,11 +1,40 @@
 use rand::Rng;
 use std::path::PathBuf;
 
+const SOLUTION: &str = r"
+#include <iostream>
+using namespace std;
+int main() {
+    int n;
+    cin >> n;
+    int a[n];
+    for (int i = 0; i < n; i++) {
+        cin >> a[i];
+    }
+
+    // Sort the array
+    sort(a, a + n);
+
+    // Find the smallest sum that cannot be formed
+    int smallest_sum = 1;
+    for (int i = 0; i < n; i++) {
+        if (a[i] > smallest_sum) {
+            break;
+        }
+        smallest_sum += a[i];
+    }
+
+    cout << smallest_sum << endl;
+    return 0;
+}
+";
+
 fn main() {
     // In this task you have n coins with values a1, a2, ..., an. You need to find the smallest sum, you cannot get using these coins.
     // For example, if you have coins with values 1, 2 and 4, you can get any sum from 1 to 7, but you cannot get 8.
 
     let mut task = ezcp::Task::new("Coins", &PathBuf::from("task2"));
+    task.solution_source = SOLUTION.to_owned();
 
     // Constraint: n = 1
     let mut subtask1 = ezcp::Subtask::new();

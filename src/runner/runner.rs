@@ -5,7 +5,7 @@ use log::trace;
 use crate::Error;
 use crate::Result;
 
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq, Debug)]
 pub enum RunResult {
     Ok(i32, String), // elapsed time in milliseconds and output
     TimedOut,
@@ -29,9 +29,12 @@ pub fn run_solution(executable_file: &PathBuf, input_data: &str, time_limit: f32
         .spawn()
         .map_err(|err| Error::IOError { err, file: String::new() })?;
 
-    {
+    if !input_data.is_empty() {
         let stdin = solution_process.stdin.as_mut().unwrap();
-        stdin.write_all(input_data.as_bytes()).unwrap();
+        let res = stdin.write_all(input_data.as_bytes());
+        if res.is_err() {
+            return Ok(RunResult::Crashed);
+        }
     }
 
     let return_code = solution_process.wait().map_err(|err| Error::IOError { err, file: String::new() })?;

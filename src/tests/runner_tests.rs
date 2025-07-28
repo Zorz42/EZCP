@@ -147,4 +147,63 @@ pub mod runner_tests {
 
         drop(tempdir);
     }
+
+    #[test]
+    fn test_runner_program_tle() {
+        initialize_logger();
+
+        let tempdir = TempDir::new().unwrap();
+        let mut runner = CppRunner::new(tempdir.path().to_owned()).unwrap();
+
+        let program_source = r#"
+        int main() {
+            while (true) {
+                // Infinite loop to simulate TLE
+            }
+            return 0;
+        }
+        "#;
+
+        let program_handle = runner.add_program(program_source).unwrap();
+        let task_handle = runner.add_task(program_handle, "1\n".to_owned(), 1.0).unwrap();
+
+        runner.run_tasks(None).unwrap();
+
+        // Check that the result is indeed a TLE
+        let result = runner.get_result(task_handle);
+        assert!(matches!(result, RunResult::TimedOut));
+
+        drop(tempdir);
+    }
+
+    #[test]
+    fn test_runner_program_crash() {
+        initialize_logger();
+
+        let tempdir = TempDir::new().unwrap();
+        let mut runner = CppRunner::new(tempdir.path().to_owned()).unwrap();
+
+        let program_source = r#"
+        int main() {
+            int*n=nullptr;
+            while(true){
+                *n=1;
+                n++;
+            }
+            return 0;
+        }
+        "#;
+
+        let program_handle = runner.add_program(program_source).unwrap();
+        let task_handle = runner.add_task(program_handle, "1\n".to_owned(), 1.0).unwrap();
+
+        runner.run_tasks(None).unwrap();
+
+        // Check that the result is indeed a crash
+        let result = runner.get_result(task_handle);
+        println!("Result: {:?}", result);
+        assert!(matches!(result, RunResult::Crashed));
+
+        drop(tempdir);
+    }
 }

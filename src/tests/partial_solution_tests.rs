@@ -27,7 +27,7 @@ mod partial_solution_tests {
         }
         "#;
 
-        task.create_solution(solution_contents);
+        task.task.solution_source = solution_contents.to_owned();
 
         // create partial solution file (it overflows)
         let partial_solution_contents = r#"
@@ -48,8 +48,6 @@ mod partial_solution_tests {
         }
         "#;
 
-        std::fs::write(task.task_path().join("solution1.cpp"), partial_solution_contents).unwrap();
-
         // subtask 1, the sum is less than 10^6
         let mut subtask1 = crate::Subtask::new();
 
@@ -68,7 +66,7 @@ mod partial_solution_tests {
         task.task.add_subtask_dependency(subtask2, subtask1);
 
         // add partial solutions
-        task.task.add_partial_solution("solution1.cpp", &[subtask1]);
+        task.task.add_partial_solution(partial_solution_contents.to_owned(), &[subtask1]);
 
         task.test()
     }
@@ -96,7 +94,7 @@ mod partial_solution_tests {
         }
         "#;
 
-        task.create_solution(solution_contents);
+        task.task.solution_source = solution_contents.to_owned();
 
         // create partial solution file (it overflows)
         let partial_solution_contents = r#"
@@ -117,8 +115,6 @@ mod partial_solution_tests {
         }
         "#;
 
-        std::fs::write(task.task_path().join("solution1.cpp"), partial_solution_contents).unwrap();
-
         // subtask 1, the sum is less than 10^6
         let mut subtask1 = crate::Subtask::new();
 
@@ -137,7 +133,7 @@ mod partial_solution_tests {
         task.task.add_subtask_dependency(subtask2, subtask1);
 
         // add partial solutions
-        task.task.add_partial_solution("solution1.cpp", &[subtask2]);
+        task.task.add_partial_solution(partial_solution_contents.to_owned(), &[subtask2]);
 
         for _ in 0..10 {
             assert!(!task.task.create_tests().is_ok());
@@ -167,7 +163,7 @@ mod partial_solution_tests {
         }
         "#;
 
-        task.create_solution(solution_contents);
+        task.task.solution_source = solution_contents.to_owned();
 
         // create partial solution file (it overflows)
         let partial_solution_contents = r#"
@@ -188,8 +184,6 @@ mod partial_solution_tests {
         }
         "#;
 
-        std::fs::write(task.task_path().join("solution1.cpp"), partial_solution_contents).unwrap();
-
         // subtask 1, the sum is less than 10^6
         let mut subtask1 = crate::Subtask::new();
 
@@ -208,7 +202,7 @@ mod partial_solution_tests {
         task.task.add_subtask_dependency(subtask2, subtask1);
 
         // add partial solutions
-        task.task.add_partial_solution("solution1.cpp", &[subtask1]);
+        task.task.add_partial_solution(partial_solution_contents.to_owned(), &[subtask1]);
 
         for _ in 0..10 {
             assert!(!task.task.create_tests().is_ok());
@@ -238,7 +232,7 @@ mod partial_solution_tests {
         }
         "#;
 
-        task.create_solution(solution_contents);
+        task.task.solution_source = solution_contents.to_owned();
 
         // create partial solution file (it overflows)
         let partial_solution_contents = r#"
@@ -260,8 +254,6 @@ mod partial_solution_tests {
         }
         "#;
 
-        std::fs::write(task.task_path().join("solution1.cpp"), partial_solution_contents).unwrap();
-
         // subtask 1, the sum is less than 10^6
         let mut subtask1 = crate::Subtask::new();
 
@@ -280,7 +272,7 @@ mod partial_solution_tests {
         task.task.add_subtask_dependency(subtask2, subtask1);
 
         // add partial solutions
-        task.task.add_partial_solution("solution1.cpp", &[subtask1]);
+        task.task.add_partial_solution(partial_solution_contents.to_owned(), &[subtask1]);
 
         task.test()
     }
@@ -308,7 +300,7 @@ mod partial_solution_tests {
         }
         "#;
 
-        task.create_solution(solution_contents);
+        task.task.solution_source = solution_contents.to_owned();
 
         // create partial solution file (it crashes)
         let partial_solution_contents = "
@@ -321,8 +313,6 @@ mod partial_solution_tests {
             return 0; 
         }
         ";
-
-        std::fs::write(task.task_path().join("solution1.cpp"), partial_solution_contents).unwrap();
 
         // subtask 1, the sum is less than 10^6
         let mut subtask1 = crate::Subtask::new();
@@ -342,7 +332,7 @@ mod partial_solution_tests {
         task.task.add_subtask_dependency(subtask2, subtask1);
 
         // add partial solutions
-        task.task.add_partial_solution("solution1.cpp", &[]);
+        task.task.add_partial_solution(partial_solution_contents.to_owned(), &[]);
 
         task.test()
     }
@@ -370,7 +360,7 @@ mod partial_solution_tests {
         }
         "#;
 
-        task.create_solution(solution_contents);
+        task.task.solution_source = solution_contents.to_owned();
 
         // create partial solution file (it overflows)
         let partial_solution_contents = r#"
@@ -392,8 +382,6 @@ mod partial_solution_tests {
         }
         "#;
 
-        std::fs::write(task.task_path().join("solution1.cpp"), partial_solution_contents).unwrap();
-
         // subtask 1, the sum is less than 10^6
         let mut subtask1 = crate::Subtask::new();
 
@@ -412,7 +400,7 @@ mod partial_solution_tests {
         task.task.add_subtask_dependency(subtask2, subtask1);
 
         // add partial solutions
-        task.task.add_partial_solution("solution1.cpp", &[]);
+        task.task.add_partial_solution(partial_solution_contents.to_owned(), &[]);
 
         task.test()
     }

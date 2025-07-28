@@ -121,7 +121,7 @@ impl Gcc {
     }
     
     /// Transforms the output file path based on the source file and the specified output file.
-    pub fn transform_output_file(source_file: &PathBuf, output_file: Option<&PathBuf>) -> PathBuf {
+    pub fn transform_output_file(source_file: &PathBuf, output_file: Option<&PathBuf>) -> Result<PathBuf> {
         let mut output_file = output_file.map_or(source_file, |p| p).to_owned();
         #[cfg(windows)]
         {
@@ -131,13 +131,36 @@ impl Gcc {
         {
             output_file.set_extension("");
         }
-        output_file
+
+        // create output file and its parent directories if they do not exist
+        if let Some(parent) = output_file.parent() {
+            if !parent.exists() {
+                std::fs::create_dir_all(parent).map_err(|err| Error::IOError { err, file: parent.to_string_lossy().to_string() })?;
+            }
+        }
+
+        if !output_file.exists() {
+            std::fs::File::create(&output_file).map_err(|err| Error::IOError { err, file: output_file.to_string_lossy().to_string() })?;
+        }
+
+        // convert to absolute path
+        let output_file = output_file.canonicalize().map_err(|err| Error::IOError { err, file: output_file.to_string_lossy().to_string() })?;
+
+        // lastly, remove the file
+        if output_file.exists() {
+            std::fs::remove_file(&output_file).map_err(|err| Error::IOError { err, file: output_file.to_string_lossy().to_string() })?;
+        }
+
+        Ok(output_file)
     }
 
     /// Calls `gcc` to compile the source file.
     /// If `output_file` is None, it will use the source file name with an appropriate extension.
     pub fn compile(&self, source_file: &PathBuf, output_file: Option<&PathBuf>) -> Result<PathBuf> {
-        let output_file = Self::transform_output_file(source_file, output_file);
+        // transform the path to absolute path
+        let source_file = source_file.canonicalize().map_err(|err| Error::IOError { err, file: source_file.to_string_lossy().to_string() })?;
+
+        let output_file = Self::transform_output_file(&source_file, output_file)?;
 
         let mut command = std::process::Command::new(&self.path);
 
@@ -153,9 +176,9 @@ impl Gcc {
         {
             command.arg("-static"); // Use static linking on Windows to avoid DLL issues
         }
+
         command.arg(source_file).arg("-o").arg(&output_file);
         if let Some(parent) = self.path.parent() {
-            debug!("Setting command current directory to: {}", parent.display());
             command.current_dir(parent);
         }
 

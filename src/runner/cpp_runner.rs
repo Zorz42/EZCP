@@ -1,10 +1,10 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::hash::{DefaultHasher, Hash, Hasher};
 use std::path::PathBuf;
 use std::thread::spawn;
 use std::time::{Duration, SystemTime};
 use indicatif::{MultiProgress, ProgressBar};
-use log::trace;
+use log::{debug, trace};
 use crate::runner::gcc::{Gcc, GccOptimization, GccStandard};
 use crate::{Error, Result};
 use crate::Error::IOError;
@@ -49,6 +49,9 @@ pub struct CppRunner {
     // this stores the tasks to be run
     tasks: Vec<Task>,
     hash_to_handle: HashMap<u64, ProgramHandle>,
+    // this stores the set of files that are needed in the build folder
+    // used for cleaning up the build folder
+    necessary_files: HashSet<PathBuf>,
 }
 
 impl CppRunner {
@@ -62,6 +65,8 @@ impl CppRunner {
         let mut gcc = Gcc::new()?;
         gcc.standard = Some(GccStandard::Cpp17);
         gcc.optimization = Some(GccOptimization::Level2);
+        let build_folder = build_folder.canonicalize()
+            .map_err(|err| IOError { err, file: build_folder.to_string_lossy().to_string() })?;
         let mut res = Self {
             gcc,
             build_folder,
@@ -69,6 +74,7 @@ impl CppRunner {
             programs: Vec::new(),
             tasks: Vec::new(),
             hash_to_handle: HashMap::new(),
+            necessary_files: HashSet::new(),
         };
 
         trace!("Building timer program");
@@ -93,9 +99,13 @@ impl CppRunner {
             return Ok(*existing_handle);
         }
 
+        self.hash_to_handle.insert(hash, handle);
         trace!("Program handle created with id: {} and hash: {hash}", handle.id);
         let source_file = self.build_folder.join(format!("p{}.cpp", hash));
-        let executable_file = Gcc::transform_output_file(&source_file, None);
+        let executable_file = Gcc::transform_output_file(&source_file, None)?;
+        trace!("Source file: {}, Executable file: {}", source_file.to_string_lossy(), executable_file.to_string_lossy());
+        self.necessary_files.insert(source_file.clone());
+        self.necessary_files.insert(executable_file.clone());
 
         if !source_file.exists() {
             trace!("Source file does not exist, writing to: {}", source_file.to_string_lossy());
@@ -141,7 +151,26 @@ impl CppRunner {
         self.tasks[task_handle.id].result.clone().unwrap()
     }
 
+    fn clean_build_folder(&self) -> Result<()> {
+        trace!("Cleaning build folder: {}", self.build_folder.to_string_lossy());
+
+        // Get all files in the build folder
+        let entries = std::fs::read_dir(&self.build_folder).map_err(|err| IOError { err, file: self.build_folder.to_string_lossy().to_string() })?;
+        for entry in entries {
+            let entry = entry.map_err(|err| IOError { err, file: self.build_folder.to_string_lossy().to_string() })?;
+            let path = entry.path();
+            // If the file is not in the necessary files set, delete it
+            if !self.necessary_files.contains(&path) {
+                debug!("Removing unnecessary file: {}", path.to_string_lossy());
+                std::fs::remove_file(&path).map_err(|err| IOError { err, file: path.to_string_lossy().to_string() })?;
+            }
+        }
+        Ok(())
+    }
+
     pub fn run_tasks(&mut self, logger: Option<&MultiProgress>) -> Result<()> {
+        self.clean_build_folder()?;
+
         let timer_path = self.programs[self.timer.id].clone();
 
         let num_threads = num_cpus::get();
