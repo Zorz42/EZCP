@@ -23,7 +23,10 @@ long long get_rusage(HANDLE process) {
     return user_ms + sys_ms;
 }
 
-int run_command_with_timeout(const string& command, int timeout_ms) {
+int main(int argc, const char* argv[]) {
+    string command = argv[1];
+    int timeout_ms = stoi(argv[2]);
+
     // Use STARTUPINFOW for wide characters
     STARTUPINFOW si = { sizeof(si) };
     PROCESS_INFORMATION pi;
@@ -45,6 +48,9 @@ int run_command_with_timeout(const string& command, int timeout_ms) {
     while (elapsed < timeout_ms) {
         waitResult = WaitForSingleObject(pi.hProcess, wait_time_ms);
         if (waitResult == WAIT_OBJECT_0) {
+            long long elapsed_time = get_rusage(pi.hProcess);
+            cerr << elapsed_time << endl; // Output the elapsed time
+
             DWORD exitCode;
             GetExitCodeProcess(pi.hProcess, &exitCode);
             CloseHandle(pi.hProcess);
@@ -63,25 +69,6 @@ int run_command_with_timeout(const string& command, int timeout_ms) {
     CloseHandle(pi.hThread);
 
     return 175; // Timeout occurred
-}
-
-int main(int argc, const char* argv[]) {
-    string command = argv[1];
-    int time_limit_ms = stoi(argv[2]);
-
-    // Start the command and measure its execution time
-    auto start = chrono::high_resolution_clock::now();
-
-    int exit_status = run_command_with_timeout(command, time_limit_ms * 2);
-
-    auto end = chrono::high_resolution_clock::now();
-    auto elapsed = end - start;
-
-    if (elapsed.count() > time_limit_ms)
-        return 175;
-
-    cerr << elapsed.count() << endl;
-    return exit_status;
 }
 
 #else

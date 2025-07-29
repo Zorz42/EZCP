@@ -55,7 +55,7 @@ pub fn run_solution(executable_file: &PathBuf, input_data: &str, time_limit: f32
         let mut stderr_str = String::new();
         stderr.read_to_string(&mut stderr_str).map_err(|err| Error::IOError { err, file: String::new() })?;
         // parse output from timer command
-        stderr_str.parse::<i32>().unwrap()
+        stderr_str.parse::<i32>().unwrap_or(0)
     };
     trace!("Elapsed time from timer: {elapsed_time_ms} ms");
 
