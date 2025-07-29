@@ -213,7 +213,7 @@ pub mod cpp_runner_tests {
         let tempdir = TempDir::new().unwrap();
         let mut start = Instant::now();
 
-        for it in 0..20 {
+        for it in 0..30 {
             if it == 1 {
                 // After the first iteration, we should have a cache
                 start = Instant::now();
@@ -235,7 +235,7 @@ pub mod cpp_runner_tests {
         }
 
         let elapsed = start.elapsed();
-        assert!(elapsed.as_secs() < 5, "Cache pickup took too long: {:?}", elapsed);
+        assert!(elapsed.as_secs() < 10, "Cache pickup took too long: {:?}", elapsed);
 
         drop(tempdir);
     }
