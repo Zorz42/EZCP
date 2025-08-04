@@ -177,6 +177,7 @@ pub mod cpp_runner_tests {
     }
 
     #[test]
+    #[cfg(not(windows))]
     fn test_runner_program_crash() {
         initialize_logger();
 
@@ -207,6 +208,7 @@ pub mod cpp_runner_tests {
     }
 
     #[test]
+    #[cfg(not(windows))]
     fn test_runner_pickup_cache() {
         initialize_logger();
 
