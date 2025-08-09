@@ -133,10 +133,8 @@ impl Gcc {
         }
 
         // create output file and its parent directories if they do not exist
-        if let Some(parent) = output_file.parent() {
-            if !parent.exists() {
-                std::fs::create_dir_all(parent).map_err(|err| Error::IOError { err, file: parent.to_string_lossy().to_string() })?;
-            }
+        if let Some(parent) = output_file.parent() && !parent.exists() {
+            std::fs::create_dir_all(parent).map_err(|err| Error::IOError { err, file: parent.to_string_lossy().to_string() })?;
         }
 
         let output_existed = output_file.exists();

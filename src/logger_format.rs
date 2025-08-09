@@ -16,11 +16,11 @@ pub fn logger_format(buf: &mut Formatter, record: &Record) -> std::io::Result<()
     for (line_num, line) in message.lines().enumerate() {
         if line_num == 0 {
             // For the first line, write the prefix
-            writeln!(buf, "[{}] {}", prefix, line)?;
+            writeln!(buf, "[{prefix}] {line}")?;
         } else {
             // For subsequent lines, just write the line
             let prefix_space = " ".repeat(prefix.len());
-            writeln!(buf, "{}|  {}", prefix_space, line)?;
+            writeln!(buf, "{prefix_space}|  {line}")?;
         }
     }
     Ok(())
