@@ -50,17 +50,17 @@ fn main() {
     let mut subtask1 = ezcp::Subtask::new();
     
     // Add 5 tests, where an array is generated with length 1 and an even value between 0 and 1_000_000_000 (inclusive).
-    subtask1.add_test(5, ezcp::array_generator_custom(1, 1, |rng| rng.gen_range(0..=500_000_000) * 2));
+    subtask1.add_test(5, ezcp::array_generator_custom(1, 1, |rng| rng.random_range(0..=500_000_000) * 2));
     
 
     // No additional constraints.
     let mut subtask2 = ezcp::Subtask::new();
 
     // Add some random tests.
-    subtask2.add_test(5, ezcp::array_generator_custom(1, 200_000, |rng| rng.gen_range(0..=500_000_000) * 2));
+    subtask2.add_test(5, ezcp::array_generator_custom(1, 200_000, |rng| rng.random_range(0..=500_000_000) * 2));
 
     // Add 5 edge cases, where n is maximal.
-    subtask2.add_test(5, ezcp::array_generator_custom(200_000, 200_000, |rng| rng.gen_range(0..=500_000_000) * 2));
+    subtask2.add_test(5, ezcp::array_generator_custom(200_000, 200_000, |rng| rng.random_range(0..=500_000_000) * 2));
 
     // Add subtasks to the task.
     let subtask1 = task.add_subtask(subtask1);
@@ -70,6 +70,6 @@ fn main() {
     task.add_subtask_dependency(subtask2, subtask1);
     
     // Finally, create the tests.
-    task.create_tests();
+    task.create_tests().ok();
 }
 ```
