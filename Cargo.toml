@@ -1,6 +1,6 @@
 [package]
 name = "ezcp"
-version = "0.3.3"
+version = "0.4.0"
 edition = "2024"
 description = "A simple tool to automatically generate test cases for competitive programming problems."
 license-file = "LICENSE"
