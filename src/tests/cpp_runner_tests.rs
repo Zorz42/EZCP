@@ -185,12 +185,10 @@ pub mod cpp_runner_tests {
         let mut runner = CppRunner::new(tempdir.path()).unwrap();
 
         let program_source = r#"
+        #include <signal.h>
         int main() {
-            int*n=nullptr;
-            while(true){
-                *n=1;
-                n++;
-            }
+            // Force a deterministic crash via SIGSEGV
+            raise(SIGSEGV);
             return 0;
         }
         "#;
