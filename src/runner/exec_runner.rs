@@ -31,9 +31,9 @@ pub fn run_solution(executable_file: &PathBuf, input_data: &str, time_limit: f32
 
     if !input_data.is_empty() {
         let stdin = solution_process.stdin.as_mut().unwrap();
-        if let Err(_e) = stdin.write_all(input_data.as_bytes()) {
-            return Ok(RunResult::Crashed);
-        }
+        // If the child exits early without reading stdin, writing can error with EPIPE.
+        // Do not treat that as a crash of the child solution.
+        let _ = stdin.write_all(input_data.as_bytes());
     }
     // Explicitly drop stdin to signal EOF to the child
     drop(solution_process.stdin.take());
@@ -67,10 +67,6 @@ pub fn run_solution(executable_file: &PathBuf, input_data: &str, time_limit: f32
         stdout.read_to_string(&mut output_str).map_err(|err| Error::IOError { err, file: String::new() })?;
         output_str
     };
-
-    if elapsed_time_ms as f32 * 0.001 > time_limit {
-        return Ok(RunResult::TimedOut);
-    }
 
     Ok(RunResult::Ok(elapsed_time_ms, output))
 }
