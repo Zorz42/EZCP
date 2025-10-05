@@ -76,6 +76,7 @@ impl Task {
     /// This function adds a subtask to the task.
     /// The subtask must be ready as it cannot be modified after it is added to the task.
     /// The function returns the index of the subtask.
+    #[must_use]
     pub fn add_subtask(&mut self, mut subtask: Subtask) -> usize {
         subtask.number = self.subtasks.len();
         self.subtasks.push(subtask);
@@ -162,7 +163,8 @@ impl Task {
 
         // create build directory if it doesn't exist
         if !self.build_folder_path.exists() {
-            fs::create_dir_all(&self.build_folder_path).map_err(|err| Error::IOError { err, file: String::new() })?;
+            fs::create_dir_all(&self.build_folder_path)
+                .map_err(|err| Error::IOError { err, file: self.build_folder_path.to_string_lossy().into_owned() })?;
         }
 
         // check if solution source exists
@@ -186,10 +188,12 @@ impl Task {
         }
 
         // create tests directory if it doesn't exist and clear it
-        fs::create_dir_all(&self.tests_path).map_err(|err| Error::IOError { err, file: String::new() })?;
-        for entry in fs::read_dir(&self.tests_path).map_err(|err| Error::IOError { err, file: String::new() })? {
-            fs::remove_file(entry.map_err(|err| Error::IOError { err, file: String::new() })?.path()).map_err(|err| Error::IOError { err, file: String::new() })?;
+        if self.tests_path.exists() {
+            fs::remove_dir_all(&self.tests_path)
+                .map_err(|err| Error::IOError { err, file: self.tests_path.to_string_lossy().into_owned() })?;
         }
+        fs::create_dir_all(&self.tests_path)
+            .map_err(|err| Error::IOError { err, file: self.tests_path.to_string_lossy().into_owned() })?;
 
         self.print_progress(1,5, "Generating tests");
         let test_files = self.generate_tests()?;
@@ -282,7 +286,7 @@ impl Task {
         Ok(())
     }
     
-    fn generate_test_solutions(&self, test_files: &Vec<Vec<(PathBuf, PathBuf)>>, cpp_runner: &mut CppRunner, solution_handle: ProgramHandle) -> Result<()> {
+    fn generate_test_solutions(&self, test_files: &[Vec<(PathBuf, PathBuf)>], cpp_runner: &mut CppRunner, solution_handle: ProgramHandle) -> Result<()> {
         let mut test_tasks = Vec::new();
         
         // invoke solution on each test
@@ -328,8 +332,8 @@ impl Task {
         Ok(())
     }
     
-    fn check_partial_solutions(&self, test_files: &Vec<Vec<(PathBuf, PathBuf)>>, cpp_runner: &mut CppRunner, partial_solution_handles: &Vec<ProgramHandle>) -> Result<()> {
-        for ((partial_id, (_source, passing_subtasks)), program_handle) in self.partial_solutions.iter().enumerate().zip(partial_solution_handles) {
+    fn check_partial_solutions(&self, test_files: &[Vec<(PathBuf, PathBuf)>], cpp_runner: &mut CppRunner, partial_solution_handles: &[ProgramHandle]) -> Result<()> {
+        for ((partial_id, (_source, passing_subtasks)), program_handle) in self.partial_solutions.iter().enumerate().zip(partial_solution_handles.iter()) {
             info!("Running partial solution {}:", partial_id + 1);
             
             let subtasks_passed = run_partial_solution(test_files, cpp_runner, *program_handle, &self.logger, self.time_limit)?;
@@ -357,7 +361,7 @@ impl Task {
     }
     
     /// Archive all tests into a zip file
-    fn archive_tests(&self, test_files: &Vec<Vec<(PathBuf, PathBuf)>>) -> Result<()> {
+    fn archive_tests(&self, test_files: &[Vec<(PathBuf, PathBuf)>]) -> Result<()> {
         let mut test_files_vec = Vec::new();
         for subtask in test_files {
             for (input_file, output_file) in subtask {
