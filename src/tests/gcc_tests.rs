@@ -106,6 +106,28 @@ pub mod gcc_tests {
     }
 
     #[test]
+    fn test_transform_output_file_extension() {
+        let tempdir = tempfile::TempDir::new().unwrap();
+        let source_path = tempdir.path().join("foo.cpp");
+        std::fs::write(&source_path, "int main(){return 0;}").unwrap();
+
+        // No explicit output path → based on source
+        let transformed = Gcc::transform_output_file(&source_path, None).unwrap();
+
+        #[cfg(windows)]
+        assert_eq!(transformed.extension().and_then(|e| e.to_str()), Some("exe"));
+
+        #[cfg(unix)]
+        {
+            // No extension on Unix; filename should be exactly "foo"
+            assert_eq!(transformed.extension(), None);
+            assert_eq!(transformed.file_name().unwrap().to_string_lossy(), "foo");
+        }
+
+        drop(tempdir);
+    }
+
+    #[test]
     fn test_compile_error() {
         let gcc = Gcc::new().unwrap();
 

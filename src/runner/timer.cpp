@@ -37,7 +37,7 @@ int main(int argc, const char* argv[]) {
 
     // Use CreateProcessW (wide character version)
     if (!CreateProcessW(
-            NULL, &wcommand[0], NULL, NULL, FALSE, 0, NULL, NULL, &si, &pi)) {
+            NULL, wcommand.data(), NULL, NULL, TRUE, CREATE_NO_WINDOW, NULL, NULL, &si, &pi)) {
         return -1;  // Error in creating process
     }
 
@@ -101,7 +101,9 @@ int run_command_with_timeout(const string& command, int timeout_ms) {
     }
 
     if (pid == 0) {
-        exit(execl(command.c_str(), (char*) nullptr));
+        // Child: execute the command path directly. execl requires argv[0]; pass same path.
+        execl(command.c_str(), command.c_str(), (char*)nullptr);
+        _exit(127);
     }
 
     int status;

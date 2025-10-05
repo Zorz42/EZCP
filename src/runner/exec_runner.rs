@@ -31,11 +31,12 @@ pub fn run_solution(executable_file: &PathBuf, input_data: &str, time_limit: f32
 
     if !input_data.is_empty() {
         let stdin = solution_process.stdin.as_mut().unwrap();
-        let res = stdin.write_all(input_data.as_bytes());
-        if res.is_err() {
+        if let Err(_e) = stdin.write_all(input_data.as_bytes()) {
             return Ok(RunResult::Crashed);
         }
     }
+    // Explicitly drop stdin to signal EOF to the child
+    drop(solution_process.stdin.take());
 
     let return_code = solution_process.wait().map_err(|err| Error::IOError { err, file: String::new() })?;
 
@@ -54,8 +55,9 @@ pub fn run_solution(executable_file: &PathBuf, input_data: &str, time_limit: f32
         let stderr = solution_process.stderr.as_mut().unwrap();
         let mut stderr_str = String::new();
         stderr.read_to_string(&mut stderr_str).map_err(|err| Error::IOError { err, file: String::new() })?;
-        // parse output from timer command
-        stderr_str.parse::<i32>().unwrap_or(0)
+        // parse output from timer command (ignore trailing newlines/whitespace)
+        let trimmed = stderr_str.trim();
+        trimmed.parse::<i32>().unwrap_or(0)
     };
     trace!("Elapsed time from timer: {elapsed_time_ms} ms");
 

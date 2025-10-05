@@ -1,4 +1,3 @@
-use std::fs::exists;
 use std::path::{Path, PathBuf};
 use log::debug;
 use crate::Error::{CompilerNotFound};
@@ -21,7 +20,6 @@ fn find_gcc() -> Result<PathBuf> {
             "mingw32-g++",
             "x86_64-w64-mingw32-g++",
             "c++",
-            "cl",
         ];
 
         for candidate in candidates {
@@ -191,7 +189,7 @@ impl Gcc {
             });
         }
 
-        if exists(&output_file).is_ok_and(|exists| !exists) {
+        if !output_file.exists() {
             return Err(Error::CompilerError {
                 stderr: "Output file was not created".to_owned(),
                 stdout: String::new(),

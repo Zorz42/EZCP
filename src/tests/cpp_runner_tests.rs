@@ -208,6 +208,35 @@ pub mod cpp_runner_tests {
     }
 
     #[test]
+    #[cfg(windows)]
+    fn test_runner_program_crash_windows() {
+        initialize_logger();
+
+        let tempdir = TempDir::new().unwrap();
+        let mut runner = CppRunner::new(tempdir.path()).unwrap();
+
+        // Force access violation by writing through null pointer, should crash
+        let program_source = r#"
+        #include <windows.h>
+        int main() {
+            int* p = 0;
+            *p = 1;
+            return 0;
+        }
+        "#;
+
+        let program_handle = runner.add_program(program_source).unwrap();
+        let task_handle = runner.add_task(program_handle, "".to_owned(), 1.0);
+
+        runner.run_tasks(None).unwrap();
+
+        let result = runner.get_result(task_handle);
+        assert!(matches!(result, RunResult::Crashed));
+
+        drop(tempdir);
+    }
+
+    #[test]
     #[cfg(not(windows))]
     fn test_runner_pickup_cache() {
         initialize_logger();
