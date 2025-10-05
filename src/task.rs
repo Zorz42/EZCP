@@ -16,6 +16,9 @@ use crate::runner::exec_runner::RunResult;
 
 pub static LOGGER_INIT: Once = Once::new();
 
+// Convert a Path to an owned String for error contexts and logs
+fn path_str(p: &Path) -> String { p.to_string_lossy().into_owned() }
+
 /// This struct represents an entire task.
 /// You can add subtasks, partial solutions and set the time limit.
 /// Once you are done, you can create tests for the task.
@@ -89,8 +92,8 @@ impl Task {
     /// Dependencies apply recursively but do not duplicate tests.
     /// The subtask must be added to the task before this function is called.
     pub fn add_subtask_dependency(&mut self, subtask: usize, dependency: usize) {
-        assert!(subtask < self.subtasks.len());
-        assert!(dependency < subtask);
+        assert!(subtask < self.subtasks.len(), "subtask index out of bounds");
+        assert!(dependency < subtask, "dependency must be less than subtask to avoid cycles");
         self.subtasks[subtask].dependencies.push(dependency);
     }
 
@@ -141,21 +144,20 @@ impl Task {
         self.logger.println(format!("[{}/{}] {}", style(curr).bold(), style(total).bold(), style(text).cyan().bold())).ok();
     }
 
+    fn print_title(&self, text: &str) {
+        // print title with ===== before and after text
+        let mut border_text = String::from(" ");
+        for _ in 0..text.len() + 6 { border_text.push('='); }
+        self.logger.println(&border_text).ok();
+        self.logger.println(format!(" || {} ||", style(text).bold())).ok();
+        self.logger.println(&border_text).ok();
+    }
+
     /// This function builds solution and then calls `generate_tests`.
     fn create_tests_inner(&mut self) -> Result<()> {
         self.logger.println("").ok();
         let text = format!("Creating tests for task \"{}\"", self.name);
-        // print title with ===== before and after text
-        let border_text = {
-            let mut res = " ".to_owned();
-            for _ in 0..text.len() + 6 {
-                res.push('=');
-            }
-            res
-        };
-        self.logger.println(&border_text).ok();
-        self.logger.println(format!(" || {} ||", style(text).bold())).ok();
-        self.logger.println(&border_text).ok();
+        self.print_title(&text);
 
         if self.subtasks.is_empty() {
             warn!("No subtasks defined.");
@@ -164,7 +166,7 @@ impl Task {
         // create build directory if it doesn't exist
         if !self.build_folder_path.exists() {
             fs::create_dir_all(&self.build_folder_path)
-                .map_err(|err| Error::IOError { err, file: self.build_folder_path.to_string_lossy().into_owned() })?;
+                .map_err(|err| Error::IOError { err, file: path_str(&self.build_folder_path) })?;
         }
 
         // check if solution source exists
@@ -190,21 +192,22 @@ impl Task {
         // create tests directory if it doesn't exist and clear it
         if self.tests_path.exists() {
             fs::remove_dir_all(&self.tests_path)
-                .map_err(|err| Error::IOError { err, file: self.tests_path.to_string_lossy().into_owned() })?;
+                .map_err(|err| Error::IOError { err, file: path_str(&self.tests_path) })?;
         }
         fs::create_dir_all(&self.tests_path)
-            .map_err(|err| Error::IOError { err, file: self.tests_path.to_string_lossy().into_owned() })?;
+            .map_err(|err| Error::IOError { err, file: path_str(&self.tests_path) })?;
 
-        self.print_progress(1,5, "Generating tests");
+        const TOTAL_STEPS: i32 = 5;
+        self.print_progress(1, TOTAL_STEPS, "Generating tests");
         let test_files = self.generate_tests()?;
-        self.print_progress(2,5, "Checking generated tests");
+        self.print_progress(2, TOTAL_STEPS, "Checking generated tests");
         self.check_tests()?;
-        self.print_progress(3,5, "Generating test solutions");
+        self.print_progress(3, TOTAL_STEPS, "Generating test solutions");
         self.generate_test_solutions(&test_files, &mut cpp_runner, solution_handle)?;
-        self.print_progress(4,5, "Checking partial solutions");
+        self.print_progress(4, TOTAL_STEPS, "Checking partial solutions");
         self.check_partial_solutions(&test_files, &mut cpp_runner, &partial_solution_handles)?;
 
-        self.print_progress(5,5, "Archiving tests");
+        self.print_progress(5, TOTAL_STEPS, "Archiving tests");
         self.archive_tests(&test_files)?;
 
         let tests_size = fs_extra::dir::get_size(&self.tests_path).unwrap_or(0) as f32 / 1_000_000.0;
