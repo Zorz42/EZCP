@@ -140,8 +140,13 @@ impl Gcc {
             std::fs::File::create(&output_file).map_err(|err| Error::IOError { err, file: output_file.to_string_lossy().to_string() })?;
         }
 
-        // convert to absolute path
-        let output_file = output_file.canonicalize().map_err(|err| Error::IOError { err, file: output_file.to_string_lossy().to_string() })?;
+        // convert to absolute path; use dunce to normalize UNC on Windows
+        let output_file = {
+            #[cfg(windows)]
+            { dunce::canonicalize(&output_file) }
+            #[cfg(unix)]
+            { std::fs::canonicalize(&output_file) }
+        }.map_err(|err| Error::IOError { err, file: output_file.to_string_lossy().to_string() })?;
 
 
         if !output_existed {
@@ -154,8 +159,13 @@ impl Gcc {
     /// Calls `gcc` to compile the source file.
     /// If `output_file` is None, it will use the source file name with an appropriate extension.
     pub fn compile(&self, source_file: &Path, output_file: Option<&PathBuf>) -> Result<PathBuf> {
-        // transform the path to absolute path
-        let source_file = source_file.canonicalize().map_err(|err| Error::IOError { err, file: source_file.to_string_lossy().to_string() })?;
+        // transform the path to absolute path; use dunce on Windows to avoid UNC (\\?\) paths
+        let source_file = {
+            #[cfg(windows)]
+            { dunce::canonicalize(source_file) }
+            #[cfg(unix)]
+            { std::fs::canonicalize(source_file) }
+        }.map_err(|err| Error::IOError { err, file: source_file.to_string_lossy().to_string() })?;
 
         let output_file = Self::transform_output_file(&source_file, output_file)?;
 
@@ -175,9 +185,7 @@ impl Gcc {
         }
 
         command.arg(source_file).arg("-o").arg(&output_file);
-        if let Some(parent) = self.path.parent() {
-            command.current_dir(parent);
-        }
+        // Do not override current_dir; pass absolute paths instead
 
         debug!("Running command: {command:?}");
         let process = command.output().map_err(|err| Error::IOError { err, file: String::new() })?;
