@@ -1,0 +1,56 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+
+      - name: Install dependencies
+        run: sudo apt-get update && sudo apt-get install -y g++
+
+      - name: Cargo test
+        run: cargo test --all --verbose
+
+  test-windows:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install MSYS2 with mingw64 toolchain
+        uses: msys2/setup-msys2@v2
+        with:
+          release: false
+          update: true
+          install: >
+            base-devel
+            mingw-w64-x86_64-toolchain
+          msystem: MINGW64
+
+      - name: Set GCC_PATH
+        shell: powershell
+        run: echo "GCC_PATH=C:\msys64\mingw64\bin\g++.exe" >> $env:GITHUB_ENV
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+
+      - name: Cargo test (MINGW64 shell)
+        shell: msys2 {0}
+        run: cargo test --all --verbose
+
+
