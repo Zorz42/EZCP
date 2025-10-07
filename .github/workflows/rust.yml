@@ -41,16 +41,24 @@ jobs:
      runs-on: windows-latest
      
      steps:
-     - uses: actions/checkout@v3
-     - name: Install MinGW (standalone)
-       uses: egor-tensin/setup-mingw@v2
-       with:
-         platform: x64
-     - name: Install Rust
-       uses: dtolnay/rust-toolchain@stable
-       with:
-         toolchain: stable
-     - name: Rust Cache
-       uses: Swatinem/rust-cache@v2.7.3
-     - name: Run tests
-       run: cargo test --verbose
+      - uses: actions/checkout@v3
+      - name: Install MSYS2 with mingw64 toolchain
+        uses: msys2/setup-msys2@v2
+        with:
+          release: false
+          update: true
+          install: >
+            base-devel
+            mingw-w64-x86_64-toolchain
+          msystem: MINGW64
+      - name: Set GCC_PATH
+        shell: powershell
+        run: echo "GCC_PATH=C:\msys64\mingw64\bin\g++.exe" >> $env:GITHUB_ENV
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+      - name: Rust Cache
+        uses: Swatinem/rust-cache@v2.7.3
+      - name: Run tests
+        run: cargo test --verbose
