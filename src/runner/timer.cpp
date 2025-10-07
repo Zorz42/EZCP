@@ -34,10 +34,15 @@ int main(int argc, const char* argv[]) {
 
     // Convert command to wide string for Windows (needed for CreateProcessW)
     wstring wcommand(command.begin(), command.end());
+    // Quote the command path in case it contains spaces and build a mutable buffer
+    wstring quoted = L"\"" + wcommand + L"\"";
+    // CreateProcessW requires a modifiable buffer for the command line
+    vector<wchar_t> cmdline(quoted.begin(), quoted.end());
+    cmdline.push_back(L'\0');
 
     // Use CreateProcessW (wide character version)
     if (!CreateProcessW(
-            NULL, wcommand.data(), NULL, NULL, TRUE, CREATE_NO_WINDOW, NULL, NULL, &si, &pi)) {
+            NULL, cmdline.data(), NULL, NULL, TRUE, CREATE_NO_WINDOW, NULL, NULL, &si, &pi)) {
         return -1;  // Error in creating process
     }
 
