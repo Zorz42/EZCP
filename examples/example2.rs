@@ -33,23 +33,13 @@ fn main() {
     // In this task you have n coins with values a1, a2, ..., an. You need to find the smallest sum, you cannot get using these coins.
     // For example, if you have coins with values 1, 2 and 4, you can get any sum from 1 to 7, but you cannot get 8.
 
-    let mut task = ezcp::Task::new("Coins", &PathBuf::from("task2"));
-    task.solution_source = SOLUTION.to_owned();
+    let task = ezcp::Task::new("Coins", &PathBuf::from("task2")).with_solution_source(SOLUTION.to_owned());
 
     // Constraint: n = 1
-    let mut subtask1 = ezcp::Subtask::new();
-
-
-
-    subtask1.add_test(5, ezcp::array_generator(1, 1, 1, 1000));
-    subtask1.add_test_str("1\n 1\n".to_owned());
+    let subtask1 = ezcp::Subtask::new().with_test(5, ezcp::array_generator(1, 1, 1, 1000)).with_test_str("1\n 1\n");
 
     // Constraint: elements in the array are powers of 2 and n <= 30
-    let mut subtask2 = ezcp::Subtask::new();
-
-
-
-    subtask2.add_test(5, || {
+    let subtask2 = ezcp::Subtask::new().with_test(5, || {
         let mut rng = rand::rng();
         let n = rng.random_range(1..=30);
         let mut array = Vec::new();
@@ -60,37 +50,23 @@ fn main() {
     });
 
     // Constraint: n <= 1000
-    let mut subtask3 = ezcp::Subtask::new();
-
-
-
-    subtask3.add_test(5, ezcp::array_generator(1, 1000, 1, 1000));
-    subtask3.add_test(5, ezcp::array_generator(1, 1000, 1, 1_000_000_000));
-    subtask3.add_test(5, ezcp::array_generator(1, 1000, 1, 1));
-    subtask3.add_test(5, ezcp::array_generator(1000, 1000, 1, 1000));
-    subtask3.add_test(5, ezcp::array_generator(1000, 1000, 1, 1_000_000_000));
-    subtask3.add_test(1, ezcp::array_generator(1000, 1000, 1, 1));
+    let subtask3 = ezcp::Subtask::new()
+        .with_test(5, ezcp::array_generator(1, 1000, 1, 1000))
+        .with_test(5, ezcp::array_generator(1, 1000, 1, 1_000_000_000))
+        .with_test(5, ezcp::array_generator(1, 1000, 1, 1))
+        .with_test(5, ezcp::array_generator(1000, 1000, 1, 1000))
+        .with_test(5, ezcp::array_generator(1000, 1000, 1, 1_000_000_000))
+        .with_test(1, ezcp::array_generator(1000, 1000, 1, 1));
 
     // Constraint: n <= 200_000
-    let mut subtask4 = ezcp::Subtask::new();
-
-
-
-    subtask4.add_test(5, ezcp::array_generator(1, 200_000, 1, 1000));
-    subtask4.add_test(5, ezcp::array_generator(1, 200_000, 1, 1_000_000_000));
-    subtask4.add_test(5, ezcp::array_generator(1, 200_000, 1, 1));
-    subtask4.add_test(5, ezcp::array_generator(200_000, 200_000, 1, 1000));
-    subtask4.add_test(5, ezcp::array_generator(200_000, 200_000, 1, 1_000_000_000));
-    subtask4.add_test(1, ezcp::array_generator(200_000, 200_000, 1, 1));
+    let subtask4 = ezcp::Subtask::new()
+        .with_test(5, ezcp::array_generator(1, 200_000, 1, 1000))
+        .with_test(5, ezcp::array_generator(1, 200_000, 1, 1_000_000_000))
+        .with_test(5, ezcp::array_generator(1, 200_000, 1, 1))
+        .with_test(5, ezcp::array_generator(200_000, 200_000, 1, 1000))
+        .with_test(5, ezcp::array_generator(200_000, 200_000, 1, 1_000_000_000))
+        .with_test(1, ezcp::array_generator(200_000, 200_000, 1, 1));
 
     // add subtasks to task
-    let _ = task.add_subtask(subtask1);
-    let _ = task.add_subtask(subtask2);
-    let _ = task.add_subtask(subtask3);
-    let _ = task.add_subtask(subtask4);
-
-    // add dependencies
-
-
-    task.create_tests().ok();
+    task.with_subtask(subtask1).with_subtask(subtask2).with_subtask(subtask3).with_subtask(subtask4).run().ok();
 }

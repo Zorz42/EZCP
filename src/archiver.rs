@@ -1,9 +1,9 @@
-use std::io::Write;
-use std::path::{Path, PathBuf};
-use indicatif::{MultiProgress, ProgressBar};
-use zip::write::SimpleFileOptions;
 use crate::Error;
 use crate::Result;
+use indicatif::{MultiProgress, ProgressBar};
+use std::io::Write;
+use std::path::{Path, PathBuf};
+use zip::write::SimpleFileOptions;
 
 pub fn archive_files(files: &[PathBuf], archive_path: &Path, logger: &MultiProgress) -> Result<()> {
     let mut zipper = zip::ZipWriter::new(std::fs::File::create(archive_path).map_err(|err| Error::IOError { err, file: String::new() })?);
@@ -22,6 +22,6 @@ pub fn archive_files(files: &[PathBuf], archive_path: &Path, logger: &MultiProgr
     }
 
     logger.remove(&progress_bar);
-    
+
     Ok(())
 }

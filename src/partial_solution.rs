@@ -1,13 +1,13 @@
+use crate::runner::cpp_runner::{CppRunner, ProgramHandle};
+use crate::runner::exec_runner::RunResult;
+use crate::{Error, Result};
+use console::style;
+use indicatif::MultiProgress;
+use log::info;
 use std::collections::{BTreeMap, HashSet};
 use std::fmt::Display;
 use std::fs;
 use std::path::PathBuf;
-use console::style;
-use indicatif::MultiProgress;
-use log::info;
-use crate::{Error, Result};
-use crate::runner::cpp_runner::{CppRunner, ProgramHandle};
-use crate::runner::exec_runner::RunResult;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 enum TestResult {
@@ -45,12 +45,14 @@ impl TestResult {
 pub fn run_partial_solution(test_files: &[Vec<(PathBuf, PathBuf)>], cpp_runner: &mut CppRunner, program_handle: ProgramHandle, logger: &MultiProgress, time_limit: f32) -> Result<HashSet<usize>> {
     let mut test_handles = Vec::new();
     let mut passed_subtasks = HashSet::new();
-    
+
     for subtask_tests in test_files {
         let mut test_handles_element = Vec::new();
         for (input_file, output_file) in subtask_tests {
-            let input_data = fs::read_to_string(input_file)
-                .map_err(|err| Error::IOError { err, file: input_file.to_str().unwrap_or("???").to_owned() })?;
+            let input_data = fs::read_to_string(input_file).map_err(|err| Error::IOError {
+                err,
+                file: input_file.to_str().unwrap_or("???").to_owned(),
+            })?;
             let handle = cpp_runner.add_task(program_handle, input_data, time_limit);
 
             test_handles_element.push((handle, output_file.clone()));
@@ -75,8 +77,10 @@ pub fn run_partial_solution(test_files: &[Vec<(PathBuf, PathBuf)>], cpp_runner: 
                         max_time = Some(i32::max(max_time.unwrap(), time));
                     }
 
-                    let correct_output = fs::read_to_string(output_file)
-                        .map_err(|err| Error::IOError { err, file: output_file.to_str().unwrap_or("???").to_owned() })?;
+                    let correct_output = fs::read_to_string(output_file).map_err(|err| Error::IOError {
+                        err,
+                        file: output_file.to_str().unwrap_or("???").to_owned(),
+                    })?;
                     if !are_outputs_equal(&correct_output, &program_output) {
                         test_result = TestResult::WrongAnswer;
                     }
@@ -88,10 +92,7 @@ pub fn run_partial_solution(test_files: &[Vec<(PathBuf, PathBuf)>], cpp_runner: 
 
             // increment the count for the result
             // keys are strings, because enum has time in the Ok variant
-            results
-                .entry(test_result)
-                .and_modify(|count| *count += 1)
-                .or_insert(1);
+            results.entry(test_result).and_modify(|count| *count += 1).or_insert(1);
         }
 
         results_text += "\n";
@@ -110,7 +111,7 @@ pub fn run_partial_solution(test_files: &[Vec<(PathBuf, PathBuf)>], cpp_runner: 
     }
 
     info!("Results: {results_text}");
-    
+
     Ok(passed_subtasks)
 }
 

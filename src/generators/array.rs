@@ -1,6 +1,6 @@
+use rand::Rng;
 use rand::prelude::ThreadRng;
 use std::fmt::Write;
-use rand::Rng;
 
 /// This function converts an array of integers to a string.
 ///
@@ -17,7 +17,7 @@ pub fn array_to_string(array: &Vec<i32>, include_count: bool) -> String {
     for i in array {
         write!(result, "{i} ").ok();
     }
-    
+
     result.push('\n');
     result
 }

@@ -1,6 +1,6 @@
 use crate::Input;
-use rand::prelude::SliceRandom;
 use rand::Rng;
+use rand::prelude::SliceRandom;
 use std::collections::HashSet;
 use std::fmt::Write;
 

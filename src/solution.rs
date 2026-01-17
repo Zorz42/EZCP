@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 
 /// A solution (main or partial) that will be tested against generated tests.
-/// 
+///
 /// Each solution specifies which subtasks it is expected to pass.
 /// During test generation, the system will generate tests until each
 /// solution that is not expected to pass a subtask has failed on at least
@@ -15,6 +15,7 @@ pub struct Solution {
 
 impl Solution {
     /// Create a new solution with the given source code and expected passing subtasks.
+    #[must_use]
     pub fn new(source: String, passes_subtasks: &[usize]) -> Self {
         Self {
             source,
@@ -23,8 +24,8 @@ impl Solution {
     }
 
     /// Check if this solution should be expected to fail on a given subtask.
+    #[must_use]
     pub fn should_fail(&self, subtask: usize) -> bool {
         !self.passes_subtasks.contains(&subtask)
     }
 }
-

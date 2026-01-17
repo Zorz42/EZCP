@@ -12,41 +12,22 @@ env:
 
 
 jobs:
-   test_linux:
+  test_linux:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+    - run: rustup toolchain install stable --profile minimal
+    - name: Rust Cache
+      uses: Swatinem/rust-cache@v2.7.3
+    - name: Run tests
+      run: cargo test --verbose
 
-     runs-on: ubuntu-latest
-
-     steps:
-     - uses: actions/checkout@v3
-     - run: rustup toolchain install stable --profile minimal
-     - name: Rust Cache
-       uses: Swatinem/rust-cache@v2.7.3
-     - name: Run tests
-       run: cargo test --verbose
-       
-   test_macos:
-     
-     runs-on: macos-latest
-     
-     steps:
-       - uses: actions/checkout@v3
-       - run: rustup toolchain install stable --profile minimal
-       - name: Rust Cache
-         uses: Swatinem/rust-cache@v2.7.3
-       - name: Run tests
-         run: cargo test --verbose
-       
-   test_windows:
-     
-     runs-on: windows-latest
-     
-     steps:
-       - uses: actions/checkout@v3
-       - uses: egor-tensin/setup-mingw@v2
-         with:
-           version: 12.2.0
-       - run: rustup toolchain install stable --profile minimal
-       - name: Rust Cache
-         uses: Swatinem/rust-cache@v2.7.3
-       - name: Run tests
-         run: cargo test --verbose
+  test_macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v3
+      - run: rustup toolchain install stable --profile minimal
+      - name: Rust Cache
+        uses: Swatinem/rust-cache@v2.7.3
+      - name: Run tests
+        run: cargo test --verbose

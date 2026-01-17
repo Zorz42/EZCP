@@ -35,8 +35,10 @@ pub enum Error {
     #[error("Expected {n} integers")]
     ExpectedIntegers { n: i32 },
 
-    #[error("C++ compiler is not found. Make sure to install it first. If it is already installed, \
-    specify the path to compiler with the GCC_PATH environment variable.")]
+    #[error(
+        "C++ compiler is not found. Make sure to install it first. If it is already installed, \
+    specify the path to compiler with the GCC_PATH environment variable."
+    )]
     CompilerNotFound,
 
     #[error("Compiler error: {stderr}\n{stdout}")]
@@ -55,7 +57,7 @@ pub enum Error {
     PartialSolutionFailsSubtask { subtask_number: usize, partial_number: usize },
 
     #[error("Missing solution")]
-    MissingSolution { },
+    MissingSolution {},
 }
 
 pub type Result<T, E = Error> = std::result::Result<T, E>;

@@ -1,14 +1,14 @@
+use crate::Error::IOError;
+use crate::Result;
+use crate::runner::exec_runner::{RunResult, run_solution};
+use crate::runner::gcc::{Gcc, GccOptimization, GccStandard};
+use indicatif::{MultiProgress, ProgressBar};
+use log::{debug, trace};
 use std::collections::{HashMap, HashSet};
 use std::hash::{DefaultHasher, Hash, Hasher};
 use std::path::{Path, PathBuf};
 use std::thread::spawn;
 use std::time::Duration;
-use indicatif::{MultiProgress, ProgressBar};
-use log::{debug, trace};
-use crate::runner::gcc::{Gcc, GccOptimization, GccStandard};
-use crate::Result;
-use crate::Error::IOError;
-use crate::runner::exec_runner::{run_solution, RunResult};
 
 #[derive(Clone, Copy)]
 pub struct ProgramHandle {
@@ -50,14 +50,18 @@ impl CppRunner {
         trace!("Creating CppRunner with build folder: {}", build_folder.to_string_lossy());
         if !build_folder.exists() {
             trace!("Build folder does not exist, creating: {}", build_folder.to_string_lossy());
-            std::fs::create_dir_all(build_folder)
-                .map_err(|err| IOError { err, file: build_folder.to_string_lossy().to_string() })?;
+            std::fs::create_dir_all(build_folder).map_err(|err| IOError {
+                err,
+                file: build_folder.to_string_lossy().to_string(),
+            })?;
         }
         let mut gcc = Gcc::new()?;
         gcc.standard = Some(GccStandard::Cpp17);
         gcc.optimization = Some(GccOptimization::Level2);
-        let build_folder = build_folder.canonicalize()
-            .map_err(|err| IOError { err, file: build_folder.to_string_lossy().to_string() })?;
+        let build_folder = build_folder.canonicalize().map_err(|err| IOError {
+            err,
+            file: build_folder.to_string_lossy().to_string(),
+        })?;
         let mut res = Self {
             gcc,
             build_folder,
@@ -100,20 +104,18 @@ impl CppRunner {
 
         if !source_file.exists() {
             trace!("Source file does not exist, writing to: {}", source_file.to_string_lossy());
-            std::fs::write(&source_file, source_code)
-                .map_err(|err| IOError { err, file: source_file.to_string_lossy().to_string() })?;
+            std::fs::write(&source_file, source_code).map_err(|err| IOError {
+                err,
+                file: source_file.to_string_lossy().to_string(),
+            })?;
         }
-        
+
         if !executable_file.exists() {
             trace!("Executable file does not exist. Compiling: {}", executable_file.to_string_lossy());
             let compiled_executable = self.gcc.compile(&source_file, Some(&executable_file))?;
 
             // this should never happen, but just in case
-            debug_assert_eq!(
-                compiled_executable,
-                executable_file,
-                "GCC returned a different executable file than expected",
-            );
+            debug_assert_eq!(compiled_executable, executable_file, "GCC returned a different executable file than expected",);
         }
 
         self.programs.push(executable_file);
@@ -146,14 +148,23 @@ impl CppRunner {
         trace!("Cleaning build folder: {}", self.build_folder.to_string_lossy());
 
         // Get all files in the build folder
-        let entries = std::fs::read_dir(&self.build_folder).map_err(|err| IOError { err, file: self.build_folder.to_string_lossy().to_string() })?;
+        let entries = std::fs::read_dir(&self.build_folder).map_err(|err| IOError {
+            err,
+            file: self.build_folder.to_string_lossy().to_string(),
+        })?;
         for entry in entries {
-            let entry = entry.map_err(|err| IOError { err, file: self.build_folder.to_string_lossy().to_string() })?;
+            let entry = entry.map_err(|err| IOError {
+                err,
+                file: self.build_folder.to_string_lossy().to_string(),
+            })?;
             let path = entry.path();
             // If the file is not in the necessary files set, delete it
             if !self.necessary_files.contains(&path) {
                 debug!("Removing unnecessary file: {}", path.to_string_lossy());
-                std::fs::remove_file(&path).map_err(|err| IOError { err, file: path.to_string_lossy().to_string() })?;
+                std::fs::remove_file(&path).map_err(|err| IOError {
+                    err,
+                    file: path.to_string_lossy().to_string(),
+                })?;
             }
         }
         Ok(())

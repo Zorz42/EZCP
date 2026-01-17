@@ -12,16 +12,14 @@ pub mod generic_tests {
 
     impl Test {
         pub fn new() -> Self {
-            let task_path = TempDir::new().expect("Failed to create temporary directory");
+            let task_path = TempDir::new().unwrap();
             let mut task = Task::new("Test task", task_path.path());
             task.debug_level = LevelFilter::Trace;
-            Test { task, task_path }
+            Self { task, task_path }
         }
 
-        pub fn test(mut self) {
-            for _ in 0..10 {
-                self.task.create_tests().unwrap();
-            }
+        pub fn test(self) {
+            self.task.run().unwrap();
             // Clean up the temporary directory
             drop(self.task_path);
         }
@@ -33,9 +31,9 @@ pub mod generic_tests {
 
         // create solution file
         let solution_contents = "int main() { return 0; }";
-        task.task.solution_source = solution_contents.to_owned();
+        task.task = task.task.with_solution_source(solution_contents.to_owned());
 
-        task.test()
+        task.test();
     }
 
     #[test]
@@ -54,18 +52,16 @@ pub mod generic_tests {
         
         "#;
 
-        task.task.solution_source = solution_contents.to_owned();
+        task.task = task.task.with_solution_source(solution_contents.to_owned());
 
         let subtask1 = Subtask::new();
         let subtask2 = Subtask::new();
         let subtask3 = Subtask::new();
 
         // create subtasks
-        task.task.add_subtask(subtask1);
-        task.task.add_subtask(subtask2);
-        task.task.add_subtask(subtask3);
+        task.task = task.task.with_subtask(subtask1).with_subtask(subtask2).with_subtask(subtask3);
 
-        task.test()
+        task.test();
     }
 
     #[test]
@@ -84,36 +80,23 @@ pub mod generic_tests {
         
         "#;
 
-        task.task.solution_source = solution_contents.to_owned();
+        task.task = task.task.with_solution_source(solution_contents.to_owned());
 
-        let mut subtask1 = Subtask::new();
-        subtask1.add_test_str("1\n");
-        subtask1.add_test_str("2\n");
-        subtask1.add_test_str("3\n");
-        let mut subtask2 = Subtask::new();
-        subtask2.add_test_str("1\n");
-        subtask2.add_test_str("2\n");
-        subtask2.add_test_str("3\n");
-        let mut subtask3 = Subtask::new();
-        subtask3.add_test_str("1\n");
-        subtask3.add_test_str("2\n");
+        let subtask1 = Subtask::new().with_test_str("1\n").with_test_str("2\n").with_test_str("3\n");
+        let subtask2 = Subtask::new().with_test_str("1\n").with_test_str("2\n").with_test_str("3\n");
+        let subtask3 = Subtask::new().with_test_str("1\n").with_test_str("2\n");
 
         // create subtasks
-        task.task.add_subtask(subtask1);
-        task.task.add_subtask(subtask2);
-        task.task.add_subtask(subtask3);
+        task.task = task.task.with_subtask(subtask1).with_subtask(subtask2).with_subtask(subtask3);
 
-        task.test()
+        task.test();
     }
 
     #[test]
     fn test_fails_without_solution() {
-        let mut task = Test::new();
+        let task = Test::new();
 
-        for _ in 0..10 {
-            assert!(matches!(task.task.create_tests(), Err(Error::MissingSolution { .. })));
-            assert!(matches!(task.task.create_tests(), Err(Error::MissingSolution { .. })));
-        }
+        assert!(matches!(task.task.run(), Err(Error::MissingSolution { .. })));
     }
 
     #[test]
@@ -138,17 +121,14 @@ pub mod generic_tests {
         }
         "#;
 
-        task.task.solution_source = solution_contents.to_owned();
+        task.task = task.task.with_solution_source(solution_contents.to_owned());
 
-        let mut subtask1 = Subtask::new();
-        subtask1.add_test_str("1\n");
+        let subtask1 = Subtask::new().with_test_str("1\n");
 
         // create subtasks
-        task.task.add_subtask(subtask1);
+        task.task = task.task.with_subtask(subtask1);
 
-        for _ in 0..3 {
-            assert!(matches!(task.task.create_tests(), Err(Error::SolutionTimedOut { .. })));
-        }
+        assert!(matches!(task.task.run(), Err(Error::SolutionTimedOut { .. })));
     }
 
     #[test]
@@ -163,17 +143,14 @@ pub mod generic_tests {
         }
         ";
 
-        task.task.solution_source = solution_contents.to_owned();
+        task.task = task.task.with_solution_source(solution_contents.to_owned());
 
-        let mut subtask1 = Subtask::new();
-        subtask1.add_test_str("1\n");
+        let subtask1 = Subtask::new().with_test_str("1\n");
 
         // create subtasks
-        task.task.add_subtask(subtask1);
+        task.task = task.task.with_subtask(subtask1);
 
-        for _ in 0..10 {
-            assert!(matches!(task.task.create_tests(), Err(Error::CompilerError { .. })));
-        }
+        assert!(matches!(task.task.run(), Err(Error::CompilerError { .. })));
     }
 
     #[test]
@@ -194,26 +171,16 @@ pub mod generic_tests {
         }
         "#;
 
-        task.task.solution_source = solution_contents.to_owned();
+        task.task = task.task.with_solution_source(solution_contents.to_owned());
 
-        let mut subtask1 = Subtask::new();
-        subtask1.add_test_str("1\n");
-        subtask1.add_test_str("2\n");
-        subtask1.add_test_str("3\n");
-        let mut subtask2 = Subtask::new();
-        subtask2.add_test_str("1\n");
-        subtask2.add_test_str("2\n");
-        subtask2.add_test_str("3\n");
-        let mut subtask3 = Subtask::new();
-        subtask3.add_test_str("1\n");
-        subtask3.add_test_str("2\n");
+        let subtask1 = Subtask::new().with_test_str("1\n").with_test_str("2\n").with_test_str("3\n");
+        let subtask2 = Subtask::new().with_test_str("1\n").with_test_str("2\n").with_test_str("3\n");
+        let subtask3 = Subtask::new().with_test_str("1\n").with_test_str("2\n");
 
         // create subtasks
-        task.task.add_subtask(subtask1);
-        task.task.add_subtask(subtask2);
-        task.task.add_subtask(subtask3);
+        task.task = task.task.with_subtask(subtask1).with_subtask(subtask2).with_subtask(subtask3);
 
-        task.test()
+        task.test();
     }
 
     #[test]
@@ -235,26 +202,16 @@ pub mod generic_tests {
         
         "#;
 
-        task.task.solution_source = solution_contents.to_owned();
+        task.task = task.task.with_solution_source(solution_contents.to_owned());
 
-        let mut subtask1 = Subtask::new();
-        subtask1.add_test_str("1\n");
-        subtask1.add_test_str("2\n");
-        subtask1.add_test_str("3\n");
-        let mut subtask2 = Subtask::new();
-        subtask2.add_test_str("1\n");
-        subtask2.add_test_str("2\n");
-        subtask2.add_test_str("3\n");
-        let mut subtask3 = Subtask::new();
-        subtask3.add_test_str("1\n");
-        subtask3.add_test_str("2\n");
+        let subtask1 = Subtask::new().with_test_str("1\n").with_test_str("2\n").with_test_str("3\n");
+        let subtask2 = Subtask::new().with_test_str("1\n").with_test_str("2\n").with_test_str("3\n");
+        let subtask3 = Subtask::new().with_test_str("1\n").with_test_str("2\n");
 
         // create subtasks
-        task.task.add_subtask(subtask1);
-        task.task.add_subtask(subtask2);
-        task.task.add_subtask(subtask3);
+        task.task = task.task.with_subtask(subtask1).with_subtask(subtask2).with_subtask(subtask3);
 
-        task.test()
+        task.test();
     }
 
     #[test]
@@ -276,26 +233,15 @@ pub mod generic_tests {
         
         "#;
 
-        task.task.solution_source = solution_contents.to_owned();
+        task.task = task.task.with_solution_source(solution_contents.to_owned());
 
-        let mut subtask1 = Subtask::new();
-        subtask1.add_test_str("1\n");
-        subtask1.add_test_str("2\n");
-        subtask1.add_test_str("3\n");
-        let mut subtask2 = Subtask::new();
-        subtask2.add_test_str("1\n");
-        subtask2.add_test_str("2\n");
-        subtask2.add_test_str("3\n");
-        let mut subtask3 = Subtask::new();
-        subtask3.add_test_str("1\n");
-        subtask3.add_test_str("2\n");
+        let subtask1 = Subtask::new().with_test_str("1\n").with_test_str("2\n").with_test_str("3\n");
+        let subtask2 = Subtask::new().with_test_str("1\n").with_test_str("2\n").with_test_str("3\n");
+        let subtask3 = Subtask::new().with_test_str("1\n").with_test_str("2\n");
 
         // create subtasks
-        task.task.add_subtask(subtask1);
-        task.task.add_subtask(subtask2);
-        task.task.add_subtask(subtask3);
+        task.task = task.task.with_subtask(subtask1).with_subtask(subtask2).with_subtask(subtask3);
 
-        task.test()
+        task.test();
     }
-
 }

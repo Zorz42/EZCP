@@ -27,7 +27,7 @@ mod partial_solution_tests {
         }
         "#;
 
-        task.task.solution_source = solution_contents.to_owned();
+        task.task = task.task.with_solution_source(solution_contents.to_owned());
 
         // create partial solution file (it overflows)
         let partial_solution_contents = r#"
@@ -49,26 +49,20 @@ mod partial_solution_tests {
         "#;
 
         // subtask 1, the sum is less than 10^6
-        let mut subtask1 = crate::Subtask::new();
-
-        subtask1.add_test(5, array_generator(1, 100, 1, 100));
+        let subtask1 = crate::Subtask::new().with_test(5, array_generator(1, 100, 1, 100));
 
         // subtask 2, the sum is less than 10^18
-
-        let mut subtask2 = crate::Subtask::new();
-        subtask2.add_test(5, array_generator(1, 100, 1, 1_000_000_000));
+        let subtask2 = crate::Subtask::new().with_test(5, array_generator(1, 100, 1, 1_000_000_000));
 
         // create subtasks
-        let subtask1 = task.task.add_subtask(subtask1);
-        let subtask2 = task.task.add_subtask(subtask2);
+        task.task = task
+            .task
+            .with_subtask(subtask1)
+            .with_subtask(subtask2)
+            // add partial solutions
+            .with_solution(partial_solution_contents.to_owned(), &[0]);
 
-        // add dependencies
-
-
-        // add partial solutions
-        task.task.add_partial_solution(partial_solution_contents.to_owned(), &[subtask1]);
-
-        task.test()
+        task.test();
     }
 
     #[test]
@@ -94,7 +88,7 @@ mod partial_solution_tests {
         }
         "#;
 
-        task.task.solution_source = solution_contents.to_owned();
+        task.task = task.task.with_solution_source(solution_contents.to_owned());
 
         // create partial solution file (it overflows)
         let partial_solution_contents = r#"
@@ -116,28 +110,20 @@ mod partial_solution_tests {
         "#;
 
         // subtask 1, the sum is less than 10^6
-        let mut subtask1 = crate::Subtask::new();
-
-        subtask1.add_test(5, array_generator(1, 100, 1, 100));
+        let subtask1 = crate::Subtask::new().with_test(5, array_generator(1, 100, 1, 100));
 
         // subtask 2, the sum is less than 10^18
-
-        let mut subtask2 = crate::Subtask::new();
-        subtask2.add_test(5, array_generator(1, 100, 1, 1_000_000_000));
+        let subtask2 = crate::Subtask::new().with_test(5, array_generator(1, 100, 1, 1_000_000_000));
 
         // create subtasks
-        let subtask1 = task.task.add_subtask(subtask1);
-        let subtask2 = task.task.add_subtask(subtask2);
+        task.task = task
+            .task
+            .with_subtask(subtask1)
+            .with_subtask(subtask2)
+            // add partial solutions - intentionally wrong expected subtask
+            .with_solution(partial_solution_contents.to_owned(), &[1]);
 
-        // add dependencies
-
-
-        // add partial solutions
-        task.task.add_partial_solution(partial_solution_contents.to_owned(), &[subtask2]);
-
-        for _ in 0..10 {
-            assert!(!task.task.create_tests().is_ok());
-        }
+        assert!(task.task.run().is_err());
     }
 
     #[test]
@@ -163,7 +149,7 @@ mod partial_solution_tests {
         }
         "#;
 
-        task.task.solution_source = solution_contents.to_owned();
+        task.task = task.task.with_solution_source(solution_contents.to_owned());
 
         // create partial solution file (it overflows)
         let partial_solution_contents = r#"
@@ -185,28 +171,20 @@ mod partial_solution_tests {
         "#;
 
         // subtask 1, the sum is less than 10^6
-        let mut subtask1 = crate::Subtask::new();
-
-        subtask1.add_test(5, array_generator(1, 100, 1, 100));
+        let subtask1 = crate::Subtask::new().with_test(5, array_generator(1, 100, 1, 100));
 
         // subtask 2, the sum is less than 10^18
-
-        let mut subtask2 = crate::Subtask::new();
-        subtask2.add_test(5, array_generator(1, 100, 1, 1_000_000_000));
+        let subtask2 = crate::Subtask::new().with_test(5, array_generator(1, 100, 1, 1_000_000_000));
 
         // create subtasks
-        let subtask1 = task.task.add_subtask(subtask1);
-        let subtask2 = task.task.add_subtask(subtask2);
+        task.task = task
+            .task
+            .with_subtask(subtask1)
+            .with_subtask(subtask2)
+            // add partial solutions
+            .with_solution(partial_solution_contents.to_owned(), &[0]);
 
-        // add dependencies
-
-
-        // add partial solutions
-        task.task.add_partial_solution(partial_solution_contents.to_owned(), &[subtask1]);
-
-        for _ in 0..10 {
-            assert!(!task.task.create_tests().is_ok());
-        }
+        assert!(task.task.run().is_err());
     }
 
     #[test]
@@ -232,7 +210,7 @@ mod partial_solution_tests {
         }
         "#;
 
-        task.task.solution_source = solution_contents.to_owned();
+        task.task = task.task.with_solution_source(solution_contents.to_owned());
 
         // create partial solution file (it overflows)
         let partial_solution_contents = r#"
@@ -255,26 +233,20 @@ mod partial_solution_tests {
         "#;
 
         // subtask 1, the sum is less than 10^6
-        let mut subtask1 = crate::Subtask::new();
-
-        subtask1.add_test(5, array_generator(1, 100, 1, 100));
+        let subtask1 = crate::Subtask::new().with_test(5, array_generator(1, 100, 1, 100));
 
         // subtask 2, the sum is less than 10^18
-
-        let mut subtask2 = crate::Subtask::new();
-        subtask2.add_test(5, array_generator(1, 100, 1, 1_000_000_000));
+        let subtask2 = crate::Subtask::new().with_test(5, array_generator(1, 100, 1, 1_000_000_000));
 
         // create subtasks
-        let subtask1 = task.task.add_subtask(subtask1);
-        let subtask2 = task.task.add_subtask(subtask2);
+        task.task = task
+            .task
+            .with_subtask(subtask1)
+            .with_subtask(subtask2)
+            // add partial solutions
+            .with_solution(partial_solution_contents.to_owned(), &[0]);
 
-        // add dependencies
-
-
-        // add partial solutions
-        task.task.add_partial_solution(partial_solution_contents.to_owned(), &[subtask1]);
-
-        task.test()
+        task.test();
     }
 
     #[test]
@@ -300,7 +272,7 @@ mod partial_solution_tests {
         }
         "#;
 
-        task.task.solution_source = solution_contents.to_owned();
+        task.task = task.task.with_solution_source(solution_contents.to_owned());
 
         // create partial solution file (it crashes)
         let partial_solution_contents = "
@@ -315,26 +287,20 @@ mod partial_solution_tests {
         ";
 
         // subtask 1, the sum is less than 10^6
-        let mut subtask1 = crate::Subtask::new();
-
-        subtask1.add_test(5, array_generator(1, 100, 1, 100));
+        let subtask1 = crate::Subtask::new().with_test(5, array_generator(1, 100, 1, 100));
 
         // subtask 2, the sum is less than 10^18
-
-        let mut subtask2 = crate::Subtask::new();
-        subtask2.add_test(5, array_generator(1, 100, 1, 1_000_000_000));
+        let subtask2 = crate::Subtask::new().with_test(5, array_generator(1, 100, 1, 1_000_000_000));
 
         // create subtasks
-        let subtask1 = task.task.add_subtask(subtask1);
-        let subtask2 = task.task.add_subtask(subtask2);
+        task.task = task
+            .task
+            .with_subtask(subtask1)
+            .with_subtask(subtask2)
+            // add partial solutions
+            .with_solution(partial_solution_contents.to_owned(), &[]);
 
-        // add dependencies
-
-
-        // add partial solutions
-        task.task.add_partial_solution(partial_solution_contents.to_owned(), &[]);
-
-        task.test()
+        task.test();
     }
 
     #[test]
@@ -360,7 +326,7 @@ mod partial_solution_tests {
         }
         "#;
 
-        task.task.solution_source = solution_contents.to_owned();
+        task.task = task.task.with_solution_source(solution_contents.to_owned());
 
         // create partial solution file (it overflows)
         let partial_solution_contents = r#"
@@ -383,25 +349,19 @@ mod partial_solution_tests {
         "#;
 
         // subtask 1, the sum is less than 10^6
-        let mut subtask1 = crate::Subtask::new();
-
-        subtask1.add_test(5, array_generator(1, 100, 1, 100));
+        let subtask1 = crate::Subtask::new().with_test(5, array_generator(1, 100, 1, 100));
 
         // subtask 2, the sum is less than 10^18
-
-        let mut subtask2 = crate::Subtask::new();
-        subtask2.add_test(5, array_generator(1, 100, 1, 1_000_000_000));
+        let subtask2 = crate::Subtask::new().with_test(5, array_generator(1, 100, 1, 1_000_000_000));
 
         // create subtasks
-        let subtask1 = task.task.add_subtask(subtask1);
-        let subtask2 = task.task.add_subtask(subtask2);
+        task.task = task
+            .task
+            .with_subtask(subtask1)
+            .with_subtask(subtask2)
+            // add partial solutions
+            .with_solution(partial_solution_contents.to_owned(), &[]);
 
-        // add dependencies
-
-
-        // add partial solutions
-        task.task.add_partial_solution(partial_solution_contents.to_owned(), &[]);
-
-        task.test()
+        task.test();
     }
 }

@@ -13,4 +13,3 @@ impl TestGenerator {
         (self.function)()
     }
 }
-

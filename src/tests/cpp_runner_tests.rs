@@ -1,12 +1,12 @@
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 pub mod cpp_runner_tests {
-    use std::time::Instant;
-    use tempfile::TempDir;
     use crate::Error::CompilerError;
     use crate::runner::cpp_runner::CppRunner;
     use crate::runner::exec_runner::RunResult;
     use crate::tests::test_shared::initialize_logger;
+    use std::time::Instant;
+    use tempfile::TempDir;
 
     const HELLO_WORLD_PROGRAM: &str = r#"
     #include <iostream>
@@ -23,7 +23,7 @@ pub mod cpp_runner_tests {
 
         let tempdir = TempDir::new().unwrap();
 
-        let _runner = CppRunner::new(&tempdir.path()).unwrap();
+        let _runner = CppRunner::new(tempdir.path()).unwrap();
 
         drop(tempdir);
     }
@@ -70,13 +70,13 @@ pub mod cpp_runner_tests {
         let mut runner = CppRunner::new(tempdir.path()).unwrap();
 
         let program_handle = runner.add_program(HELLO_WORLD_PROGRAM).unwrap();
-        let task_handle = runner.add_task(program_handle, "".to_owned(), 1.0);
+        let task_handle = runner.add_task(program_handle, String::new(), 1.0);
 
         runner.run_tasks(None).unwrap();
 
         let result = runner.get_result(task_handle);
 
-        assert!(matches!(result, RunResult::Ok( .. )));
+        assert!(matches!(result, RunResult::Ok(..)));
 
         if let RunResult::Ok(_, output) = result {
             assert_eq!(output.trim(), "Hello, World!");
@@ -103,14 +103,15 @@ pub mod cpp_runner_tests {
                 cout << $program_id$ << " " << n << endl;
                 return 0;
             }
-            "#.replace("$program_id$", &format!("{}", program_handles.len()));
+            "#
+            .replace("$program_id$", &format!("{}", program_handles.len()));
             let program_handle = runner.add_program(&code).unwrap();
             program_handles.push(program_handle);
         }
 
         let mut task_handles = Vec::new();
         for i in 0..100 {
-            let input = format!("{}\n", i);
+            let input = format!("{i}\n");
             let task_handle = runner.add_task(program_handles[i % program_handles.len()], input, 1.0);
             task_handles.push(task_handle);
         }
@@ -119,7 +120,7 @@ pub mod cpp_runner_tests {
 
         for (i, task_handle) in task_handles.iter().enumerate() {
             let result = runner.get_result(*task_handle);
-            assert!(matches!(result, RunResult::Ok( .. )));
+            assert!(matches!(result, RunResult::Ok(..)));
 
             if let RunResult::Ok(_, output) = result {
                 assert_eq!(output.trim(), format!("{} {}", i % program_handles.len(), i));
@@ -155,14 +156,14 @@ pub mod cpp_runner_tests {
         let tempdir = TempDir::new().unwrap();
         let mut runner = CppRunner::new(tempdir.path()).unwrap();
 
-        let program_source = r#"
+        let program_source = "
         int main() {
             while (true) {
                 // Infinite loop to simulate TLE
             }
             return 0;
         }
-        "#;
+        ";
 
         let program_handle = runner.add_program(program_source).unwrap();
         let task_handle = runner.add_task(program_handle, "1\n".to_owned(), 1.0);
@@ -184,14 +185,14 @@ pub mod cpp_runner_tests {
         let tempdir = TempDir::new().unwrap();
         let mut runner = CppRunner::new(tempdir.path()).unwrap();
 
-        let program_source = r#"
+        let program_source = "
         #include <signal.h>
         int main() {
             // Force a deterministic crash via SIGSEGV
             raise(SIGSEGV);
             return 0;
         }
-        "#;
+        ";
 
         let program_handle = runner.add_program(program_source).unwrap();
         let task_handle = runner.add_task(program_handle, "1\n".to_owned(), 1.0);
@@ -250,13 +251,13 @@ pub mod cpp_runner_tests {
             let mut runner = CppRunner::new(tempdir.path()).unwrap();
 
             let program_handle = runner.add_program(HELLO_WORLD_PROGRAM).unwrap();
-            let task_handle = runner.add_task(program_handle, "".to_owned(), 1.0);
+            let task_handle = runner.add_task(program_handle, String::new(), 1.0);
 
             runner.run_tasks(None).unwrap();
 
             let result = runner.get_result(task_handle);
 
-            assert!(matches!(result, RunResult::Ok( .. )));
+            assert!(matches!(result, RunResult::Ok(..)));
 
             if let RunResult::Ok(_, output) = result {
                 assert_eq!(output.trim(), "Hello, World!");
@@ -264,7 +265,7 @@ pub mod cpp_runner_tests {
         }
 
         let elapsed = start.elapsed();
-        assert!(elapsed.as_secs() < 10, "Cache pickup took too long: {:?}", elapsed);
+        assert!(elapsed.as_secs() < 10, "Cache pickup took too long: {elapsed:?}");
 
         drop(tempdir);
     }

@@ -7,7 +7,7 @@ pub mod gcc_tests {
     #[test]
     fn test_gcc_new() {
         let gcc = Gcc::new();
-        assert!(gcc.is_ok());
+        gcc.unwrap();
     }
 
     #[test]
@@ -64,7 +64,6 @@ pub mod gcc_tests {
         drop(tempdir);
     }
 
-
     #[test]
     fn test_gcc_compile_output() {
         let gcc = Gcc::new().unwrap();
@@ -81,7 +80,8 @@ pub mod gcc_tests {
             cout << "KEY" << endl;
             return 0;
         }
-        "#.replace("KEY", &key.to_string());
+        "#
+        .replace("KEY", &key.to_string());
 
         let source_path = tempdir.path().join("test.cpp");
         // Write the source code to a file
@@ -92,9 +92,7 @@ pub mod gcc_tests {
         assert!(output_path.exists());
 
         // run the compiled program
-        let output = std::process::Command::new(&output_path)
-            .output()
-            .expect("Failed to execute compiled program");
+        let output = std::process::Command::new(&output_path).output().unwrap();
 
         assert!(output.status.success());
 

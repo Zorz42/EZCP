@@ -17,19 +17,13 @@ impl Input {
     /// This function returns the next integer in the input.
     /// If there is no next integer, it returns an error.
     pub fn get_int(&mut self) -> Result<i32> {
-        self.iter
-            .next()
-            .ok_or(Error::InputExpectedInteger)
-            .and_then(|s| s.parse().map_err(|_err| Error::InputExpectedInteger))
+        self.iter.next().ok_or(Error::InputExpectedInteger).and_then(|s| s.parse().map_err(|_err| Error::InputExpectedInteger))
     }
 
     /// This function returns the next float in the input.
     /// If there is no next float, it returns an error.
     pub fn get_float(&mut self) -> Result<f32> {
-        self.iter
-            .next()
-            .ok_or(Error::InputExpectedFloat)
-            .and_then(|s| s.parse().map_err(|_err| Error::InputExpectedFloat))
+        self.iter.next().ok_or(Error::InputExpectedFloat).and_then(|s| s.parse().map_err(|_err| Error::InputExpectedFloat))
     }
 
     /// This function returns the next string in the input.

@@ -1,9 +1,9 @@
+use crate::Error;
+use crate::Result;
+use log::trace;
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
-use log::trace;
-use crate::Error;
-use crate::Result;
 
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub enum RunResult {

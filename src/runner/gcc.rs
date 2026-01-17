@@ -1,7 +1,7 @@
-use std::path::{Path, PathBuf};
-use log::debug;
-use crate::Error::{CompilerNotFound};
+use crate::Error::CompilerNotFound;
 use crate::{Error, Result};
+use log::debug;
+use std::path::{Path, PathBuf};
 
 fn find_gcc() -> Result<PathBuf> {
     if let Ok(gcc_path) = std::env::var("GCC_PATH") {
@@ -15,12 +15,7 @@ fn find_gcc() -> Result<PathBuf> {
     }
     #[cfg(windows)]
     {
-        let candidates = [
-            "g++",
-            "mingw32-g++",
-            "x86_64-w64-mingw32-g++",
-            "c++",
-        ];
+        let candidates = ["g++", "mingw32-g++", "x86_64-w64-mingw32-g++", "c++"];
 
         for candidate in candidates {
             if let Ok(gcc_path) = which::which(candidate) {
@@ -33,11 +28,9 @@ fn find_gcc() -> Result<PathBuf> {
             "C:\\msys64\\mingw64\\bin",
             "C:\\msys64\\mingw32\\bin",
             "C:\\msys32\\mingw32\\bin",
-
             // MinGW standalone
             "C:\\MinGW\\bin",
             "C:\\mingw-w64\\bin",
-
             // Visual Studio (uncommon for gcc, but you may want cl.exe)
             "C:\\Program Files (x86)\\Microsoft Visual Studio\\2019\\Community\\VC\\Tools\\MSVC",
             "C:\\Program Files\\Microsoft Visual Studio\\2022\\Community\\VC\\Tools\\MSVC",
@@ -106,7 +99,6 @@ pub struct Gcc {
     path: PathBuf,
     pub standard: Option<GccStandard>,
     pub optimization: Option<GccOptimization>,
-
 }
 
 impl Gcc {
@@ -117,7 +109,7 @@ impl Gcc {
             optimization: None,
         })
     }
-    
+
     /// Transforms the output file path based on the source file and the specified output file.
     pub fn transform_output_file(source_file: &PathBuf, output_file: Option<&PathBuf>) -> Result<PathBuf> {
         let mut output_file = output_file.map_or(source_file, |p| p).to_owned();
@@ -131,26 +123,44 @@ impl Gcc {
         }
 
         // create output file and its parent directories if they do not exist
-        if let Some(parent) = output_file.parent() && !parent.exists() {
-            std::fs::create_dir_all(parent).map_err(|err| Error::IOError { err, file: parent.to_string_lossy().to_string() })?;
+        if let Some(parent) = output_file.parent()
+            && !parent.exists()
+        {
+            std::fs::create_dir_all(parent).map_err(|err| Error::IOError {
+                err,
+                file: parent.to_string_lossy().to_string(),
+            })?;
         }
 
         let output_existed = output_file.exists();
         if !output_file.exists() {
-            std::fs::File::create(&output_file).map_err(|err| Error::IOError { err, file: output_file.to_string_lossy().to_string() })?;
+            std::fs::File::create(&output_file).map_err(|err| Error::IOError {
+                err,
+                file: output_file.to_string_lossy().to_string(),
+            })?;
         }
 
         // convert to absolute path; use dunce to normalize UNC on Windows
         let output_file = {
             #[cfg(windows)]
-            { dunce::canonicalize(&output_file) }
+            {
+                dunce::canonicalize(&output_file)
+            }
             #[cfg(unix)]
-            { std::fs::canonicalize(&output_file) }
-        }.map_err(|err| Error::IOError { err, file: output_file.to_string_lossy().to_string() })?;
-
+            {
+                std::fs::canonicalize(&output_file)
+            }
+        }
+        .map_err(|err| Error::IOError {
+            err,
+            file: output_file.to_string_lossy().to_string(),
+        })?;
 
         if !output_existed {
-            std::fs::remove_file(&output_file).map_err(|err| Error::IOError { err, file: output_file.to_string_lossy().to_string() })?;
+            std::fs::remove_file(&output_file).map_err(|err| Error::IOError {
+                err,
+                file: output_file.to_string_lossy().to_string(),
+            })?;
         }
 
         Ok(output_file)
@@ -162,10 +172,18 @@ impl Gcc {
         // transform the path to absolute path; use dunce on Windows to avoid UNC (\\?\) paths
         let source_file = {
             #[cfg(windows)]
-            { dunce::canonicalize(source_file) }
+            {
+                dunce::canonicalize(source_file)
+            }
             #[cfg(unix)]
-            { std::fs::canonicalize(source_file) }
-        }.map_err(|err| Error::IOError { err, file: source_file.to_string_lossy().to_string() })?;
+            {
+                std::fs::canonicalize(source_file)
+            }
+        }
+        .map_err(|err| Error::IOError {
+            err,
+            file: source_file.to_string_lossy().to_string(),
+        })?;
 
         let output_file = Self::transform_output_file(&source_file, output_file)?;
 

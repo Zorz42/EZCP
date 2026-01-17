@@ -1,16 +1,16 @@
 mod array_tests;
+mod cpp_runner_tests;
+mod gcc_tests;
 mod generic_tests;
 mod graph_tests;
 mod input_tests;
 mod partial_solution_tests;
-mod gcc_tests;
-mod cpp_runner_tests;
 
 #[cfg(test)]
 mod test_shared {
-    use log::LevelFilter;
     use crate::logger_format::logger_format;
     use crate::task::LOGGER_INIT;
+    use log::LevelFilter;
 
     #[cfg(test)]
     pub fn initialize_logger() {

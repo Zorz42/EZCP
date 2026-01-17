@@ -1,11 +1,14 @@
 use crate::test::TestGenerator;
+
+use rand::Rng;
 use std::rc::Rc;
 
 /// This struct represents a subtask.
 /// You can add generators that produce test inputs.
 /// Once you are done, you can add the subtask to a task.
-/// 
+///
 /// Tests are generated dynamically during task creation using the registered generators.
+#[derive(Default)]
 pub struct Subtask {
     pub(super) number: usize,
     /// Generators that produce test inputs
@@ -18,34 +21,35 @@ impl Subtask {
     /// This function creates a new subtask.
     #[must_use]
     pub fn new() -> Self {
-        Self {
-            number: 0,
-            generators: Vec::new(),
-            initial_counts: Vec::new(),
-        }
+        Self::default()
     }
 
     /// This function adds a test generator to the subtask with the provided initial count.
     /// The generator is a function that returns a string (the test input).
     /// During test creation, at least `count` tests will be generated from this generator.
     /// Additional tests may be generated dynamically to ensure solutions fail appropriately.
-    pub fn add_test<F: Fn() -> String + 'static>(&mut self, count: i32, function: F) {
+    #[must_use]
+    pub fn with_test<F: Fn() -> String + 'static>(mut self, count: i32, function: F) -> Self {
         let generator = Rc::new(TestGenerator::new(function));
         self.generators.push(generator);
         self.initial_counts.push(count as usize);
+        self
     }
 
     /// This function adds a single test from a string.
     /// This is a convenience method that wraps the string in a generator.
-    pub fn add_test_str<S: Into<String>>(&mut self, input: S) {
+    #[must_use]
+    pub fn with_test_str<S: Into<String>>(mut self, input: S) -> Self {
         let input: String = input.into();
         let func = move || input.clone();
         let generator = Rc::new(TestGenerator::new(func));
         self.generators.push(generator);
         self.initial_counts.push(1);
+        self
     }
 
     /// Get the total initial test count for this subtask.
+    #[must_use]
     pub fn initial_test_count(&self) -> usize {
         self.initial_counts.iter().sum()
     }
@@ -55,7 +59,7 @@ impl Subtask {
         if self.generators.is_empty() {
             return None;
         }
-        use rand::Rng;
+
         let mut rng = rand::rng();
         let idx = rng.random_range(0..self.generators.len());
         Some(self.generators[idx].generate())

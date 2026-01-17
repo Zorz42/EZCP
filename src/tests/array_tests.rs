@@ -1,8 +1,8 @@
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod array_tests {
-    use crate::{array_generator, Error, Subtask};
     use crate::tests::generic_tests::generic_tests::Test;
+    use crate::{Subtask, array_generator};
 
     #[test]
     fn test_array_generator() {
@@ -26,50 +26,32 @@ mod array_tests {
         
         "#;
 
-        task.task.solution_source = solution_contents.to_owned();
+        task.task = task.task.with_solution_source(solution_contents.to_owned());
 
         // create subtasks
-        let mut subtask1 = Subtask::new();
-
-
-
-        subtask1.add_test(5, array_generator(1, 100, 1, 100));
-        subtask1.add_test(5, array_generator(1, 100, 1, 1));
-        subtask1.add_test(5, array_generator(100, 100, 1, 100));
-        subtask1.add_test(5, array_generator(100, 100, 1, 1));
-        subtask1.add_test(1, array_generator(100, 100, 1, 1));
+        let subtask1 = Subtask::new()
+            .with_test(5, array_generator(1, 100, 1, 100))
+            .with_test(5, array_generator(1, 100, 1, 1))
+            .with_test(5, array_generator(100, 100, 1, 100))
+            .with_test(5, array_generator(100, 100, 1, 1))
+            .with_test(1, array_generator(100, 100, 1, 1));
 
         // n = 42
-        let mut subtask2 = Subtask::new();
-
-
-
-        subtask2.add_test(5, array_generator(42, 42, 1, 100));
-        subtask2.add_test(5, array_generator(42, 42, 1, 1));
-        subtask2.add_test(5, array_generator(42, 42, 100, 100));
+        let subtask2 = Subtask::new()
+            .with_test(5, array_generator(42, 42, 1, 100))
+            .with_test(5, array_generator(42, 42, 1, 1))
+            .with_test(5, array_generator(42, 42, 100, 100));
 
         // all values are 47
-        let mut subtask3 = Subtask::new();
+        let subtask3 = Subtask::new()
+            .with_test(5, array_generator(1, 100, 47, 47))
+            .with_test(5, array_generator(100, 100, 47, 47))
+            .with_test(5, array_generator(1, 1, 47, 47));
 
+        task.task = task.task.with_subtask(subtask1);
+        task.task = task.task.with_subtask(subtask2);
+        task.task = task.task.with_subtask(subtask3);
 
-
-        subtask3.add_test(5, array_generator(1, 100, 47, 47));
-        subtask3.add_test(5, array_generator(100, 100, 47, 47));
-        subtask3.add_test(5, array_generator(1, 1, 47, 47));
-
-        let subtask1 = task.task.add_subtask(subtask1);
-        let subtask2 = task.task.add_subtask(subtask2);
-        task.task.add_subtask(subtask3);
-
-        for _ in 0..10 {
-            task.task.create_tests().unwrap();
-        }
-
-        // task.task.add_subtask_dependency(subtask2, subtask1);
-
-        for _ in 0..10 {
-           // assert!(matches!(task.task.create_tests().unwrap_err(), Error::CustomError { .. }));
-           task.task.create_tests().unwrap();
-        }
+        task.task.run().unwrap();
     }
 }
