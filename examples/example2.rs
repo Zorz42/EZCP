@@ -39,19 +39,7 @@ fn main() {
     // Constraint: n = 1
     let mut subtask1 = ezcp::Subtask::new();
 
-    subtask1.set_checker(|mut input| {
-        let array = input.get_array()?;
-        input.expect_end()?;
-        let n = array.len();
-        if n != 1 {
-            ezcp::bail!("n should be 1");
-        }
-        let x = array[0];
-        if !(1..=1_000_000_000).contains(&x) {
-            ezcp::bail!("all array values should be in range [1, 1_000_000_000]");
-        }
-        Ok(())
-    });
+
 
     subtask1.add_test(5, ezcp::array_generator(1, 1, 1, 1000));
     subtask1.add_test_str("1\n 1\n".to_owned());
@@ -59,20 +47,7 @@ fn main() {
     // Constraint: elements in the array are powers of 2 and n <= 30
     let mut subtask2 = ezcp::Subtask::new();
 
-    subtask2.set_checker(|mut input| {
-        let array = input.get_array()?;
-        input.expect_end()?;
-        let n = array.len();
-        if !(1..=30).contains(&n) {
-            ezcp::bail!("n should be in range [1, 30]");
-        }
-        for (i, x) in array.iter().enumerate() {
-            if *x != 1 << i {
-                ezcp::bail!("all array values should be powers of 2");
-            }
-        }
-        Ok(())
-    });
+
 
     subtask2.add_test(5, || {
         let mut rng = rand::rng();
@@ -87,20 +62,7 @@ fn main() {
     // Constraint: n <= 1000
     let mut subtask3 = ezcp::Subtask::new();
 
-    subtask3.set_checker(|mut input| {
-        let array = input.get_array()?;
-        input.expect_end()?;
-        let n = array.len();
-        if !(1..=1000).contains(&n) {
-            ezcp::bail!("n should be in range [1, 1000]");
-        }
-        for x in array {
-            if !(1..=1_000_000_000).contains(&x) {
-                ezcp::bail!("all array values should be in range [1, 1_000_000_000]");
-            }
-        }
-        Ok(())
-    });
+
 
     subtask3.add_test(5, ezcp::array_generator(1, 1000, 1, 1000));
     subtask3.add_test(5, ezcp::array_generator(1, 1000, 1, 1_000_000_000));
@@ -112,20 +74,7 @@ fn main() {
     // Constraint: n <= 200_000
     let mut subtask4 = ezcp::Subtask::new();
 
-    subtask4.set_checker(|mut input| {
-        let array = input.get_array()?;
-        input.expect_end()?;
-        let n = array.len();
-        if !(1..=200_000).contains(&n) {
-            ezcp::bail!("n should be in range [1, 200_000]");
-        }
-        for x in array {
-            if !(1..=1_000_000_000).contains(&x) {
-                ezcp::bail!("all array values should be in range [1, 1_000_000_000]");
-            }
-        }
-        Ok(())
-    });
+
 
     subtask4.add_test(5, ezcp::array_generator(1, 200_000, 1, 1000));
     subtask4.add_test(5, ezcp::array_generator(1, 200_000, 1, 1_000_000_000));
@@ -135,15 +84,13 @@ fn main() {
     subtask4.add_test(1, ezcp::array_generator(200_000, 200_000, 1, 1));
 
     // add subtasks to task
-    let subtask1 = task.add_subtask(subtask1);
-    let subtask2 = task.add_subtask(subtask2);
-    let subtask3 = task.add_subtask(subtask3);
-    let subtask4 = task.add_subtask(subtask4);
+    let _ = task.add_subtask(subtask1);
+    let _ = task.add_subtask(subtask2);
+    let _ = task.add_subtask(subtask3);
+    let _ = task.add_subtask(subtask4);
 
     // add dependencies
-    task.add_subtask_dependency(subtask3, subtask1);
-    task.add_subtask_dependency(subtask3, subtask2);
-    task.add_subtask_dependency(subtask4, subtask3);
+
 
     task.create_tests().ok();
 }

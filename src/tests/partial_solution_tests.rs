@@ -63,7 +63,7 @@ mod partial_solution_tests {
         let subtask2 = task.task.add_subtask(subtask2);
 
         // add dependencies
-        task.task.add_subtask_dependency(subtask2, subtask1);
+
 
         // add partial solutions
         task.task.add_partial_solution(partial_solution_contents.to_owned(), &[subtask1]);
@@ -130,7 +130,7 @@ mod partial_solution_tests {
         let subtask2 = task.task.add_subtask(subtask2);
 
         // add dependencies
-        task.task.add_subtask_dependency(subtask2, subtask1);
+
 
         // add partial solutions
         task.task.add_partial_solution(partial_solution_contents.to_owned(), &[subtask2]);
@@ -199,7 +199,7 @@ mod partial_solution_tests {
         let subtask2 = task.task.add_subtask(subtask2);
 
         // add dependencies
-        task.task.add_subtask_dependency(subtask2, subtask1);
+
 
         // add partial solutions
         task.task.add_partial_solution(partial_solution_contents.to_owned(), &[subtask1]);
@@ -269,7 +269,7 @@ mod partial_solution_tests {
         let subtask2 = task.task.add_subtask(subtask2);
 
         // add dependencies
-        task.task.add_subtask_dependency(subtask2, subtask1);
+
 
         // add partial solutions
         task.task.add_partial_solution(partial_solution_contents.to_owned(), &[subtask1]);
@@ -329,7 +329,7 @@ mod partial_solution_tests {
         let subtask2 = task.task.add_subtask(subtask2);
 
         // add dependencies
-        task.task.add_subtask_dependency(subtask2, subtask1);
+
 
         // add partial solutions
         task.task.add_partial_solution(partial_solution_contents.to_owned(), &[]);
@@ -397,7 +397,7 @@ mod partial_solution_tests {
         let subtask2 = task.task.add_subtask(subtask2);
 
         // add dependencies
-        task.task.add_subtask_dependency(subtask2, subtask1);
+
 
         // add partial solutions
         task.task.add_partial_solution(partial_solution_contents.to_owned(), &[]);

@@ -1,6 +1,7 @@
 use crate::subtask::Subtask;
-use crate::{Error, Input, Result};
-use std::collections::HashSet;
+use crate::solution::Solution;
+use crate::{Error, Result};
+
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Once;
@@ -20,8 +21,11 @@ pub static LOGGER_INIT: Once = Once::new();
 fn path_str(p: &Path) -> String { p.to_string_lossy().into_owned() }
 
 /// This struct represents an entire task.
-/// You can add subtasks, partial solutions and set the time limit.
+/// You can add subtasks, solutions (main and partial) and set the time limit.
 /// Once you are done, you can create tests for the task.
+/// 
+/// The system dynamically generates tests until each solution that is expected
+/// to fail on a subtask has failed on at least `min_failures_per_solution` tests.
 pub struct Task {
     name: String,
     // path to the folder with tests
@@ -36,13 +40,20 @@ pub struct Task {
     pub get_output_file_name: Box<dyn Fn(i32, i32, i32) -> String>,
     build_folder_path: PathBuf,
     subtasks: Vec<Subtask>,
-    // source code of the solution
+    // source code of the main solution
     pub solution_source: String,
-    // Source of the solution and set of subtasks that the solution passes.
-    partial_solutions: Vec<(String, HashSet<usize>)>,
+    // Solutions (partial) that should be validated
+    solutions: Vec<Solution>,
+    // Minimum number of failures required per subtask for each non-passing solution
+    pub min_failures_per_solution: usize,
+    // Maximum number of tests to generate per subtask (safety limit)
+    pub max_tests_per_subtask: usize,
 
     pub debug_level: LevelFilter,
     logger: MultiProgress,
+    
+    /// Generated test inputs per subtask (built dynamically)
+    generated_tests: Vec<Vec<String>>,
 }
 
 impl Task {
@@ -61,10 +72,13 @@ impl Task {
             build_folder_path,
             time_limit: 5.0,
             subtasks: Vec::new(),
-            partial_solutions: Vec::new(),
+            solutions: Vec::new(),
+            min_failures_per_solution: 5,
+            max_tests_per_subtask: 100,
             debug_level: LevelFilter::Info,
             logger: MultiProgress::new(),
             solution_source: String::new(),
+            generated_tests: Vec::new(),
         }
     }
 
@@ -86,24 +100,31 @@ impl Task {
         self.subtasks.len() - 1
     }
 
-    /// This function adds a dependency between two subtasks.
-    /// A dependency means, that the first subtask must be solved before the second subtask.
-    /// In practice that means that all the tests from the dependency subtask will be added before the tests from the subtask.
-    /// Dependencies apply recursively but do not duplicate tests.
-    /// The subtask must be added to the task before this function is called.
-    pub fn add_subtask_dependency(&mut self, subtask: usize, dependency: usize) {
-        assert!(subtask < self.subtasks.len(), "subtask index out of bounds");
-        assert!(dependency < subtask, "dependency must be less than subtask to avoid cycles");
-        self.subtasks[subtask].dependencies.push(dependency);
+
+
+    /// This function adds a solution to the task.
+    /// A solution is expected to pass the specified subtasks and fail on others.
+    /// During test generation, the system will dynamically generate tests until
+    /// each solution fails on at least `min_failures_per_solution` tests for subtasks it should fail.
+    pub fn add_solution(&mut self, solution_source: String, passes_subtasks: &[usize]) {
+        self.solutions.push(Solution::new(solution_source, passes_subtasks));
     }
 
-    /// This function adds a partial solution to the task.
-    /// A partial solution is a solution that only solves a subset of subtasks.
-    /// When the task is generated, the partial solution will be run on all tests of the subtasks it solves.
-    /// If the partial solution does not solve the exact subtasks it should, an error will be thrown.
+    /// Backward compatibility: alias for add_solution
     pub fn add_partial_solution(&mut self, solution_source: String, passes_subtasks: &[usize]) {
-        let set = passes_subtasks.iter().copied().collect::<HashSet<_>>();
-        self.partial_solutions.push((solution_source, set));
+        self.add_solution(solution_source, passes_subtasks);
+    }
+
+    /// Set the minimum number of test failures required per subtask for non-passing solutions.
+    /// Default is 5.
+    pub fn set_min_failures(&mut self, n: usize) {
+        self.min_failures_per_solution = n;
+    }
+
+    /// Set the maximum number of tests per subtask (safety limit).
+    /// Default is 100.
+    pub fn set_max_tests_per_subtask(&mut self, n: usize) {
+        self.max_tests_per_subtask = n;
     }
 
     /// This creates tests and prints the error message if there is an error.
@@ -129,15 +150,6 @@ impl Task {
             self.logger.println(format!("{}", style("Success!").green().bright().bold())).ok();
             Ok(())
         }
-    }
-
-    /// count how many tests there are in total (if one subtask is a dependency of another, its tests are counted multiple times)
-    fn get_num_all_tests(&self) -> i32 {
-        let mut num_tests = 0;
-        for subtask in &self.subtasks {
-            num_tests += self.get_total_tests(subtask);
-        }
-        num_tests
     }
 
     fn print_progress(&self, curr: i32, total: i32, text: &str) {
@@ -174,19 +186,15 @@ impl Task {
             return Err(Error::MissingSolution { });
         }
 
-        // reset subtask input files
-        for subtask in &mut self.subtasks {
-            for test in &mut subtask.tests {
-                test.reset_input_file();
-            }
-        }
+        // Initialize generated_tests storage
+        self.generated_tests = vec![Vec::new(); self.subtasks.len()];
 
         let mut cpp_runner = CppRunner::new(&self.build_folder_path)?;
         let solution_handle = cpp_runner.add_program(&self.solution_source)?;
 
-        let mut partial_solution_handles = Vec::new();
-        for (source, _subtasks) in &mut self.partial_solutions {
-            partial_solution_handles.push(cpp_runner.add_program(source)?);
+        let mut solution_handles = Vec::new();
+        for solution in &self.solutions {
+            solution_handles.push(cpp_runner.add_program(&solution.source)?);
         }
 
         // create tests directory if it doesn't exist and clear it
@@ -198,95 +206,119 @@ impl Task {
             .map_err(|err| Error::IOError { err, file: path_str(&self.tests_path) })?;
 
         const TOTAL_STEPS: i32 = 5;
-        self.print_progress(1, TOTAL_STEPS, "Generating tests");
-        let test_files = self.generate_tests()?;
-        self.print_progress(2, TOTAL_STEPS, "Checking generated tests");
-        self.check_tests()?;
-        self.print_progress(3, TOTAL_STEPS, "Generating test solutions");
+        self.print_progress(1, TOTAL_STEPS, "Generating initial tests");
+        self.generate_initial_tests()?;
+        
+        self.print_progress(2, TOTAL_STEPS, "Running dynamic test generation");
+        self.generate_dynamic_tests(&mut cpp_runner, &solution_handles)?;
+        
+        self.print_progress(3, TOTAL_STEPS, "Writing tests");
+        let test_files = self.write_tests()?;
+        
+        self.print_progress(4, TOTAL_STEPS, "Generating test solutions");
         self.generate_test_solutions(&test_files, &mut cpp_runner, solution_handle)?;
-        self.print_progress(4, TOTAL_STEPS, "Checking partial solutions");
-        self.check_partial_solutions(&test_files, &mut cpp_runner, &partial_solution_handles)?;
-
-        self.print_progress(5, TOTAL_STEPS, "Archiving tests");
+        
+        self.print_progress(5, TOTAL_STEPS, "Verifying solutions and archiving");
+        self.check_solutions(&test_files, &mut cpp_runner, &solution_handles)?;
         self.archive_tests(&test_files)?;
 
         let tests_size = fs_extra::dir::get_size(&self.tests_path).unwrap_or(0) as f32 / 1_000_000.0;
         info!("Tests size: {}", style(format!("{tests_size:.2}MB")).bold());
 
+        // Log test counts per subtask
+        for (i, tests) in self.generated_tests.iter().enumerate() {
+            info!("Subtask {}: {} tests", i + 1, tests.len());
+        }
+
         Ok(())
     }
-    
-    fn generate_tests(&mut self) -> Result<Vec<Vec<(PathBuf, PathBuf)>>> {
-        let num_tests = self.get_num_all_tests();
 
-        // Generate and write tests for each subtask
-        let mut curr_test_id = 0;
-        let progress_bar = self.logger.add(ProgressBar::new(num_tests as u64));
+    /// Generate initial tests from each generator based on initial_counts
+    fn generate_initial_tests(&mut self) -> Result<()> {
+        for subtask_idx in 0..self.subtasks.len() {
+            let subtask = &self.subtasks[subtask_idx];
+            for (gen_idx, generator) in subtask.generators.iter().enumerate() {
+                let count = subtask.initial_counts.get(gen_idx).copied().unwrap_or(1);
+                for _ in 0..count {
+                    let test_input = generator.generate();
+                    self.generated_tests[subtask_idx].push(test_input);
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// Generate additional tests dynamically.
+    /// For now, this just ensures we have enough tests per subtask.
+    /// The actual solution validation happens in check_solutions.
+    fn generate_dynamic_tests(&mut self, _cpp_runner: &mut CppRunner, _solution_handles: &[ProgramHandle]) -> Result<()> {
+        if self.solutions.is_empty() {
+            return Ok(());
+        }
+
+        // Generate additional tests for each subtask until we have enough
+        // The actual failure tracking happens during check_solutions
+        let progress_bar = self.logger.add(ProgressBar::new_spinner());
+        let mut iteration = 0;
+        
+        // For each subtask, ensure we generate enough tests that solutions can fail on
+        for subtask_idx in 0..self.subtasks.len() {
+            // Check if any solution needs to fail on this subtask
+            let needs_failures = self.solutions.iter().any(|s| s.should_fail(subtask_idx));
+            
+            if !needs_failures {
+                continue;
+            }
+
+            // Generate additional tests up to min_failures_per_solution + initial tests
+            let current_count = self.generated_tests[subtask_idx].len();
+            let target_count = current_count + self.min_failures_per_solution;
+            let target_count = target_count.min(self.max_tests_per_subtask);
+
+            while self.generated_tests[subtask_idx].len() < target_count {
+                let subtask = &self.subtasks[subtask_idx];
+                if let Some(test_input) = subtask.generate_random_test() {
+                    self.generated_tests[subtask_idx].push(test_input);
+                    iteration += 1;
+                    progress_bar.set_message(format!("Generated {} additional tests", iteration));
+                    progress_bar.tick();
+                } else {
+                    break;
+                }
+            }
+        }
+
+        self.logger.remove(&progress_bar);
+        if iteration > 0 {
+            info!("Generated {} additional tests dynamically", iteration);
+        }
+
+        Ok(())
+    }
+
+    /// Write all generated tests to files
+    fn write_tests(&self) -> Result<Vec<Vec<(PathBuf, PathBuf)>>> {
         let mut test_files = Vec::new();
-        for master_subtask in 0..self.subtasks.len() {
-            let mut curr_local_test_id = 0;
+        
+        for (subtask_idx, tests) in self.generated_tests.iter().enumerate() {
             let mut tests_written = Vec::new();
 
-            let dependencies = self.get_all_dependencies(&self.subtasks[master_subtask]);
-            for subtask_number in dependencies {
-                // generate input files paths for all tests because of rust borrow checker
-                let mut tests_input_files = Vec::new();
-                let num_tests = self.subtasks[subtask_number].tests.len();
-                for _ in 0..num_tests {
-                    let input_path = self.get_input_file_path(curr_test_id, master_subtask as i32, curr_local_test_id);
-                    let output_path = self.get_output_file_path(curr_test_id, master_subtask as i32, curr_local_test_id);
-                    tests_input_files.push(input_path.clone());
-                    tests_written.push((input_path, output_path));
-                    curr_test_id += 1;
-                    curr_local_test_id += 1;
-                }
-
-                // generate input files for all tests
-                for (test, input_file) in &mut self.subtasks[subtask_number].tests.iter_mut().zip(tests_input_files) {
-                    test.generate_input(input_file)?;
-                    progress_bar.inc(1);
-                }
+            for (test_id, test_input) in tests.iter().enumerate() {
+                let test_id = test_id as i32;
+                let input_path = self.get_input_file_path(test_id, subtask_idx as i32, test_id);
+                let output_path = self.get_output_file_path(test_id, subtask_idx as i32, test_id);
+                
+                // Write input file
+                fs::write(&input_path, test_input)
+                    .map_err(|err| Error::IOError { err, file: path_str(&input_path) })?;
+                
+                tests_written.push((input_path, output_path));
             }
 
             test_files.push(tests_written);
         }
 
-        self.logger.remove(&progress_bar);
-
         Ok(test_files)
-    }
-    
-    fn check_tests(&self) -> Result<()> {
-        // calculate how many steps there are in total for the progress bar.
-        let mut loading_progress_max = 0;
-        for subtask in &self.subtasks {
-            if subtask.checker.is_some() {
-                // and for each check
-                loading_progress_max += self.get_total_tests(subtask);
-            }
-        }
-        let progress_bar = self.logger.add(ProgressBar::new(loading_progress_max as u64));
-
-        let mut curr_test_id = 0;
-        for (subtask_id, subtask) in self.subtasks.iter().enumerate() {
-            let checker = &subtask.checker;
-            if let Some(checker) = checker {
-                for test_id_in_subtask in 0..self.get_total_tests(subtask) {
-                    let input_test_path = self.get_input_file_path(curr_test_id, subtask_id as i32, test_id_in_subtask);
-                    let input_str = fs::read_to_string(input_test_path).map_err(|err| Error::IOError { err, file: String::new() })?;
-                    checker(Input::new(&input_str))?;
-                    curr_test_id += 1;
-                    progress_bar.inc(1);
-                }
-            } else {
-                warn!("No checker defined for subtask {}.", subtask.number + 1);
-                curr_test_id += self.get_total_tests(subtask);
-            }
-        }
-
-        self.logger.remove(&progress_bar);
-        
-        Ok(())
     }
     
     fn generate_test_solutions(&self, test_files: &[Vec<(PathBuf, PathBuf)>], cpp_runner: &mut CppRunner, solution_handle: ProgramHandle) -> Result<()> {
@@ -335,25 +367,25 @@ impl Task {
         Ok(())
     }
     
-    fn check_partial_solutions(&self, test_files: &[Vec<(PathBuf, PathBuf)>], cpp_runner: &mut CppRunner, partial_solution_handles: &[ProgramHandle]) -> Result<()> {
-        for ((partial_id, (_source, passing_subtasks)), program_handle) in self.partial_solutions.iter().enumerate().zip(partial_solution_handles.iter()) {
-            info!("Running partial solution {}:", partial_id + 1);
+    fn check_solutions(&self, test_files: &[Vec<(PathBuf, PathBuf)>], cpp_runner: &mut CppRunner, solution_handles: &[ProgramHandle]) -> Result<()> {
+        for (sol_idx, solution) in self.solutions.iter().enumerate() {
+            info!("Running solution {}:", sol_idx + 1);
             
-            let subtasks_passed = run_partial_solution(test_files, cpp_runner, *program_handle, &self.logger, self.time_limit)?;
+            let subtasks_passed = run_partial_solution(test_files, cpp_runner, solution_handles[sol_idx], &self.logger, self.time_limit)?;
 
             for subtask_id in 0..self.subtasks.len() {
                 let subtask_failed = !subtasks_passed.contains(&subtask_id);
                 
-                if subtask_failed && passing_subtasks.contains(&subtask_id) {
+                if subtask_failed && solution.passes_subtasks.contains(&subtask_id) {
                     return Err(Error::PartialSolutionFailsSubtask {
-                        partial_number: partial_id + 1,
+                        partial_number: sol_idx + 1,
                         subtask_number: subtask_id + 1,
                     });
                 }
 
-                if !subtask_failed && !passing_subtasks.contains(&subtask_id) {
+                if !subtask_failed && !solution.passes_subtasks.contains(&subtask_id) {
                     return Err(Error::PartialSolutionPassesExtraSubtask {
-                        partial_number: partial_id + 1,
+                        partial_number: sol_idx + 1,
                         subtask_number: subtask_id + 1,
                     });
                 }
@@ -376,39 +408,5 @@ impl Task {
         archive_files(&test_files_vec, &self.tests_archive_path, &self.logger)?;
 
         Ok(())
-    }
-
-    /// Get number of tests for a subtask (including dependencies)
-    fn get_total_tests(&self, subtask: &Subtask) -> i32 {
-        let dependencies = self.get_all_dependencies(subtask);
-        let mut result = 0;
-        for dependency in dependencies {
-            result += self.subtasks[dependency].tests.len() as i32;
-        }
-        result
-    }
-
-    /// Get all dependencies, even dependencies of dependencies and so on
-    fn get_all_dependencies(&self, subtask: &Subtask) -> Vec<usize> {
-        let mut subtask_visited = vec![false; self.subtasks.len()];
-        self.get_all_dependencies_inner(subtask.number, &mut subtask_visited)
-    }
-
-    /// A simple dfs to get all dependencies
-    fn get_all_dependencies_inner(&self, subtask_number: usize, subtask_visited: &mut Vec<bool>) -> Vec<usize> {
-        // check if subtask has already been visited
-        if subtask_visited[subtask_number] {
-            return Vec::new();
-        }
-        subtask_visited[subtask_number] = true;
-
-        let mut result = Vec::new();
-        for dependency in &self.subtasks[subtask_number].dependencies {
-            result.append(&mut self.get_all_dependencies_inner(*dependency, subtask_visited));
-        }
-
-        result.push(subtask_number);
-
-        result
     }
 }

@@ -9,9 +9,12 @@ mod partial_solution;
 mod archiver;
 mod runner;
 mod logger_format;
+mod solution;
 
 pub use error::{Error, Result};
 pub use generators::{array_generator, array_generator_custom, array_to_string, Graph};
 pub use input::Input;
 pub use subtask::Subtask;
 pub use task::Task;
+pub use solution::Solution;
+
