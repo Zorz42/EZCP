@@ -3,7 +3,6 @@ mod error;
 mod generators;
 mod input;
 mod logger_format;
-mod partial_solution;
 mod runner;
 mod solution;
 mod subtask;

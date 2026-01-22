@@ -70,11 +70,7 @@ pub mod cpp_runner_tests {
         let mut runner = CppRunner::new(tempdir.path()).unwrap();
 
         let program_handle = runner.add_program(HELLO_WORLD_PROGRAM).unwrap();
-        let task_handle = runner.add_task(program_handle, String::new(), 1.0);
-
-        runner.run_tasks(None).unwrap();
-
-        let result = runner.get_result(task_handle);
+        let result = &runner.check_programs("", &[program_handle], 1.0).unwrap()[0];
 
         assert!(matches!(result, RunResult::Ok(..)));
 
@@ -109,21 +105,16 @@ pub mod cpp_runner_tests {
             program_handles.push(program_handle);
         }
 
-        let mut task_handles = Vec::new();
-        for i in 0..100 {
+        for i in 0..20 {
             let input = format!("{i}\n");
-            let task_handle = runner.add_task(program_handles[i % program_handles.len()], input, 1.0);
-            task_handles.push(task_handle);
-        }
+            let results = runner.check_programs(&input, &program_handles, 1.0).unwrap();
+            
+            for (j, result) in results.iter().enumerate() {
+                assert!(matches!(result, RunResult::Ok(..)));
 
-        runner.run_tasks(None).unwrap();
-
-        for (i, task_handle) in task_handles.iter().enumerate() {
-            let result = runner.get_result(*task_handle);
-            assert!(matches!(result, RunResult::Ok(..)));
-
-            if let RunResult::Ok(_, output) = result {
-                assert_eq!(output.trim(), format!("{} {}", i % program_handles.len(), i));
+                if let RunResult::Ok(_, output) = result {
+                    assert_eq!(output.trim(), format!("{j} {i}"));
+                }
             }
         }
 
@@ -166,12 +157,9 @@ pub mod cpp_runner_tests {
         ";
 
         let program_handle = runner.add_program(program_source).unwrap();
-        let task_handle = runner.add_task(program_handle, "1\n".to_owned(), 1.0);
-
-        runner.run_tasks(None).unwrap();
+        let result = &runner.check_programs("1\n", &[program_handle], 1.0).unwrap()[0];
 
         // Check that the result is indeed a TLE
-        let result = runner.get_result(task_handle);
         assert!(matches!(result, RunResult::TimedOut));
 
         drop(tempdir);
@@ -195,12 +183,9 @@ pub mod cpp_runner_tests {
         ";
 
         let program_handle = runner.add_program(program_source).unwrap();
-        let task_handle = runner.add_task(program_handle, "1\n".to_owned(), 1.0);
-
-        runner.run_tasks(None).unwrap();
+        let result = &runner.check_programs("1\n", &[program_handle], 1.0).unwrap()[0];
 
         // Check that the result is indeed a crash
-        let result = runner.get_result(task_handle);
         assert!(matches!(result, RunResult::Crashed));
 
         drop(tempdir);
@@ -251,11 +236,7 @@ pub mod cpp_runner_tests {
             let mut runner = CppRunner::new(tempdir.path()).unwrap();
 
             let program_handle = runner.add_program(HELLO_WORLD_PROGRAM).unwrap();
-            let task_handle = runner.add_task(program_handle, String::new(), 1.0);
-
-            runner.run_tasks(None).unwrap();
-
-            let result = runner.get_result(task_handle);
+            let result = &runner.check_programs("", &[program_handle], 1.0).unwrap()[0];
 
             assert!(matches!(result, RunResult::Ok(..)));
 

@@ -1,7 +1,7 @@
 use rand::Rng;
 use std::path::PathBuf;
 
-const SOLUTION: &str = r"
+const SOLUTION: &str = "
 #include <iostream>
 using namespace std;
 int main() {

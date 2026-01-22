@@ -8,7 +8,7 @@ use std::process::{Command, Stdio};
 /// The result of running a compiled program.
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub enum RunResult {
-    /// Program finished successfully: (elapsed_time_ms, stdout)
+    /// Program finished successfully: (`elapsed_time_ms`, stdout)
     Ok(i32, String),
     /// Program exceeded the time limit.
     TimedOut,

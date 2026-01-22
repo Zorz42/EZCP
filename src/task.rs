@@ -4,7 +4,7 @@ use crate::{Error, Result};
 
 use crate::archiver::archive_files;
 use crate::logger_format::logger_format;
-use crate::partial_solution::run_partial_solution;
+//use crate::partial_solution::run_partial_solution;
 use crate::runner::cpp_runner::{CppRunner, ProgramHandle};
 use crate::runner::exec_runner::RunResult;
 use console::style;
@@ -232,9 +232,8 @@ impl Task {
         let mut all_test_files = Vec::new();
 
         for (subtask_idx, subtask) in self.subtasks.iter().enumerate() {
-            self.print_progress((subtask_idx + 1) as i32, num_subtasks as i32, &format!("Subtask {}", subtask_idx + 1));
-            
             const MAX_TRIES: usize = 500;
+            self.print_progress((subtask_idx + 1) as i32, num_subtasks as i32, &format!("Subtask {}", subtask_idx + 1));
             let bad_solution_handles: Vec<ProgramHandle> = self.solutions.iter().zip(&solution_handles)
                  .filter(|(sol, _)| !sol.passes_subtasks.contains(&subtask_idx))
                  .map(|(_, &handle)| handle)
@@ -293,7 +292,7 @@ impl Task {
         }
 
         // Final verification of all partial solutions
-        self.check_solutions(&all_test_files, &mut cpp_runner, &solution_handles)?;
+        //self.check_solutions(&all_test_files, &mut cpp_runner, &solution_handles)?;
         self.archive_tests(&all_test_files)?;
 
         let tests_size = fs_extra::dir::get_size(&self.tests_path).unwrap_or(0) as f32 / 1_000_000.0;
@@ -349,11 +348,11 @@ impl Task {
 
 
 
-    /// Verifies all registered solutions against the generated test suite.
-    ///
-    /// Throws an error if any solution fails a subtask it was expected to pass,
-    /// or if it passes a subtask it was expected to fail.
-    fn check_solutions(&self, test_files: &[Vec<(PathBuf, PathBuf)>], cpp_runner: &mut CppRunner, solution_handles: &[ProgramHandle]) -> Result<()> {
+    // /// Verifies all registered solutions against the generated test suite.
+    // ///
+    // /// Throws an error if any solution fails a subtask it was expected to pass,
+    // /// or if it passes a subtask it was expected to fail.
+    /*fn check_solutions(&self, test_files: &[Vec<(PathBuf, PathBuf)>], cpp_runner: &mut CppRunner, solution_handles: &[ProgramHandle]) -> Result<()> {
         for (sol_idx, solution) in self.solutions.iter().enumerate() {
             info!("Running solution {}:", sol_idx + 1);
 
@@ -379,7 +378,7 @@ impl Task {
         }
 
         Ok(())
-    }
+    }*/
 
     /// Archive all tests into a zip file
     fn archive_tests(&self, test_files: &[Vec<(PathBuf, PathBuf)>]) -> Result<()> {

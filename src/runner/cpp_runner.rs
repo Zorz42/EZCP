@@ -155,6 +155,7 @@ impl CppRunner {
     ///
     /// # Panics
     /// Panics if the task has not finished running.
+    #[allow(clippy::expect_used)]
     pub fn get_result(&self, task_handle: TaskHandle) -> RunResult {
         self.tasks[task_handle.id].result.clone().expect("Task result not available")
     }
@@ -202,12 +203,6 @@ impl CppRunner {
         Ok(())
     }
 
-    /// Executes all registered tasks in parallel.
-    ///
-    /// * `logger` - Optional MultiProgress for visually reporting progress.
-    pub fn run_tasks(&mut self, logger: Option<&MultiProgress>) -> Result<()> {
-        self.run_tasks_internal(logger, true)
-    }
 
     fn run_tasks_internal(&mut self, logger: Option<&MultiProgress>, clean: bool) -> Result<()> {
         if clean {
