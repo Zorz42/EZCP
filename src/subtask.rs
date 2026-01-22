@@ -3,31 +3,31 @@ use crate::test::TestGenerator;
 use rand::Rng;
 use std::rc::Rc;
 
-/// This struct represents a subtask.
-/// You can add generators that produce test inputs.
-/// Once you are done, you can add the subtask to a task.
+/// Represents a problem subtask with specific constraints.
 ///
-/// Tests are generated dynamically during task creation using the registered generators.
+/// A subtask contains one or more test generators that produce input data
+/// adhering to the subtask's limits.
 #[derive(Default)]
 pub struct Subtask {
+    /// The index of the subtask (0-indexed)
     pub(super) number: usize,
-    /// Generators that produce test inputs
+    /// Generators that produce test inputs for this subtask
     pub(super) generators: Vec<Rc<TestGenerator>>,
-    /// How many tests to generate from each generator initially
+    /// Minimum number of tests to generate from each generator initially
     pub(super) initial_counts: Vec<usize>,
 }
 
 impl Subtask {
-    /// This function creates a new subtask.
+    /// Creates a new, empty subtask.
     #[must_use]
     pub fn new() -> Self {
         Self::default()
     }
 
-    /// This function adds a test generator to the subtask with the provided initial count.
-    /// The generator is a function that returns a string (the test input).
-    /// During test creation, at least `count` tests will be generated from this generator.
-    /// Additional tests may be generated dynamically to ensure solutions fail appropriately.
+    /// Adds a random test generator to the subtask.
+    ///
+    /// * `count` - Initial number of tests to generate from this generator.
+    /// * `function` - A closure that returns a generated input string.
     #[must_use]
     pub fn with_test<F: Fn() -> String + 'static>(mut self, count: i32, function: F) -> Self {
         let generator = Rc::new(TestGenerator::new(function));
@@ -36,8 +36,9 @@ impl Subtask {
         self
     }
 
-    /// This function adds a single test from a string.
-    /// This is a convenience method that wraps the string in a generator.
+    /// Adds a fixed test input string.
+    ///
+    /// This is a convenience method that treats the string as a single static test.
     #[must_use]
     pub fn with_test_str<S: Into<String>>(mut self, input: S) -> Self {
         let input: String = input.into();
@@ -48,13 +49,15 @@ impl Subtask {
         self
     }
 
-    /// Get the total initial test count for this subtask.
+    /// Returns the sum of initial test counts across all generators.
     #[must_use]
     pub fn initial_test_count(&self) -> usize {
         self.initial_counts.iter().sum()
     }
 
-    /// Generate a test from a random generator.
+    /// Randomly selects one of the registered generators and produces a test input.
+    ///
+    /// Returns `None` if no generators are registered.
     pub(crate) fn generate_random_test(&self) -> Option<String> {
         if self.generators.is_empty() {
             return None;

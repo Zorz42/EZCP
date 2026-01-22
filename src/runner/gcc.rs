@@ -49,6 +49,7 @@ fn find_gcc() -> Result<PathBuf> {
     }
 }
 
+/// C++ standards supported by GCC.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(dead_code)]
 pub enum GccStandard {
@@ -73,6 +74,7 @@ impl GccStandard {
     }
 }
 
+/// Optimization levels for the C++ compiler.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(dead_code)]
 pub enum GccOptimization {
@@ -95,13 +97,18 @@ impl GccOptimization {
     }
 }
 
+/// Wrapper around the `g++` compiler.
 pub struct Gcc {
+    /// Absolute path to the `g++` executable.
     path: PathBuf,
+    /// Language standard to use (e.g., -std=c++17).
     pub standard: Option<GccStandard>,
+    /// Optimization level to use (e.g., -O2).
     pub optimization: Option<GccOptimization>,
 }
 
 impl Gcc {
+    /// Locates the `g++` compiler on the system.
     pub fn new() -> Result<Self> {
         Ok(Self {
             path: find_gcc()?,
@@ -110,7 +117,10 @@ impl Gcc {
         })
     }
 
-    /// Transforms the output file path based on the source file and the specified output file.
+    /// Predicts and prepares the output binary path for a given source file.
+    ///
+    /// This method ensures parent directories exist and handles platform-specific
+    /// extensions (.exe on Windows).
     pub fn transform_output_file(source_file: &PathBuf, output_file: Option<&PathBuf>) -> Result<PathBuf> {
         let mut output_file = output_file.map_or(source_file, |p| p).to_owned();
         #[cfg(windows)]
@@ -166,8 +176,9 @@ impl Gcc {
         Ok(output_file)
     }
 
-    /// Calls `gcc` to compile the source file.
-    /// If `output_file` is None, it will use the source file name with an appropriate extension.
+    /// Compiles a C++ source file into an executable.
+    ///
+    /// Returns the absolute path to the generated binary.
     pub fn compile(&self, source_file: &Path, output_file: Option<&PathBuf>) -> Result<PathBuf> {
         // transform the path to absolute path; use dunce on Windows to avoid UNC (\\?\) paths
         let source_file = {

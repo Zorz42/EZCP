@@ -1,20 +1,27 @@
 use crate::Error;
 use crate::Result;
 use log::trace;
-use std::io::{Read, Write};
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
+/// The result of running a compiled program.
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub enum RunResult {
-    Ok(i32, String), // elapsed time in milliseconds and output
+    /// Program finished successfully: (elapsed_time_ms, stdout)
+    Ok(i32, String),
+    /// Program exceeded the time limit.
     TimedOut,
+    /// Program crashed or returned a non-zero exit code.
     Crashed,
 }
 
-/// This function takes an executable file and runs it with the input file.
-/// It writes the output to the output file, and returns the result of the test.
-/// Build dir is needed, so that timer can be built if it's not already.
+/// Spawns the timer utility to execute and monitor a solution.
+///
+/// * `executable_file` - Path to the compiled C++ binary.
+/// * `input_data` - Input to be sent via stdin.
+/// * `time_limit` - Maximum CPU time in seconds.
+/// * `timer_path` - Path to the pre-compiled `timer` utility.
 pub fn run_solution(executable_file: &PathBuf, input_data: &str, time_limit: f32, timer_path: &Path) -> Result<RunResult> {
     let mut solution_process = Command::new(timer_path);
     solution_process.arg(executable_file);
@@ -38,7 +45,8 @@ pub fn run_solution(executable_file: &PathBuf, input_data: &str, time_limit: f32
     // Explicitly drop stdin to signal EOF to the child
     drop(solution_process.stdin.take());
 
-    let return_code = solution_process.wait().map_err(|err| Error::IOError { err, file: String::new() })?;
+    let output_result = solution_process.wait_with_output().map_err(|err| Error::IOError { err, file: String::new() })?;
+    let return_code = output_result.status;
 
     if return_code.code() == Some(175) {
         trace!("Solution timed out with signal 175");
@@ -52,21 +60,14 @@ pub fn run_solution(executable_file: &PathBuf, input_data: &str, time_limit: f32
 
     let elapsed_time_ms = {
         // capture stderr from solution process
-        let stderr = solution_process.stderr.as_mut().unwrap();
-        let mut stderr_str = String::new();
-        stderr.read_to_string(&mut stderr_str).map_err(|err| Error::IOError { err, file: String::new() })?;
+        let stderr_str = String::from_utf8_lossy(&output_result.stderr);
         // parse output from timer command (ignore trailing newlines/whitespace)
         let trimmed = stderr_str.trim();
         trimmed.parse::<i32>().unwrap_or(0)
     };
     trace!("Elapsed time from timer: {elapsed_time_ms} ms");
 
-    let output = {
-        let stdout = solution_process.stdout.as_mut().unwrap();
-        let mut output_str = String::new();
-        stdout.read_to_string(&mut output_str).map_err(|err| Error::IOError { err, file: String::new() })?;
-        output_str
-    };
+    let output = String::from_utf8_lossy(&output_result.stdout).into_owned();
 
     Ok(RunResult::Ok(elapsed_time_ms, output))
 }

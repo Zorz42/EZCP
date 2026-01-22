@@ -3,16 +3,21 @@ use crate::Result;
 use crate::runner::exec_runner::{RunResult, run_solution};
 use crate::runner::gcc::{Gcc, GccOptimization, GccStandard};
 use indicatif::{MultiProgress, ProgressBar};
-use log::{debug, trace};
+use log::trace;
 use std::collections::{HashMap, HashSet};
 use std::hash::{DefaultHasher, Hash, Hasher};
 use std::path::{Path, PathBuf};
 use std::thread::spawn;
 use std::time::Duration;
 
-#[derive(Clone, Copy)]
+fn path_str(p: &Path) -> String {
+    p.to_string_lossy().into_owned()
+}
+
+/// A unique handle for a compiled C++ program.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct ProgramHandle {
-    id: usize,
+    pub(crate) id: usize,
 }
 
 struct Task {
@@ -22,26 +27,30 @@ struct Task {
     result: Option<RunResult>,
 }
 
-#[derive(Clone, Copy)]
+/// A unique handle for an asynchronous execution task.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct TaskHandle {
-    id: usize,
+    pub(crate) id: usize,
 }
 
-/// This struct is responsible for running C++ code.
-/// You add multiple source codes into it as strings and receive a handle for each source code.
-/// then you add tasks, which are triplets of (source code handle, input file, output file).
-/// The tasks are run in parallel, and you can get the result of each task by its handle.
+/// Orchestrates the compilation and parallel execution of C++ solutions.
+///
+/// `CppRunner` manages a build folder, handles program deduplication via hashing,
+/// and provides an asynchronous task-based API for running binaries with time limits.
 pub struct CppRunner {
+    /// Interface to the system's C++ compiler
     gcc: Gcc,
+    /// Directory where source files and binaries are stored
     build_folder: PathBuf,
+    /// Handle to the internal timer utility
     timer: ProgramHandle,
-    // this stores the executable for each program
+    /// Map from program ID to executable path
     programs: Vec<PathBuf>,
-    // this stores the tasks to be run
+    /// List of registered execution tasks
     tasks: Vec<Task>,
+    /// Map from source code hash to program handle for deduplication
     hash_to_handle: HashMap<u64, ProgramHandle>,
-    // this stores the set of files that are needed in the build folder
-    // used for cleaning up the build folder
+    /// Files that should be preserved in the build folder
     necessary_files: HashSet<PathBuf>,
 }
 
@@ -79,6 +88,9 @@ impl CppRunner {
         Ok(res)
     }
 
+    /// Compiles a C++ source string and returns a handle to the executable.
+    ///
+    /// If the same source has already been added, the existing handle is returned.
     pub fn add_program(&mut self, source_code: &str) -> Result<ProgramHandle> {
         trace!("Adding program with source code: {source_code}");
         let handle = ProgramHandle { id: self.programs.len() };
@@ -88,40 +100,40 @@ impl CppRunner {
             s.finish()
         };
 
-        // check if we already have this program
+        // Reuse existing program if hashes match
         if let Some(existing_handle) = self.hash_to_handle.get(&hash) {
             trace!("Program already exists with id: {}", existing_handle.id);
             return Ok(*existing_handle);
         }
 
         self.hash_to_handle.insert(hash, handle);
-        trace!("Program handle created with id: {} and hash: {hash}", handle.id);
         let source_file = self.build_folder.join(format!("p{hash}.cpp"));
         let executable_file = Gcc::transform_output_file(&source_file, None)?;
-        trace!("Source file: {}, Executable file: {}", source_file.to_string_lossy(), executable_file.to_string_lossy());
+        
         self.necessary_files.insert(source_file.clone());
         self.necessary_files.insert(executable_file.clone());
 
         if !source_file.exists() {
-            trace!("Source file does not exist, writing to: {}", source_file.to_string_lossy());
             std::fs::write(&source_file, source_code).map_err(|err| IOError {
                 err,
-                file: source_file.to_string_lossy().to_string(),
+                file: path_str(&source_file),
             })?;
         }
 
         if !executable_file.exists() {
-            trace!("Executable file does not exist. Compiling: {}", executable_file.to_string_lossy());
-            let compiled_executable = self.gcc.compile(&source_file, Some(&executable_file))?;
-
-            // this should never happen, but just in case
-            debug_assert_eq!(compiled_executable, executable_file, "GCC returned a different executable file than expected",);
+            trace!("Compiling: {}", executable_file.to_string_lossy());
+            self.gcc.compile(&source_file, Some(&executable_file))?;
         }
 
         self.programs.push(executable_file);
         Ok(handle)
     }
 
+    /// Registers a new execution task.
+    ///
+    /// * `program` - Handle to the executable to run.
+    /// * `input` - Data to be sent to stdin.
+    /// * `time_limit` - Maximum CPU time in seconds.
     pub fn add_task(&mut self, program: ProgramHandle, input: String, time_limit: f32) -> TaskHandle {
         trace!("Adding task for program id: {}, time limit: {}", program.id, time_limit);
         let handle = TaskHandle { id: self.tasks.len() };
@@ -134,48 +146,77 @@ impl CppRunner {
         handle
     }
 
+    /// Removes all registered tasks.
     pub fn clear_tasks(&mut self) {
-        trace!("Clearing tasks");
         self.tasks.clear();
     }
 
+    /// Retrieves the result of a completed task.
+    ///
+    /// # Panics
+    /// Panics if the task has not finished running.
     pub fn get_result(&self, task_handle: TaskHandle) -> RunResult {
-        trace!("Getting result for task id: {}", task_handle.id);
-        self.tasks[task_handle.id].result.clone().unwrap()
+        self.tasks[task_handle.id].result.clone().expect("Task result not available")
     }
 
+    /// Runs multiple programs against a single input sequentially or in parallel.
+    ///
+    /// This is a convenience method that manages task creation and result collection.
+    pub fn check_programs(&mut self, input: &str, programs: &[ProgramHandle], time_limit: f32) -> Result<Vec<RunResult>> {
+        self.clear_tasks();
+        let mut handles = Vec::new();
+        for &program in programs {
+            handles.push(self.add_task(program, input.to_owned(), time_limit));
+        }
+        self.run_tasks_internal(None, false)?;
+        let mut results = Vec::new();
+        for handle in handles {
+            results.push(self.get_result(handle));
+        }
+        self.clear_tasks();
+        Ok(results)
+    }
+
+    /// Deletes all files in the build directory that are not associated with
+    /// currently registered programs.
     fn clean_build_folder(&self) -> Result<()> {
         trace!("Cleaning build folder: {}", self.build_folder.to_string_lossy());
 
-        // Get all files in the build folder
         let entries = std::fs::read_dir(&self.build_folder).map_err(|err| IOError {
             err,
-            file: self.build_folder.to_string_lossy().to_string(),
+            file: path_str(&self.build_folder),
         })?;
         for entry in entries {
             let entry = entry.map_err(|err| IOError {
                 err,
-                file: self.build_folder.to_string_lossy().to_string(),
+                file: path_str(&self.build_folder),
             })?;
             let path = entry.path();
-            // If the file is not in the necessary files set, delete it
             if !self.necessary_files.contains(&path) {
-                debug!("Removing unnecessary file: {}", path.to_string_lossy());
                 std::fs::remove_file(&path).map_err(|err| IOError {
                     err,
-                    file: path.to_string_lossy().to_string(),
+                    file: path_str(&path),
                 })?;
             }
         }
         Ok(())
     }
 
+    /// Executes all registered tasks in parallel.
+    ///
+    /// * `logger` - Optional MultiProgress for visually reporting progress.
     pub fn run_tasks(&mut self, logger: Option<&MultiProgress>) -> Result<()> {
-        self.clean_build_folder()?;
+        self.run_tasks_internal(logger, true)
+    }
+
+    fn run_tasks_internal(&mut self, logger: Option<&MultiProgress>, clean: bool) -> Result<()> {
+        if clean {
+            self.clean_build_folder()?;
+        }
 
         let timer_path = self.programs[self.timer.id].clone();
 
-        let num_threads = num_cpus::get();
+        let num_threads = num_cpus::get().min(4);
         let mut threads = Vec::new();
 
         let mut it = 0;
