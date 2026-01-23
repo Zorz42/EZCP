@@ -214,6 +214,7 @@ impl Task {
         // Initialize generated_tests storage
         self.generated_tests = vec![Vec::new(); self.subtasks.len()];
 
+        // add all cpp files (solution and partial solutions)
         let mut cpp_runner = CppRunner::new(&self.build_folder_path)?;
         let solution_handle = cpp_runner.add_program(&self.solution_source)?;
         let mut solution_handles = Vec::new();
@@ -232,12 +233,18 @@ impl Task {
         let mut all_test_files = Vec::new();
 
         for (subtask_idx, subtask) in self.subtasks.iter().enumerate() {
-            const MAX_TRIES: usize = 500;
+            const MAX_TRIES: usize = 100;
             self.print_progress((subtask_idx + 1) as i32, num_subtasks as i32, &format!("Subtask {}", subtask_idx + 1));
-            let bad_solution_handles: Vec<ProgramHandle> = self.solutions.iter().zip(&solution_handles)
-                 .filter(|(sol, _)| !sol.passes_subtasks.contains(&subtask_idx))
-                 .map(|(_, &handle)| handle)
-                 .collect();
+            
+            let mut good_solution_handles = Vec::new();
+            let mut bad_solution_handles = Vec::new();
+            for (i, solution) in self.solutions.iter().enumerate() {
+                if solution.passes_subtasks.contains(&subtask_idx) {
+                    good_solution_handles.push((i, solution_handles[i]));
+                } else {
+                    bad_solution_handles.push(solution_handles[i]);
+                }
+            }
             
             let target_count = if bad_solution_handles.is_empty() {
                  subtask.initial_test_count().max(1)
@@ -253,46 +260,38 @@ impl Task {
 
             let progress_bar = self.logger.add(ProgressBar::new(target_count as u64));
             
+            let mut subtask_files = Vec::new();
+
             while found_count < target_count && tries < MAX_TRIES && subtask_start_time.elapsed() < subtask_timeout {
                  tries += 1;
                  let Some(candidate) = subtask.generate_random_test() else { break };
                  if tried_inputs.contains(&candidate) { continue; }
                  tried_inputs.insert(candidate.clone());
                  
-                 if self.is_robust_test(&candidate, solution_handle, &bad_solution_handles, &mut cpp_runner)? {
+                 if let Some(main_output) = self.is_robust_test(&candidate, solution_handle, &good_solution_handles, &bad_solution_handles, &mut cpp_runner, subtask_idx)? {
+                     // Write and solve subtask tests immediately
+                     let input_path = self.get_input_file_path(global_test_id, subtask_idx as i32, found_count as i32);
+                     let output_path = self.get_output_file_path(global_test_id, subtask_idx as i32, found_count as i32);
+                     fs::write(&input_path, &candidate).map_err(|err| Error::IOError { err, file: path_str(&input_path) })?;
+                     fs::write(&output_path, main_output).map_err(|err| Error::IOError { err, file: path_str(&output_path) })?;
+                     
+                     subtask_files.push((input_path, output_path));
                      self.generated_tests[subtask_idx].push(candidate);
                      found_count += 1;
+                     global_test_id += 1;
+                     // reset for each success
+                     tries = 0;
                      progress_bar.inc(1);
                  }
             }
             if found_count < target_count {
-                 warn!("Could not find enough robust tests for Subtask {} (found {}/{})", subtask_idx+1, found_count, target_count);
+                 error!("Could not find enough robust tests for Subtask {} (found {}/{})", subtask_idx+1, found_count, target_count);
             }
             self.logger.remove(&progress_bar);
 
-            // Write and solve subtask tests immediately
-            let mut subtask_files = Vec::new();
-            for (test_id_in_subtask, test_input) in self.generated_tests[subtask_idx].iter().enumerate() {
-                let input_path = self.get_input_file_path(global_test_id, subtask_idx as i32, test_id_in_subtask as i32);
-                let output_path = self.get_output_file_path(global_test_id, subtask_idx as i32, test_id_in_subtask as i32);
-                fs::write(&input_path, test_input).map_err(|err| Error::IOError { err, file: path_str(&input_path) })?;
-                
-                let test_result = cpp_runner.check_programs(test_input, &[solution_handle], self.time_limit)?;
-                let output = match &test_result[0] {
-                    RunResult::Ok(_, output) => output,
-                    RunResult::TimedOut => return Err(Error::SolutionTimedOut { test_path: path_str(&input_path) }),
-                    RunResult::Crashed => return Err(Error::SolutionFailed { test_path: path_str(&input_path) }),
-                };
-                fs::write(&output_path, output).map_err(|err| Error::IOError { err, file: path_str(&output_path) })?;
-                
-                subtask_files.push((input_path, output_path));
-                global_test_id += 1;
-            }
             all_test_files.push(subtask_files);
         }
 
-        // Final verification of all partial solutions
-        //self.check_solutions(&all_test_files, &mut cpp_runner, &solution_handles)?;
         self.archive_tests(&all_test_files)?;
 
         let tests_size = fs_extra::dir::get_size(&self.tests_path).unwrap_or(0) as f32 / 1_000_000.0;
@@ -310,14 +309,20 @@ impl Task {
     /// and a set of "bad" solutions.
     ///
     /// A test is considered robust if:
-    /// 1. The main solution produces a valid result (doesn't TLE or crash).
-    /// 2. Every "bad" solution either TLEs, crashes, or produces a different output
-    ///    than the correct solution.
-    fn is_robust_test(&self, input: &str, main_prog: ProgramHandle, bad_progs: &[ProgramHandle], runner: &mut CppRunner) -> Result<bool> {
-        // Run Correct (Main) Solution
-        let main_result = runner.check_programs(input, &[main_prog], self.time_limit)?;
+    /// 1. All "good" solutions (including main) produce the same valid response.
+    /// 2. Every "bad" solution either TLEs, crashes, or produces a different output.
+    fn is_robust_test(&self, input: &str, main_prog: ProgramHandle, good_progs: &[(usize, ProgramHandle)], bad_progs: &[ProgramHandle], runner: &mut CppRunner, subtask_idx: usize) -> Result<Option<String>> {
+        let mut all_progs = vec![main_prog];
+        for &(_, handle) in good_progs {
+            all_progs.push(handle);
+        }
+        all_progs.extend_from_slice(bad_progs);
+
+        // Run all solutions in parallel
+        let results = runner.check_programs(input, &all_progs, self.time_limit)?;
         
-        let main_output = match &main_result[0] {
+        // Correct (Main) Solution Result
+        let main_output = match &results[0] {
              RunResult::Ok(_, output) => output.trim().to_owned(),
              RunResult::TimedOut => return Err(Error::SolutionTimedOut {
                  test_path: "generation phase".to_owned(),
@@ -326,59 +331,37 @@ impl Task {
                  test_path: "generation phase".to_owned(),
              }),
         };
+
+        // Ensure all other "good" solutions pass and match main output
+        for (i, &(sol_idx, _)) in good_progs.iter().enumerate() {
+            match &results[1 + i] {
+                RunResult::Ok(_, output) if output.trim() == main_output => {} 
+                _ => {
+                    return Err(Error::PartialSolutionFailsSubtask {
+                        partial_number: sol_idx + 1,
+                        subtask_number: subtask_idx + 1,
+                    });
+                }
+            }
+        }
         
         if bad_progs.is_empty() {
-            return Ok(true);
+            return Ok(Some(main_output));
         }
 
         // Run Bad Solutions to ensure they fail
-        let bad_results = runner.check_programs(input, bad_progs, self.time_limit)?;
-        
-        for res in bad_results {
+        let bad_results_start = 1 + good_progs.len();
+        for res in &results[bad_results_start..] {
             match res {
                 RunResult::Ok(_, output) if output.trim() == main_output => {
                     // A bad solution passed this test! This test is not robust enough.
-                    return Ok(false);
+                    return Ok(None);
                 }
                 _ => {} // Bad solution failed as expected (TLE, Crash, or WA)
             }
         }
-        Ok(true)
+        Ok(Some(main_output))
     }
-
-
-
-    // /// Verifies all registered solutions against the generated test suite.
-    // ///
-    // /// Throws an error if any solution fails a subtask it was expected to pass,
-    // /// or if it passes a subtask it was expected to fail.
-    /*fn check_solutions(&self, test_files: &[Vec<(PathBuf, PathBuf)>], cpp_runner: &mut CppRunner, solution_handles: &[ProgramHandle]) -> Result<()> {
-        for (sol_idx, solution) in self.solutions.iter().enumerate() {
-            info!("Running solution {}:", sol_idx + 1);
-
-            let subtasks_passed = run_partial_solution(test_files, cpp_runner, solution_handles[sol_idx], &self.logger, self.time_limit)?;
-
-            for subtask_id in 0..self.subtasks.len() {
-                let subtask_failed = !subtasks_passed.contains(&subtask_id);
-
-                if subtask_failed && solution.passes_subtasks.contains(&subtask_id) {
-                    return Err(Error::PartialSolutionFailsSubtask {
-                        partial_number: sol_idx + 1,
-                        subtask_number: subtask_id + 1,
-                    });
-                }
-
-                if !subtask_failed && !solution.passes_subtasks.contains(&subtask_id) {
-                    return Err(Error::PartialSolutionPassesExtraSubtask {
-                        partial_number: sol_idx + 1,
-                        subtask_number: subtask_id + 1,
-                    });
-                }
-            }
-        }
-
-        Ok(())
-    }*/
 
     /// Archive all tests into a zip file
     fn archive_tests(&self, test_files: &[Vec<(PathBuf, PathBuf)>]) -> Result<()> {
