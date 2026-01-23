@@ -27,7 +27,7 @@ mod partial_solution_tests {
         }
         "#;
 
-        task.task = task.task.with_solution_source(solution_contents.to_owned());
+        task.task = task.task.with_solution_source(solution_contents);
 
         // create partial solution file (it overflows)
         let partial_solution_contents = r#"
@@ -60,7 +60,7 @@ mod partial_solution_tests {
             .with_subtask(subtask1)
             .with_subtask(subtask2)
             // add partial solutions
-            .with_solution(partial_solution_contents.to_owned(), &[0]);
+            .with_solution(partial_solution_contents, &[0]);
 
         task.test();
     }
@@ -90,7 +90,7 @@ mod partial_solution_tests {
         }
         "#;
 
-        task.task = task.task.with_solution_source(solution_contents.to_owned());
+        task.task = task.task.with_solution_source(solution_contents);
 
         // create partial solution file (it overflows)
         let partial_solution_contents = r#"
@@ -124,7 +124,7 @@ mod partial_solution_tests {
             .with_subtask(subtask1)
             .with_subtask(subtask2)
             // add partial solutions
-            .with_solution(partial_solution_contents.to_owned(), &[0]);
+            .with_solution(partial_solution_contents, &[0]);
 
         task.test();
     }
@@ -152,7 +152,7 @@ mod partial_solution_tests {
         }
         "#;
 
-        task.task = task.task.with_solution_source(solution_contents.to_owned());
+        task.task = task.task.with_solution_source(solution_contents);
 
         // create partial solution file (it crashes)
         let partial_solution_contents = "
@@ -178,7 +178,7 @@ mod partial_solution_tests {
             .with_subtask(subtask1)
             .with_subtask(subtask2)
             // add partial solutions
-            .with_solution(partial_solution_contents.to_owned(), &[]);
+            .with_solution(partial_solution_contents, &[]);
 
         task.test();
     }
@@ -206,7 +206,7 @@ mod partial_solution_tests {
         }
         "#;
 
-        task.task = task.task.with_solution_source(solution_contents.to_owned());
+        task.task = task.task.with_solution_source(solution_contents);
 
         // create partial solution file (it overflows)
         let partial_solution_contents = r#"
@@ -240,7 +240,7 @@ mod partial_solution_tests {
             .with_subtask(subtask1)
             .with_subtask(subtask2)
             // add partial solutions
-            .with_solution(partial_solution_contents.to_owned(), &[]);
+            .with_solution(partial_solution_contents, &[]);
 
         task.test();
     }

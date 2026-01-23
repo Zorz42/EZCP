@@ -33,7 +33,7 @@ fn main() {
     // In this task you have n coins with values a1, a2, ..., an. You need to find the smallest sum, you cannot get using these coins.
     // For example, if you have coins with values 1, 2 and 4, you can get any sum from 1 to 7, but you cannot get 8.
 
-    let task = ezcp::Task::new("Coins", &PathBuf::from("task2")).with_solution_source(SOLUTION.to_owned());
+    let task = ezcp::Task::new("Coins", &PathBuf::from("task2")).with_solution_source(SOLUTION);
 
     // Constraint: n = 1
     let subtask1 = ezcp::Subtask::new().with_test(5, ezcp::array_generator(1, 1, 1, 1000)).with_test(1, || "1\n 1\n".to_owned());

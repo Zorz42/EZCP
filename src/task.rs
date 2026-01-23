@@ -102,8 +102,8 @@ impl Task {
 
     /// Sets the source code of the correct (main) solution.
     #[must_use]
-    pub fn with_solution_source(mut self, source: String) -> Self {
-        self.solution_source = source;
+    pub fn with_solution_source(mut self, source: &str) -> Self {
+        self.solution_source = source.to_string();
         self
     }
 
@@ -129,8 +129,8 @@ impl Task {
     ///
     /// * `passes_subtasks` - List of subtask indices this solution is expected to pass.
     #[must_use]
-    pub fn with_solution(mut self, solution_source: String, passes_subtasks: &[usize]) -> Self {
-        self.solutions.push(Solution::new(solution_source, passes_subtasks));
+    pub fn with_solution(mut self, solution_source: &str, passes_subtasks: &[usize]) -> Self {
+        self.solutions.push(Solution::new(solution_source.to_string(), passes_subtasks));
         self
     }
 

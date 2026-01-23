@@ -31,7 +31,7 @@ pub mod generic_tests {
 
         // create solution file
         let solution_contents = "int main() { return 0; }";
-        task.task = task.task.with_solution_source(solution_contents.to_owned());
+        task.task = task.task.with_solution_source(solution_contents);
 
         task.test();
     }
@@ -52,7 +52,7 @@ pub mod generic_tests {
         
         "#;
 
-        task.task = task.task.with_solution_source(solution_contents.to_owned());
+        task.task = task.task.with_solution_source(solution_contents);
 
         let subtask1 = Subtask::new();
         let subtask2 = Subtask::new();
@@ -80,7 +80,7 @@ pub mod generic_tests {
         
         "#;
 
-        task.task = task.task.with_solution_source(solution_contents.to_owned());
+        task.task = task.task.with_solution_source(solution_contents);
 
         let subtask1 = Subtask::new().with_test(1, || "1\n".to_owned()).with_test(1, || "2\n".to_owned()).with_test(1, || "3\n".to_owned());
         let subtask2 = Subtask::new().with_test(1, || "1\n".to_owned()).with_test(1, || "2\n".to_owned()).with_test(1, || "3\n".to_owned());
@@ -121,7 +121,7 @@ pub mod generic_tests {
         }
         "#;
 
-        task.task = task.task.with_solution_source(solution_contents.to_owned());
+        task.task = task.task.with_solution_source(solution_contents);
 
         let subtask1 = Subtask::new().with_test(1, || "1\n".to_owned());
 
@@ -143,7 +143,7 @@ pub mod generic_tests {
         }
         ";
 
-        task.task = task.task.with_solution_source(solution_contents.to_owned());
+        task.task = task.task.with_solution_source(solution_contents);
 
         let subtask1 = Subtask::new().with_test(1, || "1\n".to_owned());
 
@@ -171,7 +171,7 @@ pub mod generic_tests {
         }
         "#;
 
-        task.task = task.task.with_solution_source(solution_contents.to_owned());
+        task.task = task.task.with_solution_source(solution_contents);
 
         let subtask1 = Subtask::new().with_test(1, || "1\n".to_owned()).with_test(1, || "2\n".to_owned()).with_test(1, || "3\n".to_owned());
         let subtask2 = Subtask::new().with_test(1, || "1\n".to_owned()).with_test(1, || "2\n".to_owned()).with_test(1, || "3\n".to_owned());
@@ -202,7 +202,7 @@ pub mod generic_tests {
         
         "#;
 
-        task.task = task.task.with_solution_source(solution_contents.to_owned());
+        task.task = task.task.with_solution_source(solution_contents);
 
         let subtask1 = Subtask::new().with_test(1, || "1\n".to_owned()).with_test(1, || "2\n".to_owned()).with_test(1, || "3\n".to_owned());
         let subtask2 = Subtask::new().with_test(1, || "1\n".to_owned()).with_test(1, || "2\n".to_owned()).with_test(1, || "3\n".to_owned());
@@ -233,7 +233,7 @@ pub mod generic_tests {
         
         "#;
 
-        task.task = task.task.with_solution_source(solution_contents.to_owned());
+        task.task = task.task.with_solution_source(solution_contents);
 
         let subtask1 = Subtask::new().with_test(1, || "1\n".to_owned()).with_test(1, || "2\n".to_owned()).with_test(1, || "3\n".to_owned());
         let subtask2 = Subtask::new().with_test(1, || "1\n".to_owned()).with_test(1, || "2\n".to_owned()).with_test(1, || "3\n".to_owned());

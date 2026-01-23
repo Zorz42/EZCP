@@ -39,7 +39,7 @@ fn main() {
 
     let task = ezcp::Task::new("Coupon", &PathBuf::from("task1"))
         //task.debug_level = LevelFilter::Trace;
-        .with_solution_source(SOLUTION.to_owned());
+        .with_solution_source(SOLUTION);
 
     // Constraint: n = 1
     // add 5 tests where an array is generated with length 1 and even values between 0 and 1_000_000_000 (inclusive)
@@ -75,7 +75,7 @@ fn main() {
     task.with_subtask(subtask1)
         .with_subtask(subtask2)
         .with_subtask(subtask3)
-        .with_solution(PARTIAL_SOLUTION.to_owned(), &[0])
+        .with_solution(PARTIAL_SOLUTION, &[0])
         .run()
         .ok();
 }

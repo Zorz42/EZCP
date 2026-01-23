@@ -56,12 +56,12 @@ mod frankenstein_tests {
         });
         
         let task = Task::new(task_name, &task_path)
-             .with_solution_source(source_main.to_owned())
+             .with_solution_source(source_main)
              .with_subtask(subtask)
              // Solution A should fail subtask 0
-             .with_solution(source_bad_a.to_owned(), &[])
+             .with_solution(source_bad_a, &[])
              // Solution B should fail subtask 0
-             .with_solution(source_bad_b.to_owned(), &[])
+             .with_solution(source_bad_b, &[])
              .with_min_failures(5);
              
          // Run task

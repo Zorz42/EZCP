@@ -26,7 +26,7 @@ mod array_tests {
         
         "#;
 
-        task.task = task.task.with_solution_source(solution_contents.to_owned());
+        task.task = task.task.with_solution_source(solution_contents);
 
         // create subtasks
         let subtask1 = Subtask::new()
