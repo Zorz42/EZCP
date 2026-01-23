@@ -44,8 +44,6 @@ fn main() {
     // Constraint: n = 1
     // add 5 tests where an array is generated with length 1 and even values between 0 and 1_000_000_000 (inclusive)
     let subtask1 = ezcp::Subtask::new().with_test(5, ezcp::array_generator_custom(1, 1, |rng| rng.random_range(0..=500_000_000) * 2));
-    // this is a faulty test for testing the checker
-    //subtask1.add_test_str("1\n 0 0\n".to_owned());
 
     // Constraint: all values are the same
     // add 5 random tests where each test is an array of length between 1 and 200_000 (inclusive) and all values are the same even value between 0 and 1_000_000_000 (inclusive)

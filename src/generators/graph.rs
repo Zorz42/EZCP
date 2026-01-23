@@ -1,4 +1,3 @@
-use crate::Input;
 use rand::Rng;
 use rand::prelude::SliceRandom;
 use std::collections::HashSet;
@@ -98,25 +97,6 @@ impl Graph {
             result.add_edge(u as usize, v as usize);
         }
         result
-    }
-
-    /// This function creates a new graph from an input string.
-    /// The input string should be formatted as follows:
-    /// The first line should contain two integers n and m, the number of nodes and edges respectively.
-    /// The next m lines should contain two integers u and v, representing an edge between nodes u and v.
-    /// The nodes are 1-indexed.
-    #[must_use]
-    pub fn new_from_input(input: &str) -> Option<Self> {
-        let mut input = Input::new(input);
-        let n = input.get_int().ok()?;
-        let m = input.get_int().ok()?;
-        let mut result = Self::new_empty(n);
-        for _ in 0..m {
-            let u = input.get_int().ok()? - 1;
-            let v = input.get_int().ok()? - 1;
-            result.add_edge(u as usize, v as usize);
-        }
-        Some(result)
     }
 
     /// This function returns true if there is an edge between nodes u and v.

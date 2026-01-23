@@ -269,61 +269,6 @@ mod graph_tests {
     }
 
     #[test]
-    #[allow(clippy::cognitive_complexity)]
-    fn test_graph_input_output() {
-        let mut graph = Graph::new_empty(5);
-        graph.add_edge(0, 1);
-        graph.add_edge(1, 2);
-        graph.add_edge(0, 3);
-
-        let input = graph.create_output();
-        let graph = Graph::new_from_input(&input).unwrap();
-
-        assert_eq!(graph.get_num_nodes(), 5);
-        assert_eq!(graph.get_num_edges(), 3);
-        assert!(!graph.has_edge(0, 0));
-        assert!(graph.has_edge(0, 1));
-        assert!(!graph.has_edge(0, 2));
-        assert!(graph.has_edge(0, 3));
-        assert!(!graph.has_edge(0, 4));
-        assert!(graph.has_edge(1, 0));
-        assert!(!graph.has_edge(1, 1));
-        assert!(graph.has_edge(1, 2));
-        assert!(!graph.has_edge(1, 3));
-        assert!(!graph.has_edge(1, 4));
-        assert!(!graph.has_edge(2, 0));
-        assert!(graph.has_edge(2, 1));
-        assert!(!graph.has_edge(2, 2));
-        assert!(!graph.has_edge(2, 3));
-        assert!(!graph.has_edge(2, 4));
-        assert!(graph.has_edge(3, 0));
-        assert!(!graph.has_edge(3, 1));
-        assert!(!graph.has_edge(3, 2));
-        assert!(!graph.has_edge(3, 3));
-        assert!(!graph.has_edge(3, 4));
-        assert!(!graph.has_edge(4, 0));
-        assert!(!graph.has_edge(4, 1));
-        assert!(!graph.has_edge(4, 2));
-        assert!(!graph.has_edge(4, 3));
-        assert!(!graph.has_edge(4, 4));
-
-        for n in 1..20 {
-            for m in 0..n * (n - 1) / 2 {
-                let graph = Graph::new_random(n, m);
-                let input = graph.create_output();
-                let graph2 = Graph::new_from_input(&input).unwrap();
-                assert_eq!(graph2.get_num_nodes(), n);
-                assert_eq!(graph2.get_num_edges(), m);
-                for u in 0..n {
-                    for v in 0..n {
-                        assert_eq!(graph.has_edge(u as usize, v as usize), graph2.has_edge(v as usize, u as usize));
-                    }
-                }
-            }
-        }
-    }
-
-    #[test]
     fn test_get_connected_components() {
         let mut graph = Graph::new_empty(10);
         assert_eq!(

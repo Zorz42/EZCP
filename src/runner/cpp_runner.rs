@@ -134,7 +134,7 @@ impl CppRunner {
     /// * `program` - Handle to the executable to run.
     /// * `input` - Data to be sent to stdin.
     /// * `time_limit` - Maximum CPU time in seconds.
-    pub fn add_task(&mut self, program: ProgramHandle, input: String, time_limit: f32) -> TaskHandle {
+    fn add_task(&mut self, program: ProgramHandle, input: String, time_limit: f32) -> TaskHandle {
         trace!("Adding task for program id: {}, time limit: {}", program.id, time_limit);
         let handle = TaskHandle { id: self.tasks.len() };
         self.tasks.push(Task {
@@ -147,7 +147,7 @@ impl CppRunner {
     }
 
     /// Removes all registered tasks.
-    pub fn clear_tasks(&mut self) {
+    fn clear_tasks(&mut self) {
         self.tasks.clear();
     }
 
@@ -156,7 +156,7 @@ impl CppRunner {
     /// # Panics
     /// Panics if the task has not finished running.
     #[allow(clippy::expect_used)]
-    pub fn get_result(&self, task_handle: TaskHandle) -> RunResult {
+    fn get_result(&self, task_handle: TaskHandle) -> RunResult {
         self.tasks[task_handle.id].result.clone().expect("Task result not available")
     }
 

@@ -3,7 +3,6 @@ mod cpp_runner_tests;
 mod gcc_tests;
 mod generic_tests;
 mod graph_tests;
-mod input_tests;
 mod partial_solution_tests;
 mod frankenstein_tests;
 
