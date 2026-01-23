@@ -36,7 +36,7 @@ fn main() {
     let task = ezcp::Task::new("Coins", &PathBuf::from("task2")).with_solution_source(SOLUTION.to_owned());
 
     // Constraint: n = 1
-    let subtask1 = ezcp::Subtask::new().with_test(5, ezcp::array_generator(1, 1, 1, 1000)).with_test_str("1\n 1\n");
+    let subtask1 = ezcp::Subtask::new().with_test(5, ezcp::array_generator(1, 1, 1, 1000)).with_test(1, || "1\n 1\n".to_owned());
 
     // Constraint: elements in the array are powers of 2 and n <= 30
     let subtask2 = ezcp::Subtask::new().with_test(5, || {

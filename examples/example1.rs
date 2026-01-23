@@ -59,9 +59,9 @@ fn main() {
             let x = rng.random_range(0..=500_000_000) * 2;
             ezcp::array_to_string(&vec![x; n as usize], true)
         })
-        .with_test_str(ezcp::array_to_string(&vec![x; 200_000], true))
+        .with_test(1, move || ezcp::array_to_string(&vec![x; 200_000], true))
         .with_test(3, ezcp::array_generator(1, 200_000, 1_000_000_000, 1_000_000_000))
-        .with_test_str(ezcp::array_to_string(&vec![1_000_000_000; 200_000], true));
+        .with_test(1, || ezcp::array_to_string(&vec![1_000_000_000; 200_000], true));
 
     // No additional constraints
     // add some random tests

@@ -36,18 +36,6 @@ impl Subtask {
         self
     }
 
-    /// Adds a fixed test input string.
-    ///
-    /// This is a convenience method that treats the string as a single static test.
-    #[must_use]
-    pub fn with_test_str<S: Into<String>>(mut self, input: S) -> Self {
-        let input: String = input.into();
-        let func = move || input.clone();
-        let generator = Rc::new(TestGenerator::new(func));
-        self.generators.push(generator);
-        self.initial_counts.push(1);
-        self
-    }
 
     /// Returns the sum of initial test counts across all generators.
     #[must_use]
