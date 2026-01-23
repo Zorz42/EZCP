@@ -4,7 +4,6 @@ use crate::{Error, Result};
 
 use crate::archiver::archive_files;
 use crate::logger_format::logger_format;
-//use crate::partial_solution::run_partial_solution;
 use crate::runner::cpp_runner::{CppRunner, ProgramHandle};
 use crate::runner::exec_runner::RunResult;
 use console::style;
@@ -38,30 +37,30 @@ pub struct Task {
     /// Name of the task
     name: String,
     /// Directory where generated tests will be saved
-    pub tests_path: PathBuf,
+    tests_path: PathBuf,
     /// Time limit in seconds for solutions
-    pub time_limit: f32,
+    time_limit: f32,
     /// Path to the final ZIP archive containing all tests
-    pub tests_archive_path: PathBuf,
+    tests_archive_path: PathBuf,
     /// Closure to determine input file names: `(test_id, subtask_id, id_in_subtask) -> String`
-    pub get_input_file_name: Box<dyn Fn(i32, i32, i32) -> String>,
+    get_input_file_name: Box<dyn Fn(i32, i32, i32) -> String>,
     /// Closure to determine output file names: `(test_id, subtask_id, id_in_subtask) -> String`
-    pub get_output_file_name: Box<dyn Fn(i32, i32, i32) -> String>,
+    get_output_file_name: Box<dyn Fn(i32, i32, i32) -> String>,
     /// Internal build directory for compiling solutions
     build_folder_path: PathBuf,
     /// Registered subtasks
     subtasks: Vec<Subtask>,
     /// Source code of the correct (main) solution
-    pub solution_source: String,
+    solution_source: String,
     /// Partial solutions to be verified against subtasks
     solutions: Vec<Solution>,
     /// Target number of failures per "bad" solution per subtask
-    pub min_failures_per_solution: usize,
+    min_failures_per_solution: usize,
     /// Maximum number of tests allowed per subtask
-    pub max_tests_per_subtask: usize,
+    max_tests_per_subtask: usize,
 
     /// Log level for output
-    pub debug_level: LevelFilter,
+    debug_level: LevelFilter,
     /// Progress reporting manager
     logger: MultiProgress,
 
@@ -103,7 +102,7 @@ impl Task {
     /// Sets the source code of the correct (main) solution.
     #[must_use]
     pub fn with_solution_source(mut self, source: &str) -> Self {
-        self.solution_source = source.to_string();
+        self.solution_source = source.to_owned();
         self
     }
 
@@ -130,7 +129,7 @@ impl Task {
     /// * `passes_subtasks` - List of subtask indices this solution is expected to pass.
     #[must_use]
     pub fn with_solution(mut self, solution_source: &str, passes_subtasks: &[usize]) -> Self {
-        self.solutions.push(Solution::new(solution_source.to_string(), passes_subtasks));
+        self.solutions.push(Solution::new(solution_source.to_owned(), passes_subtasks));
         self
     }
 
@@ -141,10 +140,59 @@ impl Task {
         self
     }
 
-    /// Sets a safety limit on the number of tests per subtask.
+    /// Sets the safety limit on the number of tests per subtask.
     #[must_use]
     pub const fn with_max_tests_per_subtask(mut self, n: usize) -> Self {
         self.max_tests_per_subtask = n;
+        self
+    }
+
+    /// Sets the directory for build artifacts.
+    #[must_use]
+    pub fn with_build_folder_path(mut self, path: PathBuf) -> Self {
+        self.build_folder_path = path;
+        self
+    }
+
+    /// Sets the directory where generated tests will be saved.
+    #[must_use]
+    pub fn with_tests_path(mut self, path: PathBuf) -> Self {
+        self.tests_path = path;
+        self
+    }
+
+    /// Sets the time limit in seconds for solutions.
+    #[must_use]
+    pub const fn with_time_limit(mut self, limit: f32) -> Self {
+        self.time_limit = limit;
+        self
+    }
+
+    /// Sets the path to the final ZIP archive containing all tests.
+    #[must_use]
+    pub fn with_tests_archive_path(mut self, path: PathBuf) -> Self {
+        self.tests_archive_path = path;
+        self
+    }
+
+    /// Sets the closure to determine input file names.
+    #[must_use]
+    pub fn with_get_input_file_name<F: Fn(i32, i32, i32) -> String + 'static>(mut self, f: F) -> Self {
+        self.get_input_file_name = Box::new(f);
+        self
+    }
+
+    /// Sets the closure to determine output file names.
+    #[must_use]
+    pub fn with_get_output_file_name<F: Fn(i32, i32, i32) -> String + 'static>(mut self, f: F) -> Self {
+        self.get_output_file_name = Box::new(f);
+        self
+    }
+
+    /// Sets the log level for output.
+    #[must_use]
+    pub const fn with_debug_level(mut self, level: LevelFilter) -> Self {
+        self.debug_level = level;
         self
     }
 

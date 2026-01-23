@@ -13,8 +13,7 @@ pub mod generic_tests {
     impl Test {
         pub fn new() -> Self {
             let task_path = TempDir::new().unwrap();
-            let mut task = Task::new("Test task", task_path.path());
-            task.debug_level = LevelFilter::Trace;
+            let task = Task::new("Test task", task_path.path()).with_debug_level(LevelFilter::Trace);
             Self { task, task_path }
         }
 
@@ -102,7 +101,7 @@ pub mod generic_tests {
     #[test]
     fn test_times_out() {
         let mut task = Test::new();
-        task.task.time_limit = 0.1;
+        task.task = task.task.with_time_limit(0.1);
 
         // create solution file
         let solution_contents = r#"
@@ -157,8 +156,8 @@ pub mod generic_tests {
     fn create_with_custom_names() {
         let mut task = Test::new();
 
-        task.task.get_input_file_name = Box::new(|test_id: i32, subtask_id: i32, test_id_in_subtask: i32| format!("in_{subtask_id}_{test_id_in_subtask}_{test_id}.txt"));
-        task.task.get_output_file_name = Box::new(|test_id: i32, subtask_id: i32, test_id_in_subtask: i32| format!("out_{subtask_id}_{test_id_in_subtask}_{test_id}.txt"));
+        task.task = task.task.with_get_input_file_name(|test_id: i32, subtask_id: i32, test_id_in_subtask: i32| format!("in_{subtask_id}_{test_id_in_subtask}_{test_id}.txt"))
+            .with_get_output_file_name(|test_id: i32, subtask_id: i32, test_id_in_subtask: i32| format!("out_{subtask_id}_{test_id_in_subtask}_{test_id}.txt"));
 
         // create solution file
         let solution_contents = r#"
@@ -187,8 +186,8 @@ pub mod generic_tests {
     fn create_with_custom_names2() {
         let mut task = Test::new();
 
-        task.task.get_input_file_name = Box::new(|_test_id: i32, subtask_id: i32, test_id_in_subtask: i32| format!("in_{subtask_id}_{test_id_in_subtask}.txt"));
-        task.task.get_output_file_name = Box::new(|_test_id: i32, subtask_id: i32, test_id_in_subtask: i32| format!("out_{subtask_id}_{test_id_in_subtask}.txt"));
+        task.task = task.task.with_get_input_file_name(|_test_id: i32, subtask_id: i32, test_id_in_subtask: i32| format!("in_{subtask_id}_{test_id_in_subtask}.txt"))
+            .with_get_output_file_name(|_test_id: i32, subtask_id: i32, test_id_in_subtask: i32| format!("out_{subtask_id}_{test_id_in_subtask}.txt"));
 
         // create solution file
         let solution_contents = r#"
@@ -218,8 +217,8 @@ pub mod generic_tests {
     fn create_with_custom_names3() {
         let mut task = Test::new();
 
-        task.task.get_input_file_name = Box::new(|test_id: i32, _subtask_id: i32, _test_id_in_subtask: i32| format!("in_{test_id}.txt"));
-        task.task.get_output_file_name = Box::new(|test_id: i32, _subtask_id: i32, _test_id_in_subtask: i32| format!("out_{test_id}.txt"));
+        task.task = task.task.with_get_input_file_name(|test_id: i32, _subtask_id: i32, _test_id_in_subtask: i32| format!("in_{test_id}.txt"))
+            .with_get_output_file_name(|test_id: i32, _subtask_id: i32, _test_id_in_subtask: i32| format!("out_{test_id}.txt"));
 
         // create solution file
         let solution_contents = r#"
