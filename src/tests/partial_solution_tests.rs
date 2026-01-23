@@ -65,8 +65,6 @@ mod partial_solution_tests {
         task.test();
     }
 
-
-
     #[test]
     fn test_partial_solution_tle() {
         let mut task = Test::new();

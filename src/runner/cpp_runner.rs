@@ -109,15 +109,12 @@ impl CppRunner {
         self.hash_to_handle.insert(hash, handle);
         let source_file = self.build_folder.join(format!("p{hash}.cpp"));
         let executable_file = Gcc::transform_output_file(&source_file, None)?;
-        
+
         self.necessary_files.insert(source_file.clone());
         self.necessary_files.insert(executable_file.clone());
 
         if !source_file.exists() {
-            std::fs::write(&source_file, source_code).map_err(|err| IOError {
-                err,
-                file: path_str(&source_file),
-            })?;
+            std::fs::write(&source_file, source_code).map_err(|err| IOError { err, file: path_str(&source_file) })?;
         }
 
         if !executable_file.exists() {
@@ -194,15 +191,11 @@ impl CppRunner {
             })?;
             let path = entry.path();
             if !self.necessary_files.contains(&path) {
-                std::fs::remove_file(&path).map_err(|err| IOError {
-                    err,
-                    file: path_str(&path),
-                })?;
+                std::fs::remove_file(&path).map_err(|err| IOError { err, file: path_str(&path) })?;
             }
         }
         Ok(())
     }
-
 
     fn run_tasks_internal(&mut self, logger: Option<&MultiProgress>, clean: bool) -> Result<()> {
         if clean {

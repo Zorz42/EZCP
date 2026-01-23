@@ -33,4 +33,3 @@ impl Solution {
         !self.passes_subtasks.contains(&subtask)
     }
 }
-

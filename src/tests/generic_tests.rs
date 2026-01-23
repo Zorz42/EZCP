@@ -156,7 +156,9 @@ pub mod generic_tests {
     fn create_with_custom_names() {
         let mut task = Test::new();
 
-        task.task = task.task.with_get_input_file_name(|test_id: i32, subtask_id: i32, test_id_in_subtask: i32| format!("in_{subtask_id}_{test_id_in_subtask}_{test_id}.txt"))
+        task.task = task
+            .task
+            .with_get_input_file_name(|test_id: i32, subtask_id: i32, test_id_in_subtask: i32| format!("in_{subtask_id}_{test_id_in_subtask}_{test_id}.txt"))
             .with_get_output_file_name(|test_id: i32, subtask_id: i32, test_id_in_subtask: i32| format!("out_{subtask_id}_{test_id_in_subtask}_{test_id}.txt"));
 
         // create solution file
@@ -186,7 +188,9 @@ pub mod generic_tests {
     fn create_with_custom_names2() {
         let mut task = Test::new();
 
-        task.task = task.task.with_get_input_file_name(|_test_id: i32, subtask_id: i32, test_id_in_subtask: i32| format!("in_{subtask_id}_{test_id_in_subtask}.txt"))
+        task.task = task
+            .task
+            .with_get_input_file_name(|_test_id: i32, subtask_id: i32, test_id_in_subtask: i32| format!("in_{subtask_id}_{test_id_in_subtask}.txt"))
             .with_get_output_file_name(|_test_id: i32, subtask_id: i32, test_id_in_subtask: i32| format!("out_{subtask_id}_{test_id_in_subtask}.txt"));
 
         // create solution file
@@ -217,7 +221,9 @@ pub mod generic_tests {
     fn create_with_custom_names3() {
         let mut task = Test::new();
 
-        task.task = task.task.with_get_input_file_name(|test_id: i32, _subtask_id: i32, _test_id_in_subtask: i32| format!("in_{test_id}.txt"))
+        task.task = task
+            .task
+            .with_get_input_file_name(|test_id: i32, _subtask_id: i32, _test_id_in_subtask: i32| format!("in_{test_id}.txt"))
             .with_get_output_file_name(|test_id: i32, _subtask_id: i32, _test_id_in_subtask: i32| format!("out_{test_id}.txt"));
 
         // create solution file

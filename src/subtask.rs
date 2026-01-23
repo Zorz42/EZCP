@@ -36,7 +36,6 @@ impl Subtask {
         self
     }
 
-
     /// Returns the sum of initial test counts across all generators.
     #[must_use]
     pub fn initial_test_count(&self) -> usize {

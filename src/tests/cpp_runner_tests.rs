@@ -108,7 +108,7 @@ pub mod cpp_runner_tests {
         for i in 0..20 {
             let input = format!("{i}\n");
             let results = runner.check_programs(&input, &program_handles, 1.0).unwrap();
-            
+
             for (j, result) in results.iter().enumerate() {
                 assert!(matches!(result, RunResult::Ok(..)));
 
