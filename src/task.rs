@@ -58,6 +58,8 @@ pub struct Task {
     min_failures_per_solution: usize,
     /// Maximum number of tests allowed per subtask
     max_tests_per_subtask: usize,
+    /// Maximum number of consecutive failed attempts to find a robust test
+    max_tries: usize,
 
     /// Log level for output
     debug_level: LevelFilter,
@@ -88,6 +90,7 @@ impl Task {
             solutions: Vec::new(),
             min_failures_per_solution: 5,
             max_tests_per_subtask: 100,
+            max_tries: 100,
             debug_level: LevelFilter::Info,
             logger: MultiProgress::new(),
             solution_source: String::new(),
@@ -140,6 +143,13 @@ impl Task {
     #[must_use]
     pub const fn with_max_tests_per_subtask(mut self, n: usize) -> Self {
         self.max_tests_per_subtask = n;
+        self
+    }
+
+    /// Sets the maximum number of consecutive failed attempts to find a robust test.
+    #[must_use]
+    pub const fn with_max_tries(mut self, n: usize) -> Self {
+        self.max_tries = n;
         self
     }
 
@@ -283,7 +293,6 @@ impl Task {
         let mut all_test_files = Vec::new();
 
         for (subtask_idx, subtask) in self.subtasks.iter().enumerate() {
-            const MAX_TRIES: usize = 100;
             self.print_progress((subtask_idx + 1) as i32, num_subtasks as i32, &format!("Subtask {}", subtask_idx + 1));
 
             let mut good_solution_handles = Vec::new();
@@ -309,11 +318,11 @@ impl Task {
             let subtask_timeout = std::time::Duration::from_secs(30);
 
             let found_count_progress_bar = self.logger.add(ProgressBar::new(target_count as u64));
-            let tries_progress_bar = self.logger.add(ProgressBar::new(MAX_TRIES as u64));
+            let tries_progress_bar = self.logger.add(ProgressBar::new(self.max_tries as u64));
 
             let mut subtask_files = Vec::new();
 
-            while found_count < target_count && tries < MAX_TRIES && subtask_start_time.elapsed() < subtask_timeout {
+            while found_count < target_count && tries < self.max_tries && subtask_start_time.elapsed() < subtask_timeout {
                 tries += 1;
                 let Some(candidate) = subtask.generate_random_test() else { break };
                 if tried_inputs.contains(&candidate) {
