@@ -59,9 +59,9 @@ mod frankenstein_tests {
             .with_solution_source(source_main)
             .with_subtask(subtask)
             // Solution A should fail subtask 0
-            .with_solution(source_bad_a, &[])
+            .with_partial_solution(source_bad_a, &[])
             // Solution B should fail subtask 0
-            .with_solution(source_bad_b, &[])
+            .with_partial_solution(source_bad_b, &[])
             .with_min_failures(5);
 
         // Run task

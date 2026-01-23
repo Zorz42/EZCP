@@ -60,7 +60,7 @@ mod partial_solution_tests {
             .with_subtask(subtask1)
             .with_subtask(subtask2)
             // add partial solutions
-            .with_solution(partial_solution_contents, &[0]);
+            .with_partial_solution(partial_solution_contents, &[0]);
 
         task.test();
     }
@@ -122,7 +122,7 @@ mod partial_solution_tests {
             .with_subtask(subtask1)
             .with_subtask(subtask2)
             // add partial solutions
-            .with_solution(partial_solution_contents, &[0]);
+            .with_partial_solution(partial_solution_contents, &[0]);
 
         task.test();
     }
@@ -176,7 +176,7 @@ mod partial_solution_tests {
             .with_subtask(subtask1)
             .with_subtask(subtask2)
             // add partial solutions
-            .with_solution(partial_solution_contents, &[]);
+            .with_partial_solution(partial_solution_contents, &[]);
 
         task.test();
     }
@@ -238,7 +238,7 @@ mod partial_solution_tests {
             .with_subtask(subtask1)
             .with_subtask(subtask2)
             // add partial solutions
-            .with_solution(partial_solution_contents, &[]);
+            .with_partial_solution(partial_solution_contents, &[]);
 
         task.test();
     }

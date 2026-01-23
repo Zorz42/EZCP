@@ -96,8 +96,11 @@ impl Task {
     }
 
     /// Sets the source code of the correct (main) solution.
+    /// 
+    /// Panics if it is called the second time.
     #[must_use]
     pub fn with_solution_source(mut self, source: &str) -> Self {
+        assert!(self.solution_source.is_empty());
         self.solution_source = source.to_owned();
         self
     }
@@ -124,7 +127,7 @@ impl Task {
     ///
     /// * `passes_subtasks` - List of subtask indices this solution is expected to pass.
     #[must_use]
-    pub fn with_solution(mut self, solution_source: &str, passes_subtasks: &[usize]) -> Self {
+    pub fn with_partial_solution(mut self, solution_source: &str, passes_subtasks: &[usize]) -> Self {
         self.solutions.push(Solution::new(solution_source.to_owned(), passes_subtasks));
         self
     }

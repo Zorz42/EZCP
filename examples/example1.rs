@@ -75,7 +75,7 @@ fn main() {
     task.with_subtask(subtask1)
         .with_subtask(subtask2)
         .with_subtask(subtask3)
-        .with_solution(PARTIAL_SOLUTION, &[0])
+        .with_partial_solution(PARTIAL_SOLUTION, &[0])
         .run()
         .ok();
 }
