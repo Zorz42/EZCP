@@ -10,6 +10,7 @@ use console::style;
 use indicatif::{MultiProgress, ProgressBar};
 use indicatif_log_bridge::LogWrapper;
 use log::{LevelFilter, debug, error, info, warn};
+use rand::seq::SliceRandom;
 use std::collections::HashSet;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -96,7 +97,7 @@ impl Task {
     }
 
     /// Sets the source code of the correct (main) solution.
-    /// 
+    ///
     /// Panics if it is called the second time.
     #[must_use]
     pub fn with_solution_source(mut self, source: &str) -> Self {
@@ -298,23 +299,41 @@ impl Task {
                 }
             }
 
-            let target_count = if bad_solution_handles.is_empty() {
-                subtask.initial_test_count().max(1)
-            } else {
-                self.min_failures_per_solution
-            };
-
             let mut tried_inputs = HashSet::new();
-            let mut found_count = 0;
-            let mut tries = 0;
+            let mut subtask_tests = Vec::new();
+            let mut robust_found_count = 0;
 
-            let found_count_progress_bar = self.logger.add(ProgressBar::new(target_count as u64));
+            let total_initial: usize = subtask.initial_counts.iter().sum();
+            let target_robust = if bad_solution_handles.is_empty() { 0 } else { self.min_failures_per_solution };
+
+            let found_count_progress_bar = self.logger.add(ProgressBar::new((total_initial + target_robust) as u64));
             let tries_progress_bar = self.logger.add(ProgressBar::new(self.max_tries as u64));
 
-            let mut subtask_files = Vec::new();
+            // Phase 1: Initial tests from each generator (only good solutions must pass)
+            for (gen_idx, generator) in subtask.generators.iter().enumerate() {
+                let needed = subtask.initial_counts[gen_idx];
+                for _ in 0..needed {
+                    let candidate = generator.generate();
+                    // Each test must be unique within the subtask
+                    if tried_inputs.contains(&candidate) {
+                        continue;
+                    }
+                    tried_inputs.insert(candidate.clone());
 
-            while found_count < target_count && tries < self.max_tries {
-                tries += 1;
+                    // We check only good solutions in Phase 1 (no bad_progs passed)
+                    let main_output = match self.is_robust_test(&candidate, solution_handle, &good_solution_handles, &[], &mut cpp_runner, subtask_idx)? {
+                        Some(out) => out,
+                        None => unreachable!("is_robust_test with no bad progs should always return Some or Err"),
+                    };
+                    subtask_tests.push((candidate, main_output));
+                    found_count_progress_bar.inc(1);
+                }
+            }
+
+            // Phase 2: Robust tests (failing bad solutions)
+            let mut supplemental_tries = 0;
+            while robust_found_count < target_robust && supplemental_tries < self.max_tries {
+                supplemental_tries += 1;
                 let Some(candidate) = subtask.generate_random_test() else { break };
                 if tried_inputs.contains(&candidate) {
                     continue;
@@ -322,28 +341,38 @@ impl Task {
                 tried_inputs.insert(candidate.clone());
 
                 if let Some(main_output) = self.is_robust_test(&candidate, solution_handle, &good_solution_handles, &bad_solution_handles, &mut cpp_runner, subtask_idx)? {
-                    // Write and solve subtask tests immediately
-                    tries_progress_bar.reset();
-                    let input_path = self.get_input_file_path(global_test_id, subtask_idx as i32, found_count as i32);
-                    let output_path = self.get_output_file_path(global_test_id, subtask_idx as i32, found_count as i32);
-                    fs::write(&input_path, &candidate).map_err(|err| Error::IOError { err, file: path_str(&input_path) })?;
-                    fs::write(&output_path, main_output).map_err(|err| Error::IOError { err, file: path_str(&output_path) })?;
-
-                    subtask_files.push((input_path, output_path));
-                    self.generated_tests[subtask_idx].push(candidate);
-                    found_count += 1;
-                    global_test_id += 1;
-                    // reset for each success
-                    tries = 0;
+                    subtask_tests.push((candidate, main_output));
+                    robust_found_count += 1;
+                    supplemental_tries = 0;
                     found_count_progress_bar.inc(1);
+                    tries_progress_bar.reset();
                 }
                 tries_progress_bar.inc(1);
             }
-            if found_count < target_count {
-                error!("Could not find enough robust tests for Subtask {} (found {}/{})", subtask_idx + 1, found_count, target_count);
+
+            if robust_found_count < target_robust {
+                error!("Could not find enough robust tests for Subtask {} (found {}/{})", subtask_idx + 1, robust_found_count, target_robust);
             }
             self.logger.remove(&found_count_progress_bar);
             self.logger.remove(&tries_progress_bar);
+
+            // Shuffle all tests for this subtask
+            let mut rng = rand::rng();
+            subtask_tests.shuffle(&mut rng);
+
+            // Write shuffled tests to disk
+            let mut subtask_files = Vec::new();
+            for (test_id_in_subtask, (input, output)) in subtask_tests.into_iter().enumerate() {
+                let input_path = self.get_input_file_path(global_test_id, subtask_idx as i32, test_id_in_subtask as i32);
+                let output_path = self.get_output_file_path(global_test_id, subtask_idx as i32, test_id_in_subtask as i32);
+
+                fs::write(&input_path, &input).map_err(|err| Error::IOError { err, file: path_str(&input_path) })?;
+                fs::write(&output_path, output).map_err(|err| Error::IOError { err, file: path_str(&output_path) })?;
+
+                subtask_files.push((input_path, output_path));
+                self.generated_tests[subtask_idx].push(input);
+                global_test_id += 1;
+            }
 
             all_test_files.push(subtask_files);
         }

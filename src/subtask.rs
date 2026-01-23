@@ -36,12 +36,6 @@ impl Subtask {
         self
     }
 
-    /// Returns the sum of initial test counts across all generators.
-    #[must_use]
-    pub fn initial_test_count(&self) -> usize {
-        self.initial_counts.iter().sum()
-    }
-
     /// Randomly selects one of the registered generators and produces a test input.
     ///
     /// Returns `None` if no generators are registered.
