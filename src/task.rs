@@ -56,8 +56,6 @@ pub struct Task {
     solutions: Vec<Solution>,
     /// Target number of failures per "bad" solution per subtask
     min_failures_per_solution: usize,
-    /// Maximum number of tests allowed per subtask
-    max_tests_per_subtask: usize,
     /// Maximum number of consecutive failed attempts to find a robust test
     max_tries: usize,
 
@@ -89,7 +87,6 @@ impl Task {
             subtasks: Vec::new(),
             solutions: Vec::new(),
             min_failures_per_solution: 5,
-            max_tests_per_subtask: 100,
             max_tries: 100,
             debug_level: LevelFilter::Info,
             logger: MultiProgress::new(),
@@ -136,13 +133,6 @@ impl Task {
     #[must_use]
     pub const fn with_min_failures(mut self, n: usize) -> Self {
         self.min_failures_per_solution = n;
-        self
-    }
-
-    /// Sets the safety limit on the number of tests per subtask.
-    #[must_use]
-    pub const fn with_max_tests_per_subtask(mut self, n: usize) -> Self {
-        self.max_tests_per_subtask = n;
         self
     }
 
@@ -314,15 +304,13 @@ impl Task {
             let mut tried_inputs = HashSet::new();
             let mut found_count = 0;
             let mut tries = 0;
-            let subtask_start_time = std::time::Instant::now();
-            let subtask_timeout = std::time::Duration::from_secs(30);
 
             let found_count_progress_bar = self.logger.add(ProgressBar::new(target_count as u64));
             let tries_progress_bar = self.logger.add(ProgressBar::new(self.max_tries as u64));
 
             let mut subtask_files = Vec::new();
 
-            while found_count < target_count && tries < self.max_tries && subtask_start_time.elapsed() < subtask_timeout {
+            while found_count < target_count && tries < self.max_tries {
                 tries += 1;
                 let Some(candidate) = subtask.generate_random_test() else { break };
                 if tried_inputs.contains(&candidate) {
