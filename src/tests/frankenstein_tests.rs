@@ -50,7 +50,7 @@ mod frankenstein_tests {
         }
         ";
 
-        let subtask = Subtask::new().with_test(0, || {
+        let subtask = Subtask::new("").with_test(0, || {
             let mut rng = rand::rng();
             format!("{}", rng.random_range(0..50))
         });

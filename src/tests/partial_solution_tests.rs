@@ -49,10 +49,10 @@ mod partial_solution_tests {
         "#;
 
         // subtask 1, the sum is less than 10^6
-        let subtask1 = crate::Subtask::new().with_test(5, array_generator(1, 100, 1, 100));
+        let subtask1 = crate::Subtask::new("").with_test(5, array_generator(1, 100, 1, 100));
 
         // subtask 2, the sum is less than 10^18
-        let subtask2 = crate::Subtask::new().with_test(5, array_generator(1, 100, 1, 1_000_000_000));
+        let subtask2 = crate::Subtask::new("").with_test(5, array_generator(1, 100, 1, 1_000_000_000));
 
         // create subtasks
         task.task = task
@@ -111,10 +111,10 @@ mod partial_solution_tests {
         "#;
 
         // subtask 1, the sum is less than 10^6
-        let subtask1 = crate::Subtask::new().with_test(5, array_generator(1, 100, 1, 100));
+        let subtask1 = crate::Subtask::new("").with_test(5, array_generator(1, 100, 1, 100));
 
         // subtask 2, the sum is less than 10^18
-        let subtask2 = crate::Subtask::new().with_test(5, array_generator(1, 100, 1, 1_000_000_000));
+        let subtask2 = crate::Subtask::new("").with_test(5, array_generator(1, 100, 1, 1_000_000_000));
 
         // create subtasks
         task.task = task
@@ -165,10 +165,10 @@ mod partial_solution_tests {
         ";
 
         // subtask 1, the sum is less than 10^6
-        let subtask1 = crate::Subtask::new().with_test(5, array_generator(1, 100, 1, 100));
+        let subtask1 = crate::Subtask::new("").with_test(5, array_generator(1, 100, 1, 100));
 
         // subtask 2, the sum is less than 10^18
-        let subtask2 = crate::Subtask::new().with_test(5, array_generator(1, 100, 1, 1_000_000_000));
+        let subtask2 = crate::Subtask::new("").with_test(5, array_generator(1, 100, 1, 1_000_000_000));
 
         // create subtasks
         task.task = task
@@ -227,10 +227,10 @@ mod partial_solution_tests {
         "#;
 
         // subtask 1, the sum is less than 10^6
-        let subtask1 = crate::Subtask::new().with_test(5, array_generator(1, 100, 1, 100));
+        let subtask1 = crate::Subtask::new("").with_test(5, array_generator(1, 100, 1, 100));
 
         // subtask 2, the sum is less than 10^18
-        let subtask2 = crate::Subtask::new().with_test(5, array_generator(1, 100, 1, 1_000_000_000));
+        let subtask2 = crate::Subtask::new("").with_test(5, array_generator(1, 100, 1, 1_000_000_000));
 
         // create subtasks
         task.task = task

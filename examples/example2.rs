@@ -36,10 +36,10 @@ fn main() {
     let task = ezcp::Task::new("Coins", &PathBuf::from("task2")).with_solution_source(SOLUTION);
 
     // Constraint: n = 1
-    let subtask1 = ezcp::Subtask::new().with_test(5, ezcp::array_generator(1, 1, 1, 1000)).with_test(1, || "1\n 1\n".to_owned());
+    let subtask1 = ezcp::Subtask::new("n = 1").with_test(5, ezcp::array_generator(1, 1, 1, 1000)).with_test(1, || "1\n 1\n".to_owned());
 
     // Constraint: elements in the array are powers of 2 and n <= 30
-    let subtask2 = ezcp::Subtask::new().with_test(5, || {
+    let subtask2 = ezcp::Subtask::new("elements in the array are powers of 2 and n <= 30").with_test(5, || {
         let mut rng = rand::rng();
         let n = rng.random_range(1..=30);
         let mut array = Vec::new();
@@ -50,7 +50,7 @@ fn main() {
     });
 
     // Constraint: n <= 1000
-    let subtask3 = ezcp::Subtask::new()
+    let subtask3 = ezcp::Subtask::new("n <= 1000")
         .with_test(5, ezcp::array_generator(1, 1000, 1, 1000))
         .with_test(5, ezcp::array_generator(1, 1000, 1, 1_000_000_000))
         .with_test(5, ezcp::array_generator(1, 1000, 1, 1))
@@ -59,7 +59,7 @@ fn main() {
         .with_test(1, ezcp::array_generator(1000, 1000, 1, 1));
 
     // Constraint: n <= 200_000
-    let subtask4 = ezcp::Subtask::new()
+    let subtask4 = ezcp::Subtask::new("n <= 200_000")
         .with_test(5, ezcp::array_generator(1, 200_000, 1, 1000))
         .with_test(5, ezcp::array_generator(1, 200_000, 1, 1_000_000_000))
         .with_test(5, ezcp::array_generator(1, 200_000, 1, 1))

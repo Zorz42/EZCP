@@ -287,7 +287,7 @@ impl Task {
         let mut all_test_files = Vec::new();
 
         for (subtask_idx, subtask) in self.subtasks.iter().enumerate() {
-            self.print_progress((subtask_idx + 1) as i32, num_subtasks as i32, &format!("Subtask {}", subtask_idx + 1));
+            self.print_progress((subtask_idx + 1) as i32, num_subtasks as i32, &format!("Subtask {}: {}", subtask_idx + 1, subtask.name));
 
             let mut good_solution_handles = Vec::new();
             let mut bad_solution_handles = Vec::new();

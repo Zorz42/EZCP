@@ -15,13 +15,18 @@ pub struct Subtask {
     pub(super) generators: Vec<Rc<TestGenerator>>,
     /// Minimum number of tests to generate from each generator initially
     pub(super) initial_counts: Vec<usize>,
+    
+    pub(super) name: String,
 }
 
 impl Subtask {
     /// Creates a new, empty subtask.
     #[must_use]
-    pub fn new() -> Self {
-        Self::default()
+    pub fn new(name: &str) -> Self {
+        Self {
+            name: name.to_owned(),
+            ..Self::default()
+        }
     }
 
     /// Adds a random test generator to the subtask.
