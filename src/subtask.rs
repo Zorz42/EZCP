@@ -15,7 +15,7 @@ pub struct Subtask {
     pub(super) generators: Vec<Rc<TestGenerator>>,
     /// Minimum number of tests to generate from each generator initially
     pub(super) initial_counts: Vec<usize>,
-    
+
     pub(super) name: String,
 }
 

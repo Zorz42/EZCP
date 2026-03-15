@@ -237,6 +237,7 @@ impl Task {
     }
 
     /// This function builds solution and then calls `generate_tests`.
+    #[allow(clippy::too_many_lines)]
     fn create_tests_inner(&mut self) -> Result<()> {
         self.logger.println("").ok();
         let text = format!("Creating tests for task \"{}\"", self.name);
@@ -321,9 +322,8 @@ impl Task {
                     tried_inputs.insert(candidate.clone());
 
                     // We check only good solutions in Phase 1 (no bad_progs passed)
-                    let main_output = match self.is_robust_test(&candidate, solution_handle, &good_solution_handles, &[], &mut cpp_runner, subtask_idx)? {
-                        Some(out) => out,
-                        None => unreachable!("is_robust_test with no bad progs should always return Some or Err"),
+                    let Some(main_output) = self.is_robust_test(&candidate, solution_handle, &good_solution_handles, &[], &mut cpp_runner, subtask_idx)? else {
+                        unreachable!("is_robust_test with no bad progs should always return Some or Err")
                     };
                     subtask_tests.push((candidate, main_output));
                     found_count_progress_bar.inc(1);
