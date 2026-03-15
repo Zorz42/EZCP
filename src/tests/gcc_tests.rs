@@ -149,4 +149,97 @@ pub mod gcc_tests {
 
         drop(tempdir);
     }
+
+    // --- Additional GCC coverage from ANALYSIS.md ---
+
+    fn compile_hello_world_with(gcc: &Gcc) {
+        let tempdir = tempfile::TempDir::new().unwrap();
+        let source_code = "int main() { return 0; }";
+        let source_path = tempdir.path().join("test.cpp");
+        std::fs::write(&source_path, source_code).unwrap();
+        let out = gcc.compile(&source_path, None).unwrap();
+        assert!(out.exists());
+    }
+
+    #[test]
+    fn test_gcc_standard_cpp11() {
+        let mut gcc = Gcc::new().unwrap();
+        gcc.standard = Some(GccStandard::Cpp11);
+        compile_hello_world_with(&gcc);
+    }
+
+    #[test]
+    fn test_gcc_standard_cpp14() {
+        let mut gcc = Gcc::new().unwrap();
+        gcc.standard = Some(GccStandard::Cpp14);
+        compile_hello_world_with(&gcc);
+    }
+
+    #[test]
+    fn test_gcc_standard_cpp17() {
+        let mut gcc = Gcc::new().unwrap();
+        gcc.standard = Some(GccStandard::Cpp17);
+        compile_hello_world_with(&gcc);
+    }
+
+    #[test]
+    fn test_gcc_standard_cpp20() {
+        let mut gcc = Gcc::new().unwrap();
+        gcc.standard = Some(GccStandard::Cpp20);
+        compile_hello_world_with(&gcc);
+    }
+
+    #[test]
+    fn test_gcc_optimization_level1() {
+        let mut gcc = Gcc::new().unwrap();
+        gcc.optimization = Some(GccOptimization::Level1);
+        compile_hello_world_with(&gcc);
+    }
+
+    #[test]
+    fn test_gcc_optimization_level2() {
+        let mut gcc = Gcc::new().unwrap();
+        gcc.optimization = Some(GccOptimization::Level2);
+        compile_hello_world_with(&gcc);
+    }
+
+    #[test]
+    fn test_gcc_optimization_level3() {
+        let mut gcc = Gcc::new().unwrap();
+        gcc.optimization = Some(GccOptimization::Level3);
+        compile_hello_world_with(&gcc);
+    }
+
+    #[test]
+    fn test_gcc_optimization_small() {
+        let mut gcc = Gcc::new().unwrap();
+        gcc.optimization = Some(GccOptimization::Small);
+        compile_hello_world_with(&gcc);
+    }
+
+    #[test]
+    fn test_gcc_optimization_fast() {
+        let mut gcc = Gcc::new().unwrap();
+        gcc.optimization = Some(GccOptimization::Fast);
+        compile_hello_world_with(&gcc);
+    }
+
+    #[test]
+    fn test_gcc_standard_as_str_values() {
+        assert_eq!(GccStandard::Cpp98.as_str(), "c++98");
+        assert_eq!(GccStandard::Cpp11.as_str(), "c++11");
+        assert_eq!(GccStandard::Cpp14.as_str(), "c++14");
+        assert_eq!(GccStandard::Cpp17.as_str(), "c++17");
+        assert_eq!(GccStandard::Cpp20.as_str(), "c++20");
+        assert_eq!(GccStandard::Cpp23.as_str(), "c++23");
+    }
+
+    #[test]
+    fn test_gcc_optimization_as_str_values() {
+        assert_eq!(GccOptimization::Level1.as_str(), "1");
+        assert_eq!(GccOptimization::Level2.as_str(), "2");
+        assert_eq!(GccOptimization::Level3.as_str(), "3");
+        assert_eq!(GccOptimization::Small.as_str(), "s");
+        assert_eq!(GccOptimization::Fast.as_str(), "fast");
+    }
 }

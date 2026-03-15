@@ -302,4 +302,102 @@ mod graph_tests {
         component1.sort_unstable();
         assert_eq!(component1, vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9]);
     }
+
+    // --- Edge cases identified in ANALYSIS.md ---
+
+    #[test]
+    fn test_is_connected_single_node() {
+        let graph = Graph::new_empty(1);
+        assert!(graph.is_connected());
+    }
+
+    #[test]
+    fn test_is_connected_disconnected_two_nodes() {
+        let graph = Graph::new_empty(2);
+        // Two isolated nodes: not connected
+        assert!(!graph.is_connected());
+    }
+
+    #[test]
+    fn test_is_connected_chain() {
+        let mut graph = Graph::new_empty(5);
+        graph.add_edge(0, 1);
+        graph.add_edge(1, 2);
+        graph.add_edge(2, 3);
+        graph.add_edge(3, 4);
+        assert!(graph.is_connected());
+    }
+
+    #[test]
+    fn test_is_full_one_node() {
+        let graph = Graph::new_full(1);
+        // A single node has 0 edges; n*(n-1)/2 = 0, so is_full should be true
+        assert_eq!(graph.get_num_edges(), 0);
+        assert!(graph.is_full());
+    }
+
+    #[test]
+    fn test_is_full_two_nodes() {
+        let graph = Graph::new_full(2);
+        assert_eq!(graph.get_num_edges(), 1);
+        assert!(graph.is_full());
+    }
+
+    #[test]
+    fn test_is_not_full_when_missing_edge() {
+        let graph = Graph::new_full(5);
+        // Manually verify; then check a graph missing an edge is not full
+        assert!(graph.is_full());
+        let partial = Graph::new_empty(5);
+        assert!(!partial.is_full());
+        // Adding one edge to a 5-node graph: only 1 of 10 edges
+        let mut partial2 = Graph::new_empty(5);
+        partial2.add_edge(0, 1);
+        assert!(!partial2.is_full());
+        drop(graph); // suppress unused warning
+    }
+
+    #[test]
+    fn test_is_bipartite_disconnected_graph_with_triangle() {
+        // Component 1: triangle (not bipartite); Component 2: isolated node
+        let mut graph = Graph::new_empty(4);
+        graph.add_edge(0, 1);
+        graph.add_edge(1, 2);
+        graph.add_edge(2, 0); // odd cycle
+        // node 3 is isolated
+        assert!(!graph.is_bipartite());
+    }
+
+    #[test]
+    fn test_is_bipartite_single_edge() {
+        let mut graph = Graph::new_empty(2);
+        graph.add_edge(0, 1);
+        assert!(graph.is_bipartite());
+    }
+
+    #[test]
+    fn test_get_connected_components_single_node() {
+        let graph = Graph::new_empty(1);
+        let comps = graph.get_connected_components();
+        assert_eq!(comps.len(), 1);
+        assert_eq!(comps[0], vec![0]);
+    }
+
+    #[test]
+    fn test_get_connected_components_two_isolated_nodes() {
+        let graph = Graph::new_empty(2);
+        let comps = graph.get_connected_components();
+        assert_eq!(comps.len(), 2);
+        // Each component has exactly one node
+        assert_eq!(comps[0].len(), 1);
+        assert_eq!(comps[1].len(), 1);
+    }
+
+    #[test]
+    fn test_random_connected_is_connected() {
+        for n in 2..20 {
+            let graph = Graph::new_random_connected(n, n - 1);
+            assert!(graph.is_connected(), "random connected graph with {n} nodes should be connected");
+        }
+    }
 }

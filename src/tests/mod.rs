@@ -1,10 +1,14 @@
 mod array_tests;
+mod archiver_tests;
 mod cpp_runner_tests;
 mod frankenstein_tests;
 mod gcc_tests;
 mod generic_tests;
 mod graph_tests;
 mod partial_solution_tests;
+mod solution_tests;
+mod subtask_tests;
+mod test_generator_tests;
 
 #[cfg(test)]
 mod test_shared {
