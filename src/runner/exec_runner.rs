@@ -63,7 +63,7 @@ pub fn run_solution(executable_file: &PathBuf, input_data: &str, time_limit: f32
         let stderr_str = String::from_utf8_lossy(&output_result.stderr);
         // parse output from timer command (ignore trailing newlines/whitespace)
         let trimmed = stderr_str.trim();
-        trimmed.parse::<i32>().unwrap_or(0)
+        trimmed.parse::<i32>().unwrap()
     };
     trace!("Elapsed time from timer: {elapsed_time_ms} ms");
 

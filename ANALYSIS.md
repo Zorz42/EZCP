@@ -8,21 +8,6 @@
    - **Current code**: `let target_robust = if bad_solution_handles.is_empty() { 0 } else { self.min_failures_per_solution };`
    - **Severity**: Low (works correctly but could be optimized)
 
-### 2. **Silent Error Masking in Time Parsing** (`src/runner/exec_runner.rs:66`)
-   - **Location**: Line 66
-   - **Issue**: `trimmed.parse::<i32>().unwrap_or(0)` silently returns 0 if parsing fails, which could mask timer errors. If the timer outputs invalid data, we lose that information.
-   - **Severity**: Low (unlikely but could hide bugs)
-
-### 3. **Potential Panic in Thread Join** (`src/runner/cpp_runner.rs:233`)
-   - **Location**: Line 233
-   - **Issue**: `thread.join().unwrap()?` will panic if the thread panicked, rather than returning an error. This could cause the entire process to crash instead of gracefully handling the error.
-   - **Severity**: Medium (could cause crashes in edge cases)
-
-### 4. **Missing Error Context in Archiver** (`src/archiver.rs:9,20`)
-   - **Location**: Lines 9 and 20
-   - **Issue**: Error messages have empty file strings (`file: String::new()`), losing valuable debugging context.
-   - **Severity**: Low (functionality works but debugging is harder)
-
 ### 5. **Potential Infinite Loop in Graph Generation** (`src/generators/graph.rs:88-98`)
    - **Location**: `new_random_bipartite` function
    - **Issue**: The loop could potentially run forever if `m` is very large relative to `n` and the random selection keeps picking edges that already exist. While unlikely, there's no guarantee it will terminate.
