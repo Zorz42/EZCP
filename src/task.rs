@@ -60,9 +60,9 @@ pub struct Task {
     /// Maximum number of consecutive failed attempts to find a robust test
     max_tries: usize,
     /// Test checker, used for problems with multiple different possible outputs.
-    /// By default it is a diff checker (up to whitespace)
-    /// The function takes 3 arguments: test input, official output, program output
-    /// and returns a bool indicating if it failed or not
+    /// By default it is a diff checker (up to whitespace).
+    /// The function takes 3 arguments: (`test_input`, `correct_output`, `program_output`)
+    /// and returns `true` if the program output is accepted (correct), `false` if rejected.
     checker: fn(&str, &str, &str) -> bool,
 
     /// Log level for output

@@ -1,5 +1,6 @@
 mod array_tests;
 mod archiver_tests;
+mod checker_tests;
 mod cpp_runner_tests;
 mod frankenstein_tests;
 mod gcc_tests;
