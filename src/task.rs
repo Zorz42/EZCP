@@ -59,6 +59,11 @@ pub struct Task {
     min_failures_per_solution: usize,
     /// Maximum number of consecutive failed attempts to find a robust test
     max_tries: usize,
+    /// Test checker, used for problems with multiple different possible outputs.
+    /// By default it is a diff checker (up to whitespace)
+    /// The function takes 3 arguments: test input, official output, program output
+    /// and returns a bool indicating if it failed or not
+    checker: fn(&str, &str, &str) -> bool,
 
     /// Log level for output
     debug_level: LevelFilter,
@@ -67,6 +72,10 @@ pub struct Task {
 
     /// Storage for generated test inputs: `[subtask_idx][test_idx]`
     generated_tests: Vec<Vec<String>>,
+}
+
+fn diff_checker(_test_input: &str, official_output: &str, program_output: &str) -> bool {
+    official_output.split_whitespace().collect::<Vec<_>>() == program_output.split_whitespace().collect::<Vec<_>>()
 }
 
 impl Task {
@@ -93,6 +102,7 @@ impl Task {
             logger: MultiProgress::new(),
             solution_source: String::new(),
             generated_tests: Vec::new(),
+            checker: diff_checker,
         }
     }
 
@@ -103,6 +113,13 @@ impl Task {
     pub fn with_solution_source(mut self, source: &str) -> Self {
         assert!(self.solution_source.is_empty());
         self.solution_source = source.to_owned();
+        self
+    }
+
+    /// Sets custom checker
+    #[must_use]
+    pub fn with_checker(mut self, checker: fn(&str, &str, &str) -> bool) -> Self {
+        self.checker = checker;
         self
     }
 
@@ -415,7 +432,7 @@ impl Task {
         let results = runner.check_programs(input, &all_progs, self.time_limit)?;
 
         // Correct (Main) Solution Result
-        let main_output = match &results[0] {
+        let correct_output = match &results[0] {
             RunResult::Ok(_, output) => output.trim().to_owned(),
             RunResult::TimedOut => {
                 return Err(Error::SolutionTimedOut {
@@ -432,7 +449,7 @@ impl Task {
         // Ensure all other "good" solutions pass and match main output
         for (i, &(sol_idx, _)) in good_progs.iter().enumerate() {
             match &results[1 + i] {
-                RunResult::Ok(_, output) if output.trim() == main_output => {}
+                RunResult::Ok(_, output) if (self.checker)(input, &correct_output, output) => {}
                 _ => {
                     return Err(Error::PartialSolutionFailsSubtask {
                         partial_number: sol_idx + 1,
@@ -443,21 +460,21 @@ impl Task {
         }
 
         if bad_progs.is_empty() {
-            return Ok(Some(main_output));
+            return Ok(Some(correct_output));
         }
 
         // Run Bad Solutions to ensure they fail
         let bad_results_start = 1 + good_progs.len();
         for res in &results[bad_results_start..] {
             match res {
-                RunResult::Ok(_, output) if output.trim() == main_output => {
+                RunResult::Ok(_, output) if (self.checker)(input, &correct_output, output) => {
                     // A bad solution passed this test! This test is not robust enough.
                     return Ok(None);
                 }
                 _ => {} // Bad solution failed as expected (TLE, Crash, or WA)
             }
         }
-        Ok(Some(main_output))
+        Ok(Some(correct_output))
     }
 
     /// Archive all tests into a zip file
