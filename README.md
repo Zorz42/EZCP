@@ -11,8 +11,5 @@ Features:
 - Automatically search for testcases that break all bad solutions.
 - Automatically archive all test files into a zip file.
 
-Suggestions and bug reports: jakob@zorz.si
-You can also open a pull request.
-
 See `examples/` for more information.
 
