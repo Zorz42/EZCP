@@ -16,6 +16,16 @@ pub enum RunResult {
     Crashed,
 }
 
+impl RunResult {
+    pub fn to_string(&self) -> String {
+       match self {
+           RunResult::Ok(_, _) => "OK".to_owned(),
+           RunResult::TimedOut => "TLE".to_owned(),
+           RunResult::Crashed => "RTE".to_owned(),
+       } 
+    }
+}
+
 /// Spawns the timer utility to execute and monitor a solution.
 ///
 /// * `executable_file` - Path to the compiled C++ binary.

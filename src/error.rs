@@ -2,9 +2,6 @@ use thiserror::Error;
 
 #[derive(Error, Debug)]
 pub enum Error {
-    #[error("{message}")]
-    CustomError { message: String },
-
     #[error("IO Error: {err} with file: {file}")]
     IOError { err: std::io::Error, file: String },
 
@@ -19,21 +16,6 @@ pub enum Error {
 
     #[error("Test file {path} already exists")]
     TestAlreadyExists { path: String },
-
-    #[error("Expected integer in input")]
-    InputExpectedInteger,
-
-    #[error("Expected float in input")]
-    InputExpectedFloat,
-
-    #[error("Expected string in input")]
-    InputExpectedString,
-
-    #[error("Expected end of input")]
-    InputExpectedEnd,
-
-    #[error("Expected {n} integers")]
-    ExpectedIntegers { n: i32 },
 
     #[error(
         "C++ compiler is not found. Make sure to install it first. If it is already installed, \
@@ -53,8 +35,8 @@ pub enum Error {
     #[error("Partial solution {partial_number} passes extra subtask {subtask_number}")]
     PartialSolutionPassesExtraSubtask { subtask_number: usize, partial_number: usize },
 
-    #[error("Partial solution {partial_number} does not pass subtask {subtask_number}.")]
-    PartialSolutionFailsSubtask { subtask_number: usize, partial_number: usize },
+    #[error("Partial solution {partial_number} does not pass subtask {subtask_number} ({verdict}).")]
+    PartialSolutionFailsSubtask { subtask_number: usize, partial_number: usize, verdict: String },
 
     #[error("Missing solution")]
     MissingSolution {},

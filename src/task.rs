@@ -452,10 +452,11 @@ impl Task {
         for (i, &(sol_idx, _)) in good_progs.iter().enumerate() {
             match &results[1 + i] {
                 RunResult::Ok(_, output) if (self.checker)(input, &correct_output, output) => {}
-                _ => {
+                result => {
                     return Err(Error::PartialSolutionFailsSubtask {
                         partial_number: sol_idx + 1,
                         subtask_number: subtask_idx + 1,
+                        verdict: if !matches!(result, RunResult::Ok(_, _)) { result.to_string() } else { "WA".to_string() },
                     });
                 }
             }
