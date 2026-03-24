@@ -123,10 +123,12 @@ int run_command_with_timeout(const string &command, int time_limit_ms) {
 
   int status;
   bool killed_by_us = false;
-  // Safety-net wall-time kill: 10x the CPU limit + 5 s. This only fires when
+  // Safety-net wall-time kill: 2x the CPU limit + 2 s. This only fires when
   // the process is somehow not consuming CPU (e.g., sleeping in a syscall
   // forever). Normal programs and infinite loops are caught by RLIMIT_CPU.
-  long long wall_deadline = get_wall_time_ms() + (long long)time_limit_ms * 10 + 5000;
+  // Keep the multiplier small so that blocking/sleeping TLE solutions don't
+  // hold up the tester for a long time.
+  long long wall_deadline = get_wall_time_ms() + (long long)time_limit_ms * 2 + 2000;
 
   while (true) {
     pid_t result = waitpid(pid, &status, WNOHANG);
