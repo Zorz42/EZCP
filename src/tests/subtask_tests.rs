@@ -26,10 +26,7 @@ mod subtask_tests {
 
     #[test]
     fn test_subtask_with_test_multiple_generators() {
-        let st = Subtask::new("t")
-            .with_test(1, || "a".to_owned())
-            .with_test(2, || "b".to_owned())
-            .with_test(5, || "c".to_owned());
+        let st = Subtask::new("t").with_test(1, || "a".to_owned()).with_test(2, || "b".to_owned()).with_test(5, || "c".to_owned());
         assert_eq!(st.generators.len(), 3);
         assert_eq!(st.initial_counts, vec![1, 2, 5]);
     }
@@ -51,10 +48,7 @@ mod subtask_tests {
 
     #[test]
     fn test_generate_random_test_multiple_generators_returns_one_of_values() {
-        let st = Subtask::new("t")
-            .with_test(1, || "A".to_owned())
-            .with_test(1, || "B".to_owned())
-            .with_test(1, || "C".to_owned());
+        let st = Subtask::new("t").with_test(1, || "A".to_owned()).with_test(1, || "B".to_owned()).with_test(1, || "C".to_owned());
 
         let mut seen = std::collections::HashSet::new();
         // Run enough times to likely hit all three generators
@@ -69,13 +63,11 @@ mod subtask_tests {
 
     #[test]
     fn test_generate_random_test_preserves_generator_output() {
-        use std::sync::atomic::{AtomicUsize, Ordering};
         use std::sync::Arc;
+        use std::sync::atomic::{AtomicUsize, Ordering};
         let counter = Arc::new(AtomicUsize::new(0));
         let counter_clone = Arc::clone(&counter);
-        let st = Subtask::new("t").with_test(1, move || {
-            counter_clone.fetch_add(1, Ordering::SeqCst).to_string()
-        });
+        let st = Subtask::new("t").with_test(1, move || counter_clone.fetch_add(1, Ordering::SeqCst).to_string());
 
         let _ = st.generate_random_test();
         let _ = st.generate_random_test();

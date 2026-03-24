@@ -1,8 +1,8 @@
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod archiver_tests {
-    use crate::archiver::archive_files;
     use crate::Error;
+    use crate::archiver::archive_files;
     use indicatif::MultiProgress;
     use std::io::Read;
     use std::path::PathBuf;
@@ -99,9 +99,7 @@ mod archiver_tests {
 
         let archive_file = std::fs::File::open(&archive_path).unwrap();
         let mut zip = zip::ZipArchive::new(archive_file).unwrap();
-        let mut zip_names: Vec<String> = (0..zip.len())
-            .map(|i| zip.by_index(i).unwrap().name().to_owned())
-            .collect();
+        let mut zip_names: Vec<String> = (0..zip.len()).map(|i| zip.by_index(i).unwrap().name().to_owned()).collect();
         zip_names.sort_unstable();
         let mut expected: Vec<String> = names.iter().map(|s| (*s).to_owned()).collect();
         expected.sort_unstable();

@@ -264,9 +264,7 @@ pub mod generic_tests {
     #[test]
     fn test_task_large_time_limit_does_not_panic() {
         let mut task = Test::new();
-        task.task = task.task
-            .with_time_limit(1000.0)
-            .with_solution_source(r#"int main() { return 0; }"#);
+        task.task = task.task.with_time_limit(1000.0).with_solution_source(r#"int main() { return 0; }"#);
         let subtask = Subtask::new("").with_test(1, || "\n".to_owned());
         task.task = task.task.with_subtask(subtask);
         // Should complete without panicking; may succeed or error but must not panic

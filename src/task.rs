@@ -322,7 +322,9 @@ impl Task {
             let mut robust_found_count = 0;
 
             let total_initial: usize = subtask.initial_counts.iter().sum();
-            let target_robust = if bad_solution_handles.is_empty() { 0 } else {
+            let target_robust = if bad_solution_handles.is_empty() {
+                0
+            } else {
                 subtask.min_failures_per_solution.unwrap_or(self.min_failures_per_solution)
             };
 

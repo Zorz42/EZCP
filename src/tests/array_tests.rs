@@ -59,7 +59,7 @@ mod array_tests {
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod array_unit_tests {
-    use crate::{array_to_string, array_generator};
+    use crate::{array_generator, array_to_string};
 
     #[test]
     fn test_array_to_string_empty_with_count() {
@@ -114,12 +114,7 @@ mod array_unit_tests {
             let output = generator();
             let mut lines = output.lines();
             let count: usize = lines.next().unwrap().trim().parse().unwrap();
-            let elements: Vec<i32> = lines
-                .next()
-                .unwrap_or("")
-                .split_whitespace()
-                .filter_map(|s| s.parse().ok())
-                .collect();
+            let elements: Vec<i32> = lines.next().unwrap_or("").split_whitespace().filter_map(|s| s.parse().ok()).collect();
             assert_eq!(count, 5, "expected length 5");
             assert_eq!(elements.len(), 5, "expected 5 elements");
         }
