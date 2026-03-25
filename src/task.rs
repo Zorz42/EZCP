@@ -37,6 +37,8 @@ fn path_str(p: &Path) -> String {
 pub struct Task {
     /// Name of the task
     name: String,
+    /// Directory where the whole problem is stored
+    problem_path: PathBuf,
     /// Directory where generated tests will be saved
     tests_path: PathBuf,
     /// Time limit in seconds for solutions
@@ -75,7 +77,12 @@ pub struct Task {
 }
 
 fn diff_checker(_test_input: &str, official_output: &str, program_output: &str) -> bool {
-    official_output.split_whitespace().collect::<Vec<_>>() == program_output.split_whitespace().collect::<Vec<_>>()
+    fn parse_whitespace(s: &str) -> Vec<&str> {
+        let mut res = s.split_whitespace().collect::<Vec<_>>();
+        res.retain(|x| !x.is_empty());
+        res
+    }
+    parse_whitespace(official_output) == parse_whitespace(program_output)
 }
 
 impl Task {
@@ -88,6 +95,7 @@ impl Task {
         let build_folder_path = path.join("build");
         Self {
             name: name.to_owned(),
+            problem_path: path.to_owned(),
             tests_path: path.join("tests"),
             tests_archive_path: path.join("tests.zip"),
             get_input_file_name: Box::new(|test_id, subtask_id, _test_id_in_subtask| format!("test.{:02}.{:03}.in", subtask_id + 1, test_id + 1)),
@@ -437,7 +445,7 @@ impl Task {
 
         // Correct (Main) Solution Result
         let correct_output = match &results[0] {
-            RunResult::Ok(_, output) => output.trim().to_owned(),
+            RunResult::Ok(_, output) => output.trim().to_owned() + "\n",
             RunResult::TimedOut => {
                 return Err(Error::SolutionTimedOut {
                     test_path: "generation phase".to_owned(),
@@ -455,6 +463,8 @@ impl Task {
             match &results[1 + i] {
                 RunResult::Ok(_, output) if (self.checker)(input, &correct_output, output) => {}
                 result => {
+                    let write_path = self.problem_path.join("failing_test.in");
+                    fs::write(write_path.clone(), input).map_err(move |err| Error::IOError { file: write_path.to_str().unwrap().to_owned(), err })?;
                     return Err(Error::PartialSolutionFailsSubtask {
                         partial_number: sol_idx + 1,
                         subtask_number: subtask_idx + 1,
