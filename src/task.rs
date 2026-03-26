@@ -351,7 +351,7 @@ impl Task {
                     tried_inputs.insert(candidate.clone());
 
                     // We check only good solutions in Phase 1 (no bad_progs passed)
-                    let Some(main_output) = self.is_robust_test(&candidate, solution_handle, &good_solution_handles, &[], &mut cpp_runner, subtask_idx)? else {
+                    let Some(main_output) = self.is_robust_test(&candidate, solution_handle, &good_solution_handles, &[], &mut cpp_runner, subtask_idx, gen_idx)? else {
                         unreachable!("is_robust_test with no bad progs should always return Some or Err")
                     };
                     subtask_tests.push((candidate, main_output));
@@ -363,13 +363,13 @@ impl Task {
             let mut supplemental_tries = 0;
             while robust_found_count < target_robust && supplemental_tries < self.max_tries {
                 supplemental_tries += 1;
-                let Some(candidate) = subtask.generate_random_test() else { break };
+                let Some((candidate, gen_idx)) = subtask.generate_random_test() else { break };
                 if tried_inputs.contains(&candidate) {
                     continue;
                 }
                 tried_inputs.insert(candidate.clone());
 
-                if let Some(main_output) = self.is_robust_test(&candidate, solution_handle, &good_solution_handles, &bad_solution_handles, &mut cpp_runner, subtask_idx)? {
+                if let Some(main_output) = self.is_robust_test(&candidate, solution_handle, &good_solution_handles, &bad_solution_handles, &mut cpp_runner, subtask_idx, gen_idx)? {
                     subtask_tests.push((candidate, main_output));
                     robust_found_count += 1;
                     supplemental_tries = 0;
@@ -433,6 +433,7 @@ impl Task {
         bad_progs: &[ProgramHandle],
         runner: &mut CppRunner,
         subtask_idx: usize,
+        gen_idx: usize,
     ) -> Result<Option<String>> {
         let mut all_progs = vec![main_prog];
         for &(_, handle) in good_progs {
@@ -449,11 +450,13 @@ impl Task {
             RunResult::TimedOut => {
                 return Err(Error::SolutionTimedOut {
                     test_path: "generation phase".to_owned(),
+                    gen_id: gen_idx + 1,
                 });
             }
             RunResult::Crashed => {
                 return Err(Error::SolutionFailed {
                     test_path: "generation phase".to_owned(),
+                    gen_id: gen_idx + 1,
                 });
             }
         };
@@ -469,6 +472,7 @@ impl Task {
                         partial_number: sol_idx + 1,
                         subtask_number: subtask_idx + 1,
                         verdict: if !matches!(result, RunResult::Ok(_, _)) { result.to_string() } else { "WA".to_string() },
+                        gen_id: gen_idx + 1,
                     });
                 }
             }

@@ -42,7 +42,7 @@ mod subtask_tests {
         let st = Subtask::new("t").with_test(1, || "42\n".to_owned());
         for _ in 0..10 {
             let result = st.generate_random_test();
-            assert_eq!(result.as_deref(), Some("42\n"));
+            assert_eq!(result.map(|x| x.0).as_deref(), Some("42\n"));
         }
     }
 
@@ -54,7 +54,7 @@ mod subtask_tests {
         // Run enough times to likely hit all three generators
         for _ in 0..200 {
             let val = st.generate_random_test().expect("should return Some");
-            assert!(["A", "B", "C"].contains(&val.as_str()), "unexpected: {val}");
+            assert!(["A", "B", "C"].contains(&val.0.as_str()), "unexpected: {}", val.0);
             seen.insert(val);
         }
         // With 200 trials, all 3 should be seen (probability of missing one is ~(2/3)^200 ≈ 0)

@@ -53,13 +53,13 @@ impl Subtask {
     /// Randomly selects one of the registered generators and produces a test input.
     ///
     /// Returns `None` if no generators are registered.
-    pub(crate) fn generate_random_test(&self) -> Option<String> {
+    pub(crate) fn generate_random_test(&self) -> Option<(String, usize)> {
         if self.generators.is_empty() {
             return None;
         }
 
         let mut rng = rand::rng();
         let idx = rng.random_range(0..self.generators.len());
-        Some(self.generators[idx].generate())
+        Some((self.generators[idx].generate(), idx))
     }
 }
