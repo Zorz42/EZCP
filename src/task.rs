@@ -66,6 +66,8 @@ pub struct Task {
     /// The function takes 3 arguments: (`test_input`, `correct_output`, `program_output`)
     /// and returns `true` if the program output is accepted (correct), `false` if rejected.
     checker: fn(&str, &str, &str) -> bool,
+    /// If you want to automatically trim whitespace from outputs
+    trim_whitespace: bool,
 
     /// Log level for output
     debug_level: LevelFilter,
@@ -83,6 +85,35 @@ fn diff_checker(_test_input: &str, official_output: &str, program_output: &str) 
         res
     }
     parse_whitespace(official_output) == parse_whitespace(program_output)
+}
+
+fn trim_whitespace(input: &str) -> String {
+    let mut result = String::with_capacity(input.len());
+    let mut in_block = false;
+    let mut has_newline = false;
+
+    for c in input.chars() {
+        if c.is_whitespace() {
+            in_block = true;
+            if c == '\n' {
+                has_newline = true;
+            }
+        } else {
+            if in_block {
+                result.push(if has_newline { '\n' } else { ' ' });
+            }
+            in_block = false;
+            has_newline = false;
+            result.push(c);
+        }
+    }
+
+    // ensure trailing newline
+    if !result.ends_with('\n') {
+        result.push('\n');
+    }
+
+    result
 }
 
 impl Task {
@@ -111,6 +142,7 @@ impl Task {
             solution_source: String::new(),
             generated_tests: Vec::new(),
             checker: diff_checker,
+            trim_whitespace: true,
         }
     }
 
@@ -146,6 +178,12 @@ impl Task {
     pub fn with_subtask(mut self, mut subtask: Subtask) -> Self {
         subtask.number = self.subtasks.len();
         self.subtasks.push(subtask);
+        self
+    }
+
+    #[must_use]
+    pub const fn trim_whitespace(mut self, trim_whitespace: bool) -> Self {
+        self.trim_whitespace = trim_whitespace;
         self
     }
 
@@ -445,7 +483,7 @@ impl Task {
         let results = runner.check_programs(input, &all_progs, self.time_limit)?;
 
         // Correct (Main) Solution Result
-        let correct_output = match &results[0] {
+        let mut correct_output = match &results[0] {
             RunResult::Ok(_, output) => output.trim().to_owned() + "\n",
             RunResult::TimedOut => {
                 return Err(Error::SolutionTimedOut {
@@ -461,17 +499,21 @@ impl Task {
             }
         };
 
+        if self.trim_whitespace {
+            correct_output = trim_whitespace(&correct_output);
+        }
+
         // Ensure all other "good" solutions pass and match main output
         for (i, &(sol_idx, _)) in good_progs.iter().enumerate() {
             match &results[1 + i] {
                 RunResult::Ok(_, output) if (self.checker)(input, &correct_output, output) => {}
                 result => {
                     let write_path = self.problem_path.join("failing_test.in");
-                    fs::write(write_path.clone(), input).map_err(move |err| Error::IOError { file: write_path.to_str().unwrap().to_owned(), err })?;
+                    fs::write(write_path.clone(), input).map_err(move |err| Error::IOError { file: path_str(&write_path), err })?;
                     return Err(Error::PartialSolutionFailsSubtask {
                         partial_number: sol_idx + 1,
                         subtask_number: subtask_idx + 1,
-                        verdict: if !matches!(result, RunResult::Ok(_, _)) { result.to_string() } else { "WA".to_string() },
+                        verdict: if matches!(result, RunResult::Ok(_, _)) { "WA".to_owned() } else { result.to_display_string() },
                         gen_id: gen_idx + 1,
                     });
                 }

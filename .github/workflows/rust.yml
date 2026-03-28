@@ -15,12 +15,14 @@ jobs:
   test_linux:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v3
-    - run: rustup toolchain install stable --profile minimal
-    - name: Rust Cache
-      uses: Swatinem/rust-cache@v2.7.3
-    - name: Run tests
-      run: cargo test --verbose
+      - uses: actions/checkout@v3
+      - run: rustup toolchain install stable --profile minimal
+      - name: Rust Cache
+        uses: Swatinem/rust-cache@v2.7.3
+      - name: Run tests
+        run: cargo test --verbose
+      - name: Clippy (deny warnings)
+        run: cargo clippy --all-targets --all-features -- -D warnings
 
   test_macos:
     runs-on: macos-latest
@@ -31,3 +33,5 @@ jobs:
         uses: Swatinem/rust-cache@v2.7.3
       - name: Run tests
         run: cargo test --verbose
+      - name: Clippy (deny warnings)
+        run: cargo clippy --all-targets --all-features -- -D warnings

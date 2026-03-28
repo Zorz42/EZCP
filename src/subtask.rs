@@ -15,7 +15,7 @@ pub struct Subtask {
     pub(super) generators: Vec<Rc<TestGenerator>>,
     /// Minimum number of tests to generate from each generator initially
     pub(super) initial_counts: Vec<usize>,
-    /// Override custom min_failures_per_solution
+    /// Override custom `min_failures_per_solution`
     pub(super) min_failures_per_solution: Option<usize>,
 
     pub(super) name: String,
@@ -43,9 +43,9 @@ impl Subtask {
         self
     }
 
-    /// Override custom min_failures_per_solution
+    /// Override custom `min_failures_per_solution`
     #[must_use]
-    pub fn with_min_failures(mut self, min_failures: usize) -> Self {
+    pub const fn with_min_failures(mut self, min_failures: usize) -> Self {
         self.min_failures_per_solution = Some(min_failures);
         self
     }

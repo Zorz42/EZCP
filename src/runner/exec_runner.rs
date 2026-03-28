@@ -17,11 +17,11 @@ pub enum RunResult {
 }
 
 impl RunResult {
-    pub fn to_string(&self) -> String {
+    pub fn to_display_string(&self) -> String {
         match self {
-            RunResult::Ok(_, _) => "OK".to_owned(),
-            RunResult::TimedOut => "TLE".to_owned(),
-            RunResult::Crashed => "RTE".to_owned(),
+            Self::Ok(_, _) => "OK".to_owned(),
+            Self::TimedOut => "TLE".to_owned(),
+            Self::Crashed => "RTE".to_owned(),
         }
     }
 }
@@ -35,7 +35,7 @@ impl RunResult {
 pub fn run_solution(executable_file: &PathBuf, input_data: &str, time_limit: i32, timer_path: &Path) -> Result<RunResult> {
     let mut solution_process = Command::new(timer_path);
     solution_process.arg(executable_file);
-    solution_process.arg(format!("{}", time_limit));
+    solution_process.arg(format!("{time_limit}"));
 
     trace!("Running command: {solution_process:?}");
     // spawn the solution process
