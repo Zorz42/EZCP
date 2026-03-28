@@ -1,4 +1,5 @@
 #[cfg(test)]
+#[allow(clippy::expect_used)]
 mod subtask_tests {
     use crate::Subtask;
 

@@ -1,7 +1,7 @@
 /// Tests for the custom checker feature (`with_checker` / `diff_checker`).
 ///
 /// The checker function signature is `fn(&str, &str, &str) -> bool` where
-/// arguments are (test_input, correct_output, program_output) and the return
+/// arguments are (`test_input`, `correct_output`, `program_output`) and the return
 /// value is `true` when the program output is ACCEPTED (correct), `false`
 /// when it is REJECTED (wrong answer).
 #[cfg(test)]
@@ -63,7 +63,7 @@ mod checker_tests {
         task.task = task
             .task
             .with_solution_source(main_solution)
-            .with_subtask(Subtask::new("only subtask").with_test(3, || "".to_owned()))
+            .with_subtask(Subtask::new("only subtask").with_test(3, String::new))
             // This solution passes the only subtask (extra whitespace is fine).
             .with_partial_solution(good_partial, &[0]);
 
@@ -91,7 +91,7 @@ mod checker_tests {
         task.task = task
             .task
             .with_solution_source(main_solution)
-            .with_subtask(Subtask::new("only subtask").with_test(3, || "".to_owned()))
+            .with_subtask(Subtask::new("only subtask").with_test(3, String::new))
             .with_partial_solution(bad_solution, &[]); // fails all subtasks
 
         task.test(); // must succeed (bad solution is rejected as expected)
@@ -144,7 +144,7 @@ mod checker_tests {
             .with_debug_level(LevelFilter::Off)
             .with_checker(always_accept)
             .with_solution_source(main_solution)
-            .with_subtask(Subtask::new("only subtask").with_test(2, || "".to_owned()))
+            .with_subtask(Subtask::new("only subtask").with_test(2, String::new))
             // The bad solution is supposed to fail the subtask, but our checker
             // never rejects it – so no robust test can be found.
             .with_partial_solution(bad_solution, &[])
@@ -180,7 +180,7 @@ mod checker_tests {
             .with_debug_level(LevelFilter::Off)
             .with_checker(always_accept)
             .with_solution_source(main_solution)
-            .with_subtask(Subtask::new("only subtask").with_test(2, || "".to_owned()))
+            .with_subtask(Subtask::new("only subtask").with_test(2, String::new))
             .with_partial_solution(good_partial, &[0]); // declared to pass subtask 0
 
         task.run().unwrap();
@@ -213,7 +213,7 @@ mod checker_tests {
             .with_debug_level(LevelFilter::Off)
             .with_checker(always_reject)
             .with_solution_source(main_solution)
-            .with_subtask(Subtask::new("only subtask").with_test(2, || "".to_owned()))
+            .with_subtask(Subtask::new("only subtask").with_test(2, String::new))
             .with_partial_solution(good_partial, &[0]); // declared to pass subtask 0
 
         // The checker rejects every answer so the good partial is considered
@@ -228,7 +228,7 @@ mod checker_tests {
     // ─── exact_checker (stricter than default) ───────────────────────────────
 
     /// The exact checker rejects a solution whose output differs only by
-    /// trailing whitespace, whereas the default diff_checker would accept it.
+    /// trailing whitespace, whereas the default `diff_checker` would accept it.
     /// In this test the "bad" partial produces trailing spaces, so with the
     /// exact checker it should be findable as wrong.
     #[test]
@@ -255,7 +255,7 @@ mod checker_tests {
             .with_checker(exact_checker)
             .with_solution_source(main_solution)
             // Use with_test so we have a concrete test case.
-            .with_subtask(Subtask::new("only subtask").with_test(2, || "".to_owned()))
+            .with_subtask(Subtask::new("only subtask").with_test(2, String::new))
             .with_partial_solution(bad_solution, &[]) // expected to fail
             .with_min_failures(1);
 

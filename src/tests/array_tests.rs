@@ -93,8 +93,7 @@ mod array_unit_tests {
         let result_without = array_to_string(&arr, false);
         // With count has one extra line at the front
         let lines_with: Vec<&str> = result_with.lines().collect();
-        let lines_without: Vec<&str> = result_without.lines().collect();
-        assert_eq!(lines_with.len(), lines_without.len() + 1);
+        assert_eq!(lines_with.len(), result_without.lines().count() + 1);
         assert_eq!(lines_with[0], "3");
     }
 
@@ -114,9 +113,8 @@ mod array_unit_tests {
             let output = generator();
             let mut lines = output.lines();
             let count: usize = lines.next().unwrap().trim().parse().unwrap();
-            let elements: Vec<i32> = lines.next().unwrap_or("").split_whitespace().filter_map(|s| s.parse().ok()).collect();
             assert_eq!(count, 5, "expected length 5");
-            assert_eq!(elements.len(), 5, "expected 5 elements");
+            assert_eq!(lines.next().unwrap_or("").split_whitespace().filter_map(|s| s.parse::<i32>().ok()).count(), 5, "expected 5 elements");
         }
     }
 
