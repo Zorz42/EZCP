@@ -32,10 +32,10 @@ impl RunResult {
 /// * `input_data` - Input to be sent via stdin.
 /// * `time_limit` - Maximum CPU time in seconds.
 /// * `timer_path` - Path to the pre-compiled `timer` utility.
-pub fn run_solution(executable_file: &PathBuf, input_data: &str, time_limit: f32, timer_path: &Path) -> Result<RunResult> {
+pub fn run_solution(executable_file: &PathBuf, input_data: &str, time_limit: i32, timer_path: &Path) -> Result<RunResult> {
     let mut solution_process = Command::new(timer_path);
     solution_process.arg(executable_file);
-    solution_process.arg(format!("{}", (time_limit * 1000.0) as i32));
+    solution_process.arg(format!("{}", time_limit));
 
     trace!("Running command: {solution_process:?}");
     // spawn the solution process

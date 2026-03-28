@@ -23,7 +23,7 @@ pub struct ProgramHandle {
 struct Task {
     program: ProgramHandle,
     input: String,
-    time_limit: f32, // in seconds
+    time_limit: i32, // in milliseconds
     result: Option<RunResult>,
 }
 
@@ -131,7 +131,7 @@ impl CppRunner {
     /// * `program` - Handle to the executable to run.
     /// * `input` - Data to be sent to stdin.
     /// * `time_limit` - Maximum CPU time in seconds.
-    fn add_task(&mut self, program: ProgramHandle, input: String, time_limit: f32) -> TaskHandle {
+    fn add_task(&mut self, program: ProgramHandle, input: String, time_limit: i32) -> TaskHandle {
         trace!("Adding task for program id: {}, time limit: {}", program.id, time_limit);
         let handle = TaskHandle { id: self.tasks.len() };
         self.tasks.push(Task {
@@ -160,7 +160,7 @@ impl CppRunner {
     /// Runs multiple programs against a single input sequentially or in parallel.
     ///
     /// This is a convenience method that manages task creation and result collection.
-    pub fn check_programs(&mut self, input: &str, programs: &[ProgramHandle], time_limit: f32) -> Result<Vec<RunResult>> {
+    pub fn check_programs(&mut self, input: &str, programs: &[ProgramHandle], time_limit: i32) -> Result<Vec<RunResult>> {
         self.clear_tasks();
         let mut handles = Vec::new();
         for &program in programs {

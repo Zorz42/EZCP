@@ -70,7 +70,7 @@ pub mod cpp_runner_tests {
         let mut runner = CppRunner::new(tempdir.path()).unwrap();
 
         let program_handle = runner.add_program(HELLO_WORLD_PROGRAM).unwrap();
-        let result = &runner.check_programs("", &[program_handle], 1.0).unwrap()[0];
+        let result = &runner.check_programs("", &[program_handle], 1000).unwrap()[0];
 
         assert!(matches!(result, RunResult::Ok(..)));
 
@@ -107,7 +107,7 @@ pub mod cpp_runner_tests {
 
         for i in 0..20 {
             let input = format!("{i}\n");
-            let results = runner.check_programs(&input, &program_handles, 1.0).unwrap();
+            let results = runner.check_programs(&input, &program_handles, 1000).unwrap();
 
             for (j, result) in results.iter().enumerate() {
                 assert!(matches!(result, RunResult::Ok(..)));
@@ -157,7 +157,7 @@ pub mod cpp_runner_tests {
         ";
 
         let program_handle = runner.add_program(program_source).unwrap();
-        let result = &runner.check_programs("1\n", &[program_handle], 1.0).unwrap()[0];
+        let result = &runner.check_programs("1\n", &[program_handle], 1000).unwrap()[0];
 
         // Check that the result is indeed a TLE
         assert!(matches!(result, RunResult::TimedOut));
@@ -183,7 +183,7 @@ pub mod cpp_runner_tests {
         ";
 
         let program_handle = runner.add_program(program_source).unwrap();
-        let result = &runner.check_programs("1\n", &[program_handle], 1.0).unwrap()[0];
+        let result = &runner.check_programs("1\n", &[program_handle], 1000).unwrap()[0];
 
         // Check that the result is indeed a crash
         assert!(matches!(result, RunResult::Crashed));
@@ -210,7 +210,7 @@ pub mod cpp_runner_tests {
         "#;
 
         let program_handle = runner.add_program(program_source).unwrap();
-        let task_handle = runner.add_task(program_handle, "".to_owned(), 1.0);
+        let task_handle = runner.add_task(program_handle, "".to_owned(), 1000);
 
         runner.run_tasks(None).unwrap();
 
@@ -236,7 +236,7 @@ pub mod cpp_runner_tests {
             let mut runner = CppRunner::new(tempdir.path()).unwrap();
 
             let program_handle = runner.add_program(HELLO_WORLD_PROGRAM).unwrap();
-            let result = &runner.check_programs("", &[program_handle], 1.0).unwrap()[0];
+            let result = &runner.check_programs("", &[program_handle], 1000).unwrap()[0];
 
             assert!(matches!(result, RunResult::Ok(..)));
 

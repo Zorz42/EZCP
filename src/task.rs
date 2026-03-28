@@ -41,8 +41,8 @@ pub struct Task {
     problem_path: PathBuf,
     /// Directory where generated tests will be saved
     tests_path: PathBuf,
-    /// Time limit in seconds for solutions
-    time_limit: f32,
+    /// Time limit in milliseconds for solutions
+    time_limit: i32,
     /// Path to the final ZIP archive containing all tests
     tests_archive_path: PathBuf,
     /// Closure to determine input file names: `(test_id, subtask_id, id_in_subtask) -> String`
@@ -101,7 +101,7 @@ impl Task {
             get_input_file_name: Box::new(|test_id, subtask_id, _test_id_in_subtask| format!("test.{:02}.{:03}.in", subtask_id + 1, test_id + 1)),
             get_output_file_name: Box::new(|test_id, subtask_id, _test_id_in_subtask| format!("test.{:02}.{:03}.out", subtask_id + 1, test_id + 1)),
             build_folder_path,
-            time_limit: 5.0,
+            time_limit: 5000,
             subtasks: Vec::new(),
             solutions: Vec::new(),
             min_failures_per_solution: 5,
@@ -186,9 +186,9 @@ impl Task {
         self
     }
 
-    /// Sets the time limit in seconds for solutions.
+    /// Sets the time limit in milliseconds for solutions.
     #[must_use]
-    pub const fn with_time_limit(mut self, limit: f32) -> Self {
+    pub const fn with_time_limit(mut self, limit: i32) -> Self {
         self.time_limit = limit;
         self
     }
