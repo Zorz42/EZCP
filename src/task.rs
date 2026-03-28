@@ -379,11 +379,12 @@ impl Task {
 
             // Phase 1: Initial tests from each generator (only good solutions must pass)
             for (gen_idx, generator) in subtask.generators.iter().enumerate() {
-                let needed = subtask.initial_counts[gen_idx];
+                let needed = subtask.initial_counts.get(gen_idx).copied().unwrap_or(0);
                 for _ in 0..needed {
                     let candidate = generator.generate();
                     // Each test must be unique within the subtask
                     if tried_inputs.contains(&candidate) {
+                        found_count_progress_bar.set_length(found_count_progress_bar.length().unwrap_or(1).saturating_sub(1));
                         continue;
                     }
                     tried_inputs.insert(candidate.clone());
@@ -401,6 +402,7 @@ impl Task {
             let mut supplemental_tries = 0;
             while robust_found_count < target_robust && supplemental_tries < self.max_tries {
                 supplemental_tries += 1;
+                tries_progress_bar.inc(1);
                 let Some((candidate, gen_idx)) = subtask.generate_random_test() else { break };
                 if tried_inputs.contains(&candidate) {
                     continue;
@@ -414,7 +416,6 @@ impl Task {
                     found_count_progress_bar.inc(1);
                     tries_progress_bar.reset();
                 }
-                tries_progress_bar.inc(1);
             }
 
             if robust_found_count < target_robust {
