@@ -133,6 +133,7 @@ dependencies = [
  "console",
  "dunce",
  "env_logger",
+ "ezcp_macros",
  "fs_extra",
  "indicatif",
  "indicatif-log-bridge",
@@ -144,6 +145,15 @@ dependencies = [
  "thiserror",
  "which",
  "zip",
+]
+
+[[package]]
+name = "ezcp_macros"
+version = "0.1.0"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
 ]
 
 [[package]]

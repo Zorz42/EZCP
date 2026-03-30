@@ -2,6 +2,8 @@ pub trait ToOutput {
     fn to_output(self) -> String;
 }
 
+pub use ezcp_macros::ToOutput;
+
 impl ToOutput for String {
     fn to_output(self) -> String {
         self

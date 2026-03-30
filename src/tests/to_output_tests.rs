@@ -161,4 +161,41 @@ mod test_to_output_tests {
     fn vec_bools() {
         assert_eq!(vec![true, false, true].to_output(), "1 0 1\n");
     }
+
+    // --- derive(ToOutput) ---
+
+    #[derive(ToOutput)]
+    struct MyStruct {
+        a: i32,
+        b: String,
+        c: Vec<i32>,
+    }
+
+    #[test]
+    fn derive_struct_named() {
+        let s = MyStruct {
+            a: 42,
+            b: "hello".to_owned(),
+            c: vec![1, 2, 3],
+        };
+        assert_eq!(s.to_output(), "42\nhello\n1 2 3\n\n");
+    }
+
+    #[derive(ToOutput)]
+    struct MyTupleStruct(i32, String, Vec<i32>);
+
+    #[test]
+    fn derive_struct_tuple() {
+        let s = MyTupleStruct(42, "hello".to_owned(), vec![1, 2, 3]);
+        assert_eq!(s.to_output(), "42\nhello\n1 2 3\n\n");
+    }
+
+    #[derive(ToOutput)]
+    struct UnitStruct;
+
+    #[test]
+    fn derive_struct_unit() {
+        let s = UnitStruct;
+        assert_eq!(s.to_output(), "");
+    }
 }
