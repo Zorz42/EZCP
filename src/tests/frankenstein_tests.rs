@@ -72,7 +72,7 @@ mod frankenstein_tests {
 
         // Verify generated tests are in range (10, 20)
         // We can read the generated tests from task.tests_path
-        let tests_dir = task_path.join("tests");
+        let tests_dir = task_path.join("");
         let entries = std::fs::read_dir(tests_dir).unwrap();
         let mut count = 0;
         for entry in entries {

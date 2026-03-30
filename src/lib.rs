@@ -7,11 +7,12 @@ mod solution;
 mod subtask;
 mod task;
 mod test;
-mod tests;
 mod to_output;
+mod tests;
 
 pub use error::{Error, Result};
 pub use generators::{Graph, array_generator, array_generator_custom, array_to_string};
 pub use solution::Solution;
 pub use subtask::Subtask;
 pub use task::Task;
+pub use to_output::ToOutput;

@@ -10,6 +10,7 @@ mod partial_solution_tests;
 mod solution_tests;
 mod subtask_tests;
 mod test_generator_tests;
+mod to_output_tests;
 
 #[cfg(test)]
 mod test_shared {
