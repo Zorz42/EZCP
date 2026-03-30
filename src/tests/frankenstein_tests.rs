@@ -72,12 +72,12 @@ mod frankenstein_tests {
 
         // Verify generated tests are in range (10, 20)
         // We can read the generated tests from task.tests_path
-        let tests_dir = task_path.join("");
+        let tests_dir = task_path.join("tests");
         let entries = std::fs::read_dir(tests_dir).unwrap();
         let mut count = 0;
         for entry in entries {
             let path = entry.unwrap().path();
-            if path.extension().unwrap() == "in" {
+            if path.extension().is_some_and(|ext| ext == "in") {
                 let content = std::fs::read_to_string(path).unwrap();
                 let n: i32 = content.trim().parse().unwrap();
                 assert!(n > 10 && n < 20, "Generated test {n} is not in overlap range (10, 20)");
