@@ -176,8 +176,7 @@ impl<T: ToOutput> Task<T> {
 
     /// Adds a subtask to the task.
     #[must_use]
-    pub fn with_subtask(mut self, mut subtask: Subtask<T>) -> Self {
-        subtask.number = self.subtasks.len();
+    pub fn with_subtask(mut self, subtask: Subtask<T>) -> Self {
         self.subtasks.push(subtask);
         self
     }

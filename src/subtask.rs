@@ -11,8 +11,6 @@ use crate::to_output::ToOutput;
 #[derive(Default)]
 pub struct Subtask<T: ToOutput> {
     pub(super) name: String,
-    /// The index of the subtask (0-indexed)
-    pub(super) number: usize,
     /// Generators that produce test inputs for this subtask
     pub(super) generators: Vec<Rc<TestGenerator<T>>>,
     /// Minimum number of tests to generate from each generator initially
@@ -27,7 +25,6 @@ impl<T: ToOutput> Subtask<T> {
     pub fn new(name: &str) -> Self {
         Self {
             name: name.to_owned(),
-            number: 0,
             generators: Vec::new(),
             initial_counts: Vec::new(),
             min_failures_per_solution: None,
