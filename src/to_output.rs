@@ -8,6 +8,24 @@ impl ToOutput for String {
     }
 }
 
+impl<T: ToOutput> ToOutput for Vec<T> {
+    fn to_output(self) -> String {
+        let mut res = String::new();
+        for i in self {
+            let s = i.to_output();
+            res += &s;
+            if !s.ends_with("\n") {
+                res.push(' ');
+            }
+        }
+        if res.ends_with(" ") {
+            res.pop();
+            res.push('\n');
+        }
+        res
+    }
+}
+
 impl ToOutput for i8 {
     fn to_output(self) -> String {
         self.to_string()
