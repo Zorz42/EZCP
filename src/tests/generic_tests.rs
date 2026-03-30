@@ -4,13 +4,14 @@ pub mod generic_tests {
     use crate::{Error, Subtask, Task};
     use log::LevelFilter;
     use tempfile::TempDir;
+    use crate::to_output::ToOutput;
 
-    pub struct Test {
-        pub task: Task,
+    pub struct Test<T: ToOutput> {
+        pub task: Task<T>,
         task_path: TempDir,
     }
 
-    impl Test {
+    impl<T: ToOutput> Test<T> {
         pub fn new() -> Self {
             let task_path = TempDir::new().unwrap();
             let task = Task::new("Test task", task_path.path()).with_debug_level(LevelFilter::Trace);
@@ -26,7 +27,7 @@ pub mod generic_tests {
 
     #[test]
     fn create_empty() {
-        let mut task = Test::new();
+        let mut task = Test::<String>::new();
 
         // create solution file
         let solution_contents = "int main() { return 0; }";
@@ -37,7 +38,7 @@ pub mod generic_tests {
 
     #[test]
     fn create_with_subtasks() {
-        let mut task = Test::new();
+        let mut task = Test::<String>::new();
 
         // create solution file
         let solution_contents = r#"
@@ -93,7 +94,7 @@ pub mod generic_tests {
 
     #[test]
     fn test_fails_without_solution() {
-        let task = Test::new();
+        let task = Test::<String>::new();
 
         assert!(matches!(task.task.run(), Err(Error::MissingSolution { .. })));
     }
@@ -256,7 +257,7 @@ pub mod generic_tests {
     fn test_task_no_subtasks_succeeds() {
         // A task with a solution but no subtasks should complete successfully
         // (the implementation warns but does not return an error).
-        let mut task = Test::new();
+        let mut task = Test::<String>::new();
         task.task = task.task.with_solution_source("int main() { return 0; }");
         task.task.run().unwrap();
     }

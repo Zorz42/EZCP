@@ -15,6 +15,7 @@ use std::collections::HashSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Once;
+use crate::to_output::ToOutput;
 
 pub static LOGGER_INIT: Once = Once::new();
 
@@ -34,7 +35,7 @@ fn path_str(p: &Path) -> String {
 /// A `Task` manages subtasks, solutions, and test generation configurations.
 /// It uses a builder-like pattern to set up the problem before running the
 /// test generation and verification process.
-pub struct Task {
+pub struct Task<T: ToOutput> {
     /// Name of the task
     name: String,
     /// Directory where the whole problem is stored
@@ -52,7 +53,7 @@ pub struct Task {
     /// Internal build directory for compiling solutions
     build_folder_path: PathBuf,
     /// Registered subtasks
-    subtasks: Vec<Subtask>,
+    subtasks: Vec<Subtask<T>>,
     /// Source code of the correct (main) solution
     solution_source: String,
     /// Partial solutions to be verified against subtasks
@@ -116,7 +117,7 @@ fn trim_whitespace(input: &str) -> String {
     result
 }
 
-impl Task {
+impl<T: ToOutput> Task<T> {
     /// Creates a new `Task` with the given name and root directory.
     ///
     /// * `name` - Descriptive name for the task.
@@ -175,7 +176,7 @@ impl Task {
 
     /// Adds a subtask to the task.
     #[must_use]
-    pub fn with_subtask(mut self, mut subtask: Subtask) -> Self {
+    pub fn with_subtask(mut self, mut subtask: Subtask<T>) -> Self {
         subtask.number = self.subtasks.len();
         self.subtasks.push(subtask);
         self
@@ -381,7 +382,7 @@ impl Task {
             for (gen_idx, generator) in subtask.generators.iter().enumerate() {
                 let needed = subtask.initial_counts.get(gen_idx).copied().unwrap_or(0);
                 for _ in 0..needed {
-                    let candidate = generator.generate();
+                    let candidate = generator.generate().to_output();
                     // Each test must be unique within the subtask
                     if tried_inputs.contains(&candidate) {
                         found_count_progress_bar.set_length(found_count_progress_bar.length().unwrap_or(1).saturating_sub(1));
@@ -404,6 +405,7 @@ impl Task {
                 supplemental_tries += 1;
                 tries_progress_bar.inc(1);
                 let Some((candidate, gen_idx)) = subtask.generate_random_test() else { break };
+                let candidate = candidate.to_output();
                 if tried_inputs.contains(&candidate) {
                     continue;
                 }

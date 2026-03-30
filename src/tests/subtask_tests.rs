@@ -5,7 +5,7 @@ mod subtask_tests {
 
     #[test]
     fn test_subtask_new() {
-        let st = Subtask::new("my subtask");
+        let st = Subtask::<String>::new("my subtask");
         assert_eq!(st.name, "my subtask");
         assert!(st.generators.is_empty());
         assert!(st.initial_counts.is_empty());
@@ -13,7 +13,7 @@ mod subtask_tests {
 
     #[test]
     fn test_subtask_default_name_empty() {
-        let st = Subtask::new("");
+        let st = Subtask::<String>::new("");
         assert_eq!(st.name, "");
     }
 
@@ -34,7 +34,7 @@ mod subtask_tests {
 
     #[test]
     fn test_generate_random_test_no_generators_returns_none() {
-        let st = Subtask::new("empty");
+        let st = Subtask::<String>::new("empty");
         assert!(st.generate_random_test().is_none());
     }
 

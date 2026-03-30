@@ -103,7 +103,7 @@ mod checker_tests {
     fn with_checker_returns_self_for_chaining() {
         // Verify the builder method compiles and produces a valid Task.
         let tempdir = TempDir::new().unwrap();
-        let _task = Task::new("chain test", tempdir.path())
+        let _task = Task::<String>::new("chain test", tempdir.path())
             .with_debug_level(LevelFilter::Off)
             .with_checker(always_accept)
             .with_solution_source("int main() { return 0; }");
