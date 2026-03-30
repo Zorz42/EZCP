@@ -30,13 +30,21 @@ pub enum Error {
     SolutionTimedOut { test_path: String, gen_id: usize },
 
     #[error("Solution crashed on test {test_path} (generator {gen_id})")]
+    SolutionCrash { test_path: String, gen_id: usize },
+
+    #[error("Solution produces wrong answer on {test_path} (generator {gen_id})")]
     SolutionFailed { test_path: String, gen_id: usize },
 
     #[error("Partial solution {partial_number} passes extra subtask {subtask_number} (generator {gen_id})")]
     PartialSolutionPassesExtraSubtask { subtask_number: usize, partial_number: usize, gen_id: usize },
 
     #[error("Partial solution {partial_number} does not pass subtask {subtask_number} ({verdict}) (generator {gen_id}).")]
-    PartialSolutionFailsSubtask { subtask_number: usize, partial_number: usize, verdict: String, gen_id: usize },
+    PartialSolutionFailsSubtask {
+        subtask_number: usize,
+        partial_number: usize,
+        verdict: String,
+        gen_id: usize,
+    },
 
     #[error("Missing solution")]
     MissingSolution {},

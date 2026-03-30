@@ -1,8 +1,8 @@
 use crate::test::TestGenerator;
 
+use crate::to_output::ToOutput;
 use rand::Rng;
 use std::rc::Rc;
-use crate::to_output::ToOutput;
 
 /// Represents a problem subtask with specific constraints.
 ///

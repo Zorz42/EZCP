@@ -24,11 +24,7 @@ impl ToOutput for char {
 
 impl ToOutput for bool {
     fn to_output(self) -> String {
-        if self {
-            "1".to_owned()
-        } else {
-            "0".to_owned()
-        }
+        if self { "1".to_owned() } else { "0".to_owned() }
     }
 }
 
@@ -44,9 +40,7 @@ macro_rules! impl_to_output {
     };
 }
 
-impl_to_output!(
-    i8, i16, i32, i64, i128, isize, u8, u16, u32, u64, u128, usize, f32, f64
-);
+impl_to_output!(i8, i16, i32, i64, i128, isize, u8, u16, u32, u64, u128, usize, f32, f64);
 
 impl<T: ToOutput> ToOutput for Vec<T> {
     fn to_output(self) -> String {

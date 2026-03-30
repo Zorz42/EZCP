@@ -1,10 +1,10 @@
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 pub mod generic_tests {
+    use crate::to_output::ToOutput;
     use crate::{Error, Subtask, Task};
     use log::LevelFilter;
     use tempfile::TempDir;
-    use crate::to_output::ToOutput;
 
     pub struct Test<T: ToOutput> {
         pub task: Task<T>,

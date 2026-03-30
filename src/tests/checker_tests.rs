@@ -188,14 +188,12 @@ mod checker_tests {
 
     // ─── always_reject checker ───────────────────────────────────────────────
 
-    /// When the checker always rejects, even a "good" partial solution that
-    /// produces the correct output will be considered wrong.  This means the
-    /// good partial will appear to fail the subtask, and the task should
-    /// return `PartialSolutionFailsSubtask`.
+    /// When the checker always rejects, the main solution itself will be
+    /// considered wrong. Expect SolutionFailed.
     #[test]
-    fn always_reject_checker_good_solution_errors() {
+    fn always_reject_checker_errors_on_main_solution() {
         let tempdir = TempDir::new().unwrap();
-        let task_path = tempdir.path().join("always_reject_good");
+        let task_path = tempdir.path().join("always_reject_main");
 
         let main_solution = r#"
         #include <iostream>
@@ -203,21 +201,53 @@ mod checker_tests {
         int main() { cout << 1 << "\n"; return 0; }
         "#;
 
+        let task = Task::<String>::new("always_reject_main", &task_path)
+            .with_debug_level(LevelFilter::Off)
+            .with_checker(always_reject)
+            .with_solution_source(main_solution)
+            .with_subtask(Subtask::new("only subtask").with_test(2, String::new));
+
+        // The checker rejects every answer so the main solution is considered failing.
+        let result = task.run();
+        assert!(
+            matches!(result, Err(Error::SolutionFailed { .. })),
+            "Expected SolutionFailed, got: {result:?}"
+        );
+    }
+
+    /// When the checker accepts the main solution's output but rejects a "good"
+    /// partial solution's output (even if it's declared to pass), we expect
+    /// PartialSolutionFailsSubtask.
+    #[test]
+    fn checker_rejects_good_partial_solution_errors() {
+        let tempdir = TempDir::new().unwrap();
+        let task_path = tempdir.path().join("reject_good_partial");
+
+        let main_solution = r#"
+        #include <iostream>
+        using namespace std;
+        int main() { cout << "main\n"; return 0; }
+        "#;
+
         let good_partial = r#"
         #include <iostream>
         using namespace std;
-        int main() { cout << 1 << "\n"; return 0; }
+        int main() { cout << "partial\n"; return 0; }
         "#;
 
-        let task = Task::new("always_reject_good", &task_path)
+        // Checker only accepts "main"
+        fn main_only_checker(_input: &str, _correct: &str, program: &str) -> bool {
+            program.trim() == "main"
+        }
+
+        let task = Task::<String>::new("reject_good_partial", &task_path)
             .with_debug_level(LevelFilter::Off)
-            .with_checker(always_reject)
+            .with_checker(main_only_checker)
             .with_solution_source(main_solution)
             .with_subtask(Subtask::new("only subtask").with_test(2, String::new))
             .with_partial_solution(good_partial, &[0]); // declared to pass subtask 0
 
-        // The checker rejects every answer so the good partial is considered
-        // failing – expect PartialSolutionFailsSubtask.
+        // The checker rejects "partial" so the good partial is considered failing.
         let result = task.run();
         assert!(
             matches!(result, Err(Error::PartialSolutionFailsSubtask { .. })),

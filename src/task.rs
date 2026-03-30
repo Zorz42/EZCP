@@ -2,10 +2,12 @@ use crate::solution::Solution;
 use crate::subtask::Subtask;
 use crate::{Error, Result};
 
+use crate::Error::SolutionFailed;
 use crate::archiver::archive_files;
 use crate::logger_format::logger_format;
 use crate::runner::cpp_runner::{CppRunner, ProgramHandle};
 use crate::runner::exec_runner::RunResult;
+use crate::to_output::ToOutput;
 use console::style;
 use indicatif::{MultiProgress, ProgressBar};
 use indicatif_log_bridge::LogWrapper;
@@ -13,9 +15,9 @@ use log::{LevelFilter, debug, error, info, warn};
 use rand::seq::SliceRandom;
 use std::collections::HashSet;
 use std::fs;
+use std::hash::{DefaultHasher, Hash, Hasher};
 use std::path::{Path, PathBuf};
 use std::sync::Once;
-use crate::to_output::ToOutput;
 
 pub static LOGGER_INIT: Once = Once::new();
 
@@ -363,6 +365,11 @@ impl<T: ToOutput> Task<T> {
                 }
             }
 
+            fn hash_string(s: &str) -> u64 {
+                let mut hasher = DefaultHasher::new();
+                s.hash(&mut hasher);
+                hasher.finish()
+            }
             let mut tried_inputs = HashSet::new();
             let mut subtask_tests = Vec::new();
             let mut robust_found_count = 0;
@@ -383,11 +390,11 @@ impl<T: ToOutput> Task<T> {
                 for _ in 0..needed {
                     let candidate = generator.generate().to_output();
                     // Each test must be unique within the subtask
-                    if tried_inputs.contains(&candidate) {
+                    if tried_inputs.contains(&hash_string(&candidate)) {
                         found_count_progress_bar.set_length(found_count_progress_bar.length().unwrap_or(1).saturating_sub(1));
                         continue;
                     }
-                    tried_inputs.insert(candidate.clone());
+                    tried_inputs.insert(hash_string(&candidate));
 
                     // We check only good solutions in Phase 1 (no bad_progs passed)
                     let Some(main_output) = self.is_robust_test(&candidate, solution_handle, &good_solution_handles, &[], &mut cpp_runner, subtask_idx, gen_idx)? else {
@@ -405,10 +412,10 @@ impl<T: ToOutput> Task<T> {
                 tries_progress_bar.inc(1);
                 let Some((candidate, gen_idx)) = subtask.generate_random_test() else { break };
                 let candidate = candidate.to_output();
-                if tried_inputs.contains(&candidate) {
+                if tried_inputs.contains(&hash_string(&candidate)) {
                     continue;
                 }
-                tried_inputs.insert(candidate.clone());
+                tried_inputs.insert(hash_string(&candidate));
 
                 if let Some(main_output) = self.is_robust_test(&candidate, solution_handle, &good_solution_handles, &bad_solution_handles, &mut cpp_runner, subtask_idx, gen_idx)? {
                     subtask_tests.push((candidate, main_output));
@@ -494,12 +501,19 @@ impl<T: ToOutput> Task<T> {
                 });
             }
             RunResult::Crashed => {
-                return Err(Error::SolutionFailed {
+                return Err(Error::SolutionCrash {
                     test_path: "generation phase".to_owned(),
                     gen_id: gen_idx + 1,
                 });
             }
         };
+
+        if !(self.checker)(input, &correct_output, &correct_output) {
+            return Err(SolutionFailed {
+                test_path: "generation phase".to_owned(),
+                gen_id: gen_idx + 1,
+            });
+        }
 
         if self.trim_whitespace {
             correct_output = trim_whitespace(&correct_output);

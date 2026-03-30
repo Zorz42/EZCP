@@ -1,4 +1,3 @@
-
 #[cfg(test)]
 mod test_to_output_tests {
     use crate::ToOutput;
@@ -126,10 +125,7 @@ mod test_to_output_tests {
 
     #[test]
     fn vec_strings_space_separated() {
-        assert_eq!(
-            vec!["hello".to_owned(), "world".to_owned()].to_output(),
-            "hello world\n"
-        );
+        assert_eq!(vec!["hello".to_owned(), "world".to_owned()].to_output(), "hello world\n");
     }
 
     #[test]
