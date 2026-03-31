@@ -213,6 +213,13 @@ impl Gcc {
             command.arg("-static"); // Use static linking on Windows to avoid DLL issues
         }
 
+        #[cfg(target_os = "macos")]
+        {
+            // On macOS, the default stack size is small (8MB).
+            // We increase it to 512MB for competitive programming.
+            command.arg("-Wl,-stack_size,0x20000000");
+        }
+
         command.arg(source_file).arg("-o").arg(&output_file);
         // Do not override current_dir; pass absolute paths instead
 

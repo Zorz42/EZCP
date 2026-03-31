@@ -8,6 +8,7 @@ mod generic_tests;
 mod graph_tests;
 mod partial_solution_tests;
 mod solution_tests;
+mod stack_limit_tests;
 mod subtask_tests;
 mod test_generator_tests;
 mod to_output_tests;

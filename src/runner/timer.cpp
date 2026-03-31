@@ -117,6 +117,20 @@ int run_command_with_timeout(const string &command, int time_limit_ms) {
     rl.rlim_max = (rlim_t)(limit_s + 5); // hard limit  -> SIGKILL
     setrlimit(RLIMIT_CPU, &rl);
 
+    // Set stack and memory limits to unlimited (common in CP)
+    // Set stack and memory limits as high as possible
+    struct rlimit rl_stack;
+    if (getrlimit(RLIMIT_STACK, &rl_stack) != -1) {
+        rl_stack.rlim_cur = rl_stack.rlim_max;
+        setrlimit(RLIMIT_STACK, &rl_stack);
+    }
+
+    struct rlimit rl_as;
+    if (getrlimit(RLIMIT_AS, &rl_as) != -1) {
+        rl_as.rlim_cur = rl_as.rlim_max;
+        setrlimit(RLIMIT_AS, &rl_as);
+    }
+
     execl(command.c_str(), command.c_str(), (char *)nullptr);
     _exit(127);
   }
