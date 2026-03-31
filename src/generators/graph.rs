@@ -2,12 +2,17 @@ use std::collections::HashSet;
 use std::fmt::Write;
 use rand::prelude::SliceRandom;
 use rand::RngExt;
+use crate::ToOutput;
 
 /// This struct represents a combinatorial undirected graph.
 /// It is used to generate the input for test cases and to check the output of solutions.
 pub struct Graph {
     nodes: Vec<Vec<usize>>,
     edges: HashSet<(usize, usize)>,
+    /// if the graph should be tree, is only used when generating output:
+    /// it checks if the graph is a tree and does not add edge count to the output,
+    /// since it is equal to n-1
+    pub is_tree: bool,
 }
 
 impl Graph {
@@ -17,6 +22,7 @@ impl Graph {
         Self {
             nodes: vec![Vec::new(); n as usize],
             edges: HashSet::new(),
+            is_tree: false,
         }
     }
 
@@ -51,6 +57,7 @@ impl Graph {
     #[must_use]
     pub fn new_random_tree(n: i32) -> Self {
         let mut result = Self::new_empty(n);
+        result.is_tree = true;
         let mut rng = rand::rng();
         let mut nodes = (0..n).collect::<Vec<_>>();
         nodes.shuffle(&mut rng);
@@ -68,6 +75,7 @@ impl Graph {
     #[must_use]
     pub fn new_random_connected(n: i32, m: i32) -> Self {
         let mut result = Self::new_random_tree(n);
+        result.is_tree = false;
         let mut rng = rand::rng();
         while result.get_num_edges() < m {
             let u = rng.random_range(0..n);
@@ -133,40 +141,6 @@ impl Graph {
         self.edges.iter()
     }
 
-    /// This function converts the graph to an input string.
-    /// The input string will be formatted as follows:
-    /// The first line will contain two integers n and m, the number of nodes and edges respectively.
-    /// The next m lines will contain two integers u and v, representing an edge between nodes u and v.
-    /// The nodes are 1-indexed.
-    /// The edges will be randomly shuffled and pair may be swapped.
-    #[must_use]
-    pub fn create_output(&self) -> String {
-        let mut result = String::new();
-        result += &format!("{} {}\n", self.get_num_nodes(), self.get_num_edges());
-        let edges_str = self.create_output_edges();
-        result += &edges_str;
-        result
-    }
-
-    /// This function only converts edges to an input string.
-    /// The input string will be formatted as follows:
-    /// M lines will contain two integers u and v, representing an edge between nodes u and v.
-    /// The nodes are 1-indexed.
-    #[must_use]
-    pub fn create_output_edges(&self) -> String {
-        let mut result = String::new();
-        let mut edges = self.edges_iter().collect::<Vec<_>>();
-        let mut rng = rand::rng();
-        edges.shuffle(&mut rng);
-        for (u, v) in edges {
-            if rng.random_bool(0.5) {
-                writeln!(result, "{} {}", u + 1, v + 1).ok();
-            } else {
-                writeln!(result, "{} {}", v + 1, u + 1).ok();
-            }
-        }
-        result
-    }
 
     /// This function returns the array of connected components in the graph.
     /// Each connected component is represented by an array of node indices.
@@ -238,5 +212,36 @@ impl Graph {
             }
         }
         true
+    }
+}
+
+impl ToOutput for Graph {
+    /// This function converts the graph to an input string.
+    /// The input string will be formatted as follows:
+    /// The first line will contain two integers n and m, the number of nodes and edges respectively.
+    /// The next m lines will contain two integers u and v, representing an edge between nodes u and v.
+    /// The nodes are 1-indexed.
+    /// The edges will be randomly shuffled and pair may be swapped.
+    fn to_output(self) -> String {
+        if self.is_tree {
+            assert!(self.is_tree());
+        }
+        let mut result = String::new();
+        if self.is_tree {
+            result += &format!("{}\n", self.get_num_nodes());
+        } else {
+            result += &format!("{} {}\n", self.get_num_nodes(), self.get_num_edges());
+        }
+        let mut edges = self.edges_iter().collect::<Vec<_>>();
+        let mut rng = rand::rng();
+        edges.shuffle(&mut rng);
+        for (u, v) in edges {
+            if rng.random_bool(0.5) {
+                writeln!(result, "{} {}", u + 1, v + 1).ok();
+            } else {
+                writeln!(result, "{} {}", v + 1, u + 1).ok();
+            }
+        }
+        result
     }
 }

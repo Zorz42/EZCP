@@ -400,4 +400,144 @@ mod graph_tests {
             assert!(graph.is_connected(), "random connected graph with {n} nodes should be connected");
         }
     }
+
+    // --- ToOutput tests ---
+
+    /// Helper: parse edges from output lines (skipping the header), normalizing each
+    /// edge so that (min, max) and converting from 1-indexed to 0-indexed.
+    fn parse_edges(lines: &[&str]) -> Vec<(usize, usize)> {
+        let mut edges: Vec<(usize, usize)> = lines
+            .iter()
+            .skip(1)
+            .map(|line| {
+                let parts: Vec<usize> = line.split_whitespace().map(|s| s.parse().unwrap()).collect();
+                assert_eq!(parts.len(), 2, "each edge line must have exactly 2 values");
+                let (a, b) = (parts[0] - 1, parts[1] - 1);
+                (a.min(b), a.max(b))
+            })
+            .collect();
+        edges.sort_unstable();
+        edges
+    }
+
+    #[test]
+    fn test_to_output_empty_graph() {
+        use crate::ToOutput;
+        let graph = Graph::new_empty(5);
+        let output = graph.to_output();
+        assert_eq!(output, "5 0\n");
+    }
+
+    #[test]
+    fn test_to_output_single_node() {
+        use crate::ToOutput;
+        let graph = Graph::new_empty(1);
+        let output = graph.to_output();
+        assert_eq!(output, "1 0\n");
+    }
+
+    #[test]
+    fn test_to_output_simple_edges() {
+        use crate::ToOutput;
+        let mut graph = Graph::new_empty(4);
+        graph.add_edge(0, 1);
+        graph.add_edge(1, 2);
+        graph.add_edge(2, 3);
+        let output = graph.to_output();
+        let lines: Vec<&str> = output.lines().collect();
+
+        assert_eq!(lines[0], "4 3");
+        assert_eq!(lines.len(), 4); // header + 3 edges
+
+        let edges = parse_edges(&lines);
+        assert_eq!(edges, vec![(0, 1), (1, 2), (2, 3)]);
+    }
+
+    #[test]
+    fn test_to_output_full_graph() {
+        use crate::ToOutput;
+        let graph = Graph::new_full(4);
+        let output = graph.to_output();
+        let lines: Vec<&str> = output.lines().collect();
+
+        assert_eq!(lines[0], "4 6");
+        assert_eq!(lines.len(), 7); // header + 6 edges
+
+        let edges = parse_edges(&lines);
+        assert_eq!(
+            edges,
+            vec![(0, 1), (0, 2), (0, 3), (1, 2), (1, 3), (2, 3)]
+        );
+    }
+
+    #[test]
+    fn test_to_output_tree_format() {
+        use crate::ToOutput;
+        // Tree format: header is just "n" (no edge count)
+        let mut graph = Graph::new_empty(4);
+        graph.add_edge(0, 1);
+        graph.add_edge(1, 2);
+        graph.add_edge(2, 3);
+        graph.is_tree = true;
+        let output = graph.to_output();
+        let lines: Vec<&str> = output.lines().collect();
+
+        assert_eq!(lines[0], "4"); // tree header: only node count
+        assert_eq!(lines.len(), 4); // header + 3 edges
+
+        let edges = parse_edges(&lines);
+        assert_eq!(edges, vec![(0, 1), (1, 2), (2, 3)]);
+    }
+
+    #[test]
+    fn test_to_output_random_tree() {
+        use crate::ToOutput;
+        for n in 1..50 {
+            let graph = Graph::new_random_tree(n);
+            let output = graph.to_output();
+            let lines: Vec<&str> = output.lines().collect();
+
+            // Tree format: header is just "n"
+            assert_eq!(lines[0], format!("{n}"));
+            assert_eq!(lines.len(), n as usize); // header + (n-1) edges
+        }
+    }
+
+    #[test]
+    fn test_to_output_random_graph() {
+        use crate::ToOutput;
+        for n in 5..30 {
+            let m = 2 * n;
+            let graph = Graph::new_random(n, m);
+            let output = graph.to_output();
+            let lines: Vec<&str> = output.lines().collect();
+
+            assert_eq!(lines[0], format!("{n} {m}"));
+            assert_eq!(lines.len(), (m + 1) as usize);
+
+            // Verify all edges are valid (1-indexed, within bounds)
+            for line in lines.iter().skip(1) {
+                let parts: Vec<usize> = line.split_whitespace().map(|s| s.parse().unwrap()).collect();
+                assert_eq!(parts.len(), 2);
+                assert!(parts[0] >= 1 && parts[0] <= n as usize);
+                assert!(parts[1] >= 1 && parts[1] <= n as usize);
+                assert_ne!(parts[0], parts[1]); // no self-loops
+            }
+        }
+    }
+
+    #[test]
+    fn test_to_output_edges_are_1_indexed() {
+        use crate::ToOutput;
+        let mut graph = Graph::new_empty(3);
+        graph.add_edge(0, 1);
+        let output = graph.to_output();
+        let lines: Vec<&str> = output.lines().collect();
+
+        let parts: Vec<usize> = lines[1].split_whitespace().map(|s| s.parse().unwrap()).collect();
+        // Edge (0,1) should appear as either "1 2" or "2 1"
+        let mut edge = vec![parts[0], parts[1]];
+        edge.sort_unstable();
+        assert_eq!(edge, vec![1, 2]);
+    }
 }
