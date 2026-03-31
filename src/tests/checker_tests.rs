@@ -190,7 +190,7 @@ mod checker_tests {
     // ─── always_reject checker ───────────────────────────────────────────────
 
     /// When the checker always rejects, the main solution itself will be
-    /// considered wrong. Expect SolutionFailed.
+    /// considered wrong. Expect `SolutionFailed`.
     #[test]
     fn always_reject_checker_errors_on_main_solution() {
         let tempdir = TempDir::new().unwrap();
@@ -218,9 +218,14 @@ mod checker_tests {
 
     /// When the checker accepts the main solution's output but rejects a "good"
     /// partial solution's output (even if it's declared to pass), we expect
-    /// PartialSolutionFailsSubtask.
+    /// `PartialSolutionFailsSubtask`.
     #[test]
     fn checker_rejects_good_partial_solution_errors() {
+        // Checker only accepts "main"
+        fn main_only_checker(_input: &str, _correct: &str, program: &str) -> bool {
+            program.trim() == "main"
+        }
+
         let tempdir = TempDir::new().unwrap();
         let task_path = tempdir.path().join("reject_good_partial");
 
@@ -235,11 +240,6 @@ mod checker_tests {
         using namespace std;
         int main() { cout << "partial\n"; return 0; }
         "#;
-
-        // Checker only accepts "main"
-        fn main_only_checker(_input: &str, _correct: &str, program: &str) -> bool {
-            program.trim() == "main"
-        }
 
         let task = Task::<String>::new("reject_good_partial", &task_path)
             .with_debug_level(LevelFilter::Off)

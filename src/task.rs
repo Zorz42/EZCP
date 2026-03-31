@@ -304,6 +304,12 @@ impl<T: ToOutput> Task<T> {
     /// This function builds solution and then calls `generate_tests`.
     #[allow(clippy::too_many_lines)]
     fn create_tests_inner(&mut self) -> Result<()> {
+        fn hash_string(s: &str) -> u64 {
+            let mut hasher = DefaultHasher::new();
+            s.hash(&mut hasher);
+            hasher.finish()
+        }
+        
         self.logger.println("").ok();
         let text = format!("Creating tests for task \"{}\"", self.name);
         self.print_title(&text);
@@ -365,11 +371,6 @@ impl<T: ToOutput> Task<T> {
                 }
             }
 
-            fn hash_string(s: &str) -> u64 {
-                let mut hasher = DefaultHasher::new();
-                s.hash(&mut hasher);
-                hasher.finish()
-            }
             let mut tried_inputs = HashSet::new();
             let mut subtask_tests = Vec::new();
             let mut robust_found_count = 0;
