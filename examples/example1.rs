@@ -1,4 +1,4 @@
-use rand::Rng;
+use rand::prelude::*;
 use std::path::PathBuf;
 
 const SOLUTION: &str = r#"

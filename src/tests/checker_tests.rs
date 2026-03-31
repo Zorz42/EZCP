@@ -10,6 +10,7 @@ mod checker_tests {
     use crate::tests::generic_tests::generic_tests::Test;
     use crate::{Error, Subtask, Task};
     use log::LevelFilter;
+    use rand::RngExt;
     use tempfile::TempDir;
 
     // ─── helpers ────────────────────────────────────────────────────────────────
@@ -334,7 +335,6 @@ mod checker_tests {
                 Subtask::new("only subtask")
                     // Generate inputs: single integer 1..=100.
                     .with_test(0, || {
-                        use rand::Rng;
                         let mut rng = rand::rng();
                         format!("{}", rng.random_range(1_i32..=100))
                     }),

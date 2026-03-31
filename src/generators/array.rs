@@ -1,6 +1,6 @@
-use rand::Rng;
-use rand::prelude::ThreadRng;
 use std::fmt::Write;
+use rand::prelude::ThreadRng;
+use rand::RngExt;
 
 /// This function converts an array of integers to a string.
 ///

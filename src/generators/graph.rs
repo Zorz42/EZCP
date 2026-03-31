@@ -1,7 +1,7 @@
-use rand::Rng;
-use rand::prelude::SliceRandom;
 use std::collections::HashSet;
 use std::fmt::Write;
+use rand::prelude::SliceRandom;
+use rand::RngExt;
 
 /// This struct represents a combinatorial undirected graph.
 /// It is used to generate the input for test cases and to check the output of solutions.

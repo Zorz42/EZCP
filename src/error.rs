@@ -5,12 +5,6 @@ pub enum Error {
     #[error("IO Error: {err} with file: {file}")]
     IOError { err: std::io::Error, file: String },
 
-    #[error("Snap Error: {err}")]
-    SnapError { err: snap::Error },
-
-    #[error("Bincode Error: {err}")]
-    BincodeError { err: bincode::error::EncodeError },
-
     #[error("Zip Error: {err}")]
     ZipError { err: zip::result::ZipError },
 
