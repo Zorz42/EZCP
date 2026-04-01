@@ -69,6 +69,29 @@ impl Graph {
         result
     }
 
+    /// this creates a random tree that has O(n) depth
+    #[must_use]
+    pub fn new_random_deep_tree(n: i32) -> Self {
+        let mut result = Self::new_empty(n);
+        result.is_tree = true;
+        let mut rng = rand::rng();
+        let mut nodes = (0..n).collect::<Vec<_>>();
+        nodes.shuffle(&mut rng);
+        let mut last_on_chain = nodes[0];
+        for i in 1..n {
+            let u = nodes[i as usize];
+            let v = if rng.random_bool(0.5) {
+                let res = last_on_chain;
+                last_on_chain = u;
+                res
+            } else {
+                nodes[rng.random_range(0..i) as usize]
+            };
+            result.add_edge(u as usize, v as usize);
+        }
+        result
+    }
+
     /// This function creates a new random connected graph with `n` nodes and `m` edges.
     /// The edges are chosen randomly and the graph is guaranteed to be connected.
     /// If m <= n - 1, the graph will be a tree.
