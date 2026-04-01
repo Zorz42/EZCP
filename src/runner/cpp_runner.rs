@@ -131,7 +131,7 @@ impl CppRunner {
     /// * `program` - Handle to the executable to run.
     /// * `input` - Data to be sent to stdin.
     /// * `time_limit` - Maximum CPU time in seconds.
-    fn add_task(&mut self, program: ProgramHandle, input: String, time_limit: i32) -> TaskHandle {
+    pub fn add_task(&mut self, program: ProgramHandle, input: String, time_limit: i32) -> TaskHandle {
         trace!("Adding task for program id: {}, time limit: {}", program.id, time_limit);
         let handle = TaskHandle { id: self.tasks.len() };
         self.tasks.push(Task {
@@ -144,7 +144,7 @@ impl CppRunner {
     }
 
     /// Removes all registered tasks.
-    fn clear_tasks(&mut self) {
+    pub fn clear_tasks(&mut self) {
         self.tasks.clear();
     }
 
@@ -153,7 +153,7 @@ impl CppRunner {
     /// # Panics
     /// Panics if the task has not finished running.
     #[allow(clippy::expect_used)]
-    fn get_result(&self, task_handle: TaskHandle) -> RunResult {
+    pub fn get_result(&self, task_handle: TaskHandle) -> RunResult {
         self.tasks[task_handle.id].result.clone().expect("Task result not available")
     }
 
@@ -166,7 +166,7 @@ impl CppRunner {
         for &program in programs {
             handles.push(self.add_task(program, input.to_owned(), time_limit));
         }
-        self.run_tasks_internal(None, false)?;
+        self.run_tasks(None, false)?;
         let mut results = Vec::new();
         for handle in handles {
             results.push(self.get_result(handle));
@@ -197,7 +197,7 @@ impl CppRunner {
         Ok(())
     }
 
-    fn run_tasks_internal(&mut self, logger: Option<&MultiProgress>, clean: bool) -> Result<()> {
+    pub fn run_tasks(&mut self, logger: Option<&MultiProgress>, clean: bool) -> Result<()> {
         if clean {
             self.clean_build_folder()?;
         }

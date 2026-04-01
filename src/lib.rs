@@ -9,6 +9,7 @@ mod task;
 mod test;
 mod tests;
 mod to_output;
+mod partial_solution;
 
 pub use error::{Error, Result};
 pub use generators::{Graph, array_generator, array_generator_custom, array_to_string};

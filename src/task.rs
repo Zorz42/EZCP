@@ -45,7 +45,7 @@ pub struct Task<T: ToOutput> {
     /// Directory where generated tests will be saved
     tests_path: PathBuf,
     /// Time limit in milliseconds for solutions
-    time_limit: i32,
+    pub(crate) time_limit: i32,
     /// Path to the final ZIP archive containing all tests
     tests_archive_path: PathBuf,
     /// Closure to determine input file names: `(test_id, subtask_id, id_in_subtask) -> String`
@@ -68,17 +68,14 @@ pub struct Task<T: ToOutput> {
     /// By default it is a diff checker (up to whitespace).
     /// The function takes 3 arguments: (`test_input`, `correct_output`, `program_output`)
     /// and returns `true` if the program output is accepted (correct), `false` if rejected.
-    checker: fn(&str, &str, &str) -> bool,
+    pub(crate) checker: fn(&str, &str, &str) -> bool,
     /// If you want to automatically trim whitespace from outputs
     trim_whitespace: bool,
 
     /// Log level for output
     debug_level: LevelFilter,
     /// Progress reporting manager
-    logger: MultiProgress,
-
-    /// Storage for generated test inputs: `[subtask_idx][test_idx]`
-    generated_tests: Vec<Vec<String>>,
+    pub(crate) logger: MultiProgress,
 }
 
 fn diff_checker(_test_input: &str, official_output: &str, program_output: &str) -> bool {
@@ -143,7 +140,6 @@ impl<T: ToOutput> Task<T> {
             debug_level: LevelFilter::Info,
             logger: MultiProgress::new(),
             solution_source: String::new(),
-            generated_tests: Vec::new(),
             checker: diff_checker,
             trim_whitespace: true,
         }
@@ -262,7 +258,7 @@ impl<T: ToOutput> Task<T> {
     }
 
     /// Executes the task: compiles solutions, generates robust tests, and verifies outcomes.
-    pub fn run(mut self) -> Result<()> {
+    pub fn run(self) -> Result<()> {
         LOGGER_INIT.call_once(|| {
             let mut builder = env_logger::builder();
             builder.filter(None, self.debug_level);
@@ -303,7 +299,7 @@ impl<T: ToOutput> Task<T> {
 
     /// This function builds solution and then calls `generate_tests`.
     #[allow(clippy::too_many_lines)]
-    fn create_tests_inner(&mut self) -> Result<()> {
+    fn create_tests_inner(&self) -> Result<()> {
         fn hash_string(s: &str) -> u64 {
             let mut hasher = DefaultHasher::new();
             s.hash(&mut hasher);
@@ -330,10 +326,6 @@ impl<T: ToOutput> Task<T> {
         if self.solution_source.is_empty() {
             return Err(Error::MissingSolution {});
         }
-
-        // Initialize generated_tests storage
-        self.generated_tests = vec![Vec::new(); self.subtasks.len()];
-
         // add all cpp files (solution and partial solutions)
         let mut cpp_runner = CppRunner::new(&self.build_folder_path)?;
         let solution_handle = cpp_runner.add_program(&self.solution_source)?;
@@ -447,11 +439,18 @@ impl<T: ToOutput> Task<T> {
                 fs::write(&output_path, output).map_err(|err| Error::IOError { err, file: path_str(&output_path) })?;
 
                 subtask_files.push((input_path, output_path));
-                self.generated_tests[subtask_idx].push(input);
                 global_test_id += 1;
             }
 
             all_test_files.push(subtask_files);
+        }
+
+        info!("Running official solution:");
+        self.run_partial_solution(&all_test_files, &mut cpp_runner, solution_handle)?;
+
+        for (i, partial) in solution_handles.iter().enumerate() {
+            info!("Running partial solution {}", i + 1);
+            self.run_partial_solution(&all_test_files, &mut cpp_runner, *partial)?;
         }
 
         self.archive_tests(&all_test_files)?;
@@ -460,7 +459,7 @@ impl<T: ToOutput> Task<T> {
         info!("Tests size: {}", style(format!("{tests_size:.2}MB")).bold());
 
         // Log test counts per subtask
-        for (i, tests) in self.generated_tests.iter().enumerate() {
+        for (i, tests) in all_test_files.iter().enumerate() {
             info!("Subtask {}: {} tests", i + 1, tests.len());
         }
 
