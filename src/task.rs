@@ -522,10 +522,20 @@ impl<T: ToOutput> Task<T> {
 
         // Ensure all other "good" solutions pass and match main output
         for (i, &(sol_idx, _)) in good_progs.iter().enumerate() {
-            match &results[1 + i] {
+            match &results[i + 1] {
                 RunResult::Ok(_, output) if (self.checker)(input, &correct_output, output) => {}
                 result => {
                     let write_path = self.problem_path.join("failing_test.in");
+                    let official_output_write_path = self.problem_path.join("failing_test_correct_output.out");
+                    let wrong_output_write_path = self.problem_path.join("failing_test_wrong_output.out");
+                    fs::write(official_output_write_path.clone(), correct_output).map_err(move |err| Error::IOError { file: path_str(&official_output_write_path), err })?;
+
+                    if let RunResult::Ok(_, output) = &results[i + 1] {
+                        fs::write(wrong_output_write_path.clone(), output).map_err(move |err| Error::IOError { file: path_str(&wrong_output_write_path), err })?;
+                    } else {
+                        fs::remove_file(wrong_output_write_path.clone()).map_err(move |err| Error::IOError { file: path_str(&wrong_output_write_path), err })?;
+                    }
+
                     fs::write(write_path.clone(), input).map_err(move |err| Error::IOError { file: path_str(&write_path), err })?;
                     return Err(Error::PartialSolutionFailsSubtask {
                         partial_number: sol_idx + 1,
