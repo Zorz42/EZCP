@@ -174,7 +174,7 @@ mod test_to_output_tests {
             b: "hello".to_owned(),
             c: vec![1, 2, 3],
         };
-        assert_eq!(s.to_output(), "42\nhello\n1 2 3\n\n");
+        assert_eq!(s.to_output(), "42\nhello\n1 2 3\n");
     }
 
     #[derive(ToOutput)]
@@ -183,7 +183,7 @@ mod test_to_output_tests {
     #[test]
     fn derive_struct_tuple() {
         let s = MyTupleStruct(42, "hello".to_owned(), vec![1, 2, 3]);
-        assert_eq!(s.to_output(), "42\nhello\n1 2 3\n\n");
+        assert_eq!(s.to_output(), "42\nhello\n1 2 3\n");
     }
 
     #[derive(ToOutput)]

@@ -18,7 +18,9 @@ pub fn to_output_derive(input: TokenStream) -> TokenStream {
                     let field_name = field.ident.unwrap();
                     field_calls.push(quote! {
                         res.push_str(&self.#field_name.to_output());
-                        res.push('\n');
+                        if res.chars().last() != Some('\n') {
+                            res.push('\n');
+                        }
                     });
                 }
                 quote! { #(#field_calls)* }
@@ -29,7 +31,9 @@ pub fn to_output_derive(input: TokenStream) -> TokenStream {
                     let index = syn::Index::from(idx);
                     field_calls.push(quote! {
                         res.push_str(&self.#index.to_output());
-                        res.push('\n');
+                        if res.chars().last() != Some('\n') {
+                            res.push('\n');
+                        }
                     });
                 }
                 quote! { #(#field_calls)* }
