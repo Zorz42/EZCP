@@ -199,26 +199,26 @@ mod test_to_output_tests {
 
     #[test]
     fn tuple_single() {
-        assert_eq!((42,).to_output(), "42");
+        assert_eq!((42,).to_output(), "42\n");
     }
 
     #[test]
     fn tuple_pair() {
-        assert_eq!((1, 2).to_output(), "1 2");
+        assert_eq!((1, 2).to_output(), "1 2\n");
     }
 
     #[test]
     fn tuple_mixed() {
-        assert_eq!((1_i32, "hello", true).to_output(), "1 hello 1");
+        assert_eq!((1_i32, "hello", true).to_output(), "1 hello 1\n");
     }
 
     #[test]
     fn tuple_with_newlines() {
-        assert_eq!(("a\n", "b\n", "c").to_output(), "a\nb\nc");
+        assert_eq!(("a\n", "b\n", "c").to_output(), "a\nb\nc\n");
     }
 
     #[test]
     fn tuple_large() {
-        assert_eq!((1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12).to_output(), "1 2 3 4 5 6 7 8 9 10 11 12");
+        assert_eq!((1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12).to_output(), "1 2 3 4 5 6 7 8 9 10 11 12\n");
     }
 }

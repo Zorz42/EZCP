@@ -81,6 +81,7 @@ macro_rules! impl_tuple_to_output {
                 if res.ends_with(' ') {
                     res.pop();
                 }
+                res.push('\n');
                 res
             }
         }
