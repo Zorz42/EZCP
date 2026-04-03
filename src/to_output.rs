@@ -63,3 +63,39 @@ impl<T: ToOutput> ToOutput for Vec<T> {
         res
     }
 }
+
+macro_rules! impl_tuple_to_output {
+    ( $($name:ident)+ ) => {
+        impl<$($name: ToOutput),+> ToOutput for ($($name,)+) {
+            #[allow(non_snake_case)]
+            fn to_output(self) -> String {
+                let ($($name,)+) = self;
+                let mut res = String::new();
+                $(
+                    let s = $name.to_output();
+                    res.push_str(&s);
+                    if !s.ends_with(|c: char| c.is_whitespace()) {
+                        res.push(' ');
+                    }
+                )+
+                if res.ends_with(' ') {
+                    res.pop();
+                }
+                res
+            }
+        }
+    };
+}
+
+impl_tuple_to_output! { A }
+impl_tuple_to_output! { A B }
+impl_tuple_to_output! { A B C }
+impl_tuple_to_output! { A B C D }
+impl_tuple_to_output! { A B C D E }
+impl_tuple_to_output! { A B C D E F }
+impl_tuple_to_output! { A B C D E F G }
+impl_tuple_to_output! { A B C D E F G H }
+impl_tuple_to_output! { A B C D E F G H I }
+impl_tuple_to_output! { A B C D E F G H I J }
+impl_tuple_to_output! { A B C D E F G H I J K }
+impl_tuple_to_output! { A B C D E F G H I J K L }
