@@ -400,7 +400,7 @@ impl<T: ToOutput> Task<T> {
                     got += 1;
                 }
                 if fails == 100 {
-                    warn!("Skipped phase 1 of test generation, because it could not find any more non-repeating tests.")
+                    warn!("Skipped phase 1 of test generation, because it could not find any more non-repeating tests.");
                 }
             }
 

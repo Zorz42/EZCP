@@ -52,6 +52,22 @@ impl Graph {
         result
     }
 
+    /// This function create a new random path (that is also a tree)
+    #[must_use]
+    pub fn new_random_path(n: i32) -> Self {
+        let mut result = Self::new_empty(n);
+        result.is_tree = true;
+        let mut rng = rand::rng();
+        let mut nodes = (0..n).collect::<Vec<_>>();
+        nodes.shuffle(&mut rng);
+        for i in 1..n {
+            let u = nodes[(i - 1) as usize];
+            let v = nodes[i as usize];
+            result.add_edge(u as usize, v as usize);
+        }
+        result
+    }
+
     /// This function creates a new random tree with `n` nodes and `n - 1` edges by the definition of a tree.
     /// The edges are chosen randomly.
     #[must_use]
