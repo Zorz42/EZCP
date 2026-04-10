@@ -380,11 +380,13 @@ impl<T: ToOutput> Task<T> {
             // Phase 1: Initial tests from each generator (only good solutions must pass)
             for (gen_idx, generator) in subtask.generators.iter().enumerate() {
                 let needed = subtask.initial_counts.get(gen_idx).copied().unwrap_or(0);
-                for _ in 0..needed {
+                let mut got = 0;
+                let mut fails = 0;
+                while got < needed && fails < 100 {
                     let candidate = generator.generate().to_output();
                     // Each test must be unique within the subtask
                     if tried_inputs.contains(&hash_string(&candidate)) {
-                        found_count_progress_bar.set_length(found_count_progress_bar.length().unwrap_or(1).saturating_sub(1));
+                        fails += 1;
                         continue;
                     }
                     tried_inputs.insert(hash_string(&candidate));
@@ -395,6 +397,10 @@ impl<T: ToOutput> Task<T> {
                     };
                     subtask_tests.push((candidate, main_output));
                     found_count_progress_bar.inc(1);
+                    got += 1;
+                }
+                if fails == 100 {
+                    warn!("Skipped phase 1 of test generation, because it could not find any more non-repeating tests.")
                 }
             }
 
