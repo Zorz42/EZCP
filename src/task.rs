@@ -537,7 +537,7 @@ impl<T: ToOutput> Task<T> {
 
                     if let RunResult::Ok(_, output) = &results[i + 1] {
                         fs::write(wrong_output_write_path.clone(), output).map_err(move |err| Error::IOError { file: path_str(&wrong_output_write_path), err })?;
-                    } else {
+                    } else if wrong_output_write_path.is_file() {
                         fs::remove_file(wrong_output_write_path.clone()).map_err(move |err| Error::IOError { file: path_str(&wrong_output_write_path), err })?;
                     }
 
