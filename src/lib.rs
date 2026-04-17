@@ -1,7 +1,9 @@
 mod archiver;
+mod create_tests;
 mod error;
 mod generators;
 mod logger_format;
+mod partial_solution;
 mod runner;
 mod solution;
 mod subtask;
@@ -9,8 +11,6 @@ mod task;
 mod test;
 mod tests;
 mod to_output;
-mod partial_solution;
-mod create_tests;
 
 pub use error::{Error, Result};
 pub use generators::{Graph, array_generator, array_generator_custom, array_to_string};

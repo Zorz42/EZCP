@@ -2,7 +2,7 @@
 mod frankenstein_tests {
     use crate::tests::test_shared::initialize_logger;
     use crate::{Subtask, Task};
-    use rand::{RngExt};
+    use rand::RngExt;
     use tempfile::TempDir;
 
     #[test]

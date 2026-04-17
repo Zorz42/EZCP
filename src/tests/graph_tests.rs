@@ -464,10 +464,7 @@ mod graph_tests {
         assert_eq!(lines.len(), 7); // header + 6 edges
 
         let edges = parse_edges(&lines);
-        assert_eq!(
-            edges,
-            vec![(0, 1), (0, 2), (0, 3), (1, 2), (1, 3), (2, 3)]
-        );
+        assert_eq!(edges, vec![(0, 1), (0, 2), (0, 3), (1, 2), (1, 3), (2, 3)]);
     }
 
     #[test]

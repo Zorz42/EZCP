@@ -1,16 +1,16 @@
+use crate::Error::SolutionFailed;
+use crate::Result;
+use crate::runner::cpp_runner::{CppRunner, ProgramHandle};
+use crate::runner::exec_runner::RunResult;
+use crate::task::path_str;
+use crate::{Error, Subtask, Task, ToOutput};
+use indicatif::ProgressBar;
+use log::{error, warn};
+use rand::prelude::SliceRandom;
 use std::collections::HashSet;
 use std::fs;
 use std::hash::{DefaultHasher, Hash, Hasher};
 use std::path::PathBuf;
-use indicatif::ProgressBar;
-use log::{error, warn};
-use rand::prelude::SliceRandom;
-use crate::{Error, Subtask, Task, ToOutput};
-use crate::Error::SolutionFailed;
-use crate::runner::cpp_runner::{CppRunner, ProgramHandle};
-use crate::runner::exec_runner::RunResult;
-use crate::task::path_str;
-use crate::Result;
 
 fn trim_whitespace(input: &str) -> String {
     let mut result = String::with_capacity(input.len());
@@ -47,16 +47,16 @@ fn hash_string(s: &str) -> u64 {
     hasher.finish()
 }
 
-
 impl<T: ToOutput> Task<T> {
-    pub(super) fn create_tests_for_subtask(&self, 
-                                           subtask_idx: usize, 
-                                           subtask: &Subtask<T>, 
-                                           global_test_id: &mut i32, 
-                                           all_test_files: &mut Vec<Vec<(PathBuf, PathBuf)>>, 
-                                           solution_handles: &[ProgramHandle],
-                                           solution_handle: ProgramHandle,
-                                           cpp_runner: &mut CppRunner,
+    pub(super) fn create_tests_for_subtask(
+        &self,
+        subtask_idx: usize,
+        subtask: &Subtask<T>,
+        global_test_id: &mut i32,
+        all_test_files: &mut Vec<Vec<(PathBuf, PathBuf)>>,
+        solution_handles: &[ProgramHandle],
+        solution_handle: ProgramHandle,
+        cpp_runner: &mut CppRunner,
     ) -> Result<()> {
         let mut good_solution_handles = Vec::new();
         let mut bad_solution_handles = Vec::new();
@@ -155,7 +155,7 @@ impl<T: ToOutput> Task<T> {
         all_test_files.push(subtask_files);
         Ok(())
     }
-    
+
     /// Checks if a candidate test input effectively distinguishes between the correct solution
     /// and a set of "bad" solutions.
     ///
@@ -217,12 +217,21 @@ impl<T: ToOutput> Task<T> {
                     let write_path = self.problem_path.join("failing_test.in");
                     let official_output_write_path = self.problem_path.join("failing_test_correct_output.out");
                     let wrong_output_write_path = self.problem_path.join("failing_test_wrong_output.out");
-                    fs::write(official_output_write_path.clone(), correct_output).map_err(move |err| Error::IOError { file: path_str(&official_output_write_path), err })?;
+                    fs::write(official_output_write_path.clone(), correct_output).map_err(move |err| Error::IOError {
+                        file: path_str(&official_output_write_path),
+                        err,
+                    })?;
 
                     if let RunResult::Ok(_, output) = &results[i + 1] {
-                        fs::write(wrong_output_write_path.clone(), output).map_err(move |err| Error::IOError { file: path_str(&wrong_output_write_path), err })?;
+                        fs::write(wrong_output_write_path.clone(), output).map_err(move |err| Error::IOError {
+                            file: path_str(&wrong_output_write_path),
+                            err,
+                        })?;
                     } else if wrong_output_write_path.is_file() {
-                        fs::remove_file(wrong_output_write_path.clone()).map_err(move |err| Error::IOError { file: path_str(&wrong_output_write_path), err })?;
+                        fs::remove_file(wrong_output_write_path.clone()).map_err(move |err| Error::IOError {
+                            file: path_str(&wrong_output_write_path),
+                            err,
+                        })?;
                     }
 
                     fs::write(write_path.clone(), input).map_err(move |err| Error::IOError { file: path_str(&write_path), err })?;

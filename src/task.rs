@@ -336,7 +336,6 @@ impl<T: ToOutput> Task<T> {
         Ok(())
     }
 
-
     /// Archive all tests into a zip file
     fn archive_tests(&self, test_files: &[Vec<(PathBuf, PathBuf)>]) -> Result<()> {
         let mut test_files_vec = Vec::new();

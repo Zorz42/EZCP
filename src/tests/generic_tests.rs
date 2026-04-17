@@ -82,8 +82,14 @@ pub mod generic_tests {
 
         task.task = task.task.with_solution_source(solution_contents);
 
-        let subtask1 = Subtask::new(0, "").with_test(1, || "1\n".to_owned()).with_test(1, || "2\n".to_owned()).with_test(1, || "3\n".to_owned());
-        let subtask2 = Subtask::new(0, "").with_test(1, || "1\n".to_owned()).with_test(1, || "2\n".to_owned()).with_test(1, || "3\n".to_owned());
+        let subtask1 = Subtask::new(0, "")
+            .with_test(1, || "1\n".to_owned())
+            .with_test(1, || "2\n".to_owned())
+            .with_test(1, || "3\n".to_owned());
+        let subtask2 = Subtask::new(0, "")
+            .with_test(1, || "1\n".to_owned())
+            .with_test(1, || "2\n".to_owned())
+            .with_test(1, || "3\n".to_owned());
         let subtask3 = Subtask::new(0, "").with_test(1, || "1\n".to_owned()).with_test(1, || "2\n".to_owned());
 
         // create subtasks
@@ -175,8 +181,14 @@ pub mod generic_tests {
 
         task.task = task.task.with_solution_source(solution_contents);
 
-        let subtask1 = Subtask::new(0, "").with_test(1, || "1\n".to_owned()).with_test(1, || "2\n".to_owned()).with_test(1, || "3\n".to_owned());
-        let subtask2 = Subtask::new(0, "").with_test(1, || "1\n".to_owned()).with_test(1, || "2\n".to_owned()).with_test(1, || "3\n".to_owned());
+        let subtask1 = Subtask::new(0, "")
+            .with_test(1, || "1\n".to_owned())
+            .with_test(1, || "2\n".to_owned())
+            .with_test(1, || "3\n".to_owned());
+        let subtask2 = Subtask::new(0, "")
+            .with_test(1, || "1\n".to_owned())
+            .with_test(1, || "2\n".to_owned())
+            .with_test(1, || "3\n".to_owned());
         let subtask3 = Subtask::new(0, "").with_test(1, || "1\n".to_owned()).with_test(1, || "2\n".to_owned());
 
         // create subtasks
@@ -208,8 +220,14 @@ pub mod generic_tests {
 
         task.task = task.task.with_solution_source(solution_contents);
 
-        let subtask1 = Subtask::new(0, "").with_test(1, || "1\n".to_owned()).with_test(1, || "2\n".to_owned()).with_test(1, || "3\n".to_owned());
-        let subtask2 = Subtask::new(0, "").with_test(1, || "1\n".to_owned()).with_test(1, || "2\n".to_owned()).with_test(1, || "3\n".to_owned());
+        let subtask1 = Subtask::new(0, "")
+            .with_test(1, || "1\n".to_owned())
+            .with_test(1, || "2\n".to_owned())
+            .with_test(1, || "3\n".to_owned());
+        let subtask2 = Subtask::new(0, "")
+            .with_test(1, || "1\n".to_owned())
+            .with_test(1, || "2\n".to_owned())
+            .with_test(1, || "3\n".to_owned());
         let subtask3 = Subtask::new(0, "").with_test(1, || "1\n".to_owned()).with_test(1, || "2\n".to_owned());
 
         // create subtasks
@@ -241,8 +259,14 @@ pub mod generic_tests {
 
         task.task = task.task.with_solution_source(solution_contents);
 
-        let subtask1 = Subtask::new(0, "").with_test(1, || "1\n".to_owned()).with_test(1, || "2\n".to_owned()).with_test(1, || "3\n".to_owned());
-        let subtask2 = Subtask::new(0, "").with_test(1, || "1\n".to_owned()).with_test(1, || "2\n".to_owned()).with_test(1, || "3\n".to_owned());
+        let subtask1 = Subtask::new(0, "")
+            .with_test(1, || "1\n".to_owned())
+            .with_test(1, || "2\n".to_owned())
+            .with_test(1, || "3\n".to_owned());
+        let subtask2 = Subtask::new(0, "")
+            .with_test(1, || "1\n".to_owned())
+            .with_test(1, || "2\n".to_owned())
+            .with_test(1, || "3\n".to_owned());
         let subtask3 = Subtask::new(0, "").with_test(1, || "1\n".to_owned()).with_test(1, || "2\n".to_owned());
 
         // create subtasks

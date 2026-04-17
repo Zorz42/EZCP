@@ -31,11 +31,11 @@ pub enum Error {
 
     #[error("Partial solution {partial_number} ({partial_name}) passes extra subtask {subtask_number} ({subtask_name}) (generator {gen_id})")]
     PartialSolutionPassesExtraSubtask {
-        subtask_number: usize, 
-        partial_number: usize, 
+        subtask_number: usize,
+        partial_number: usize,
         partial_name: String,
         subtask_name: String,
-        gen_id: usize
+        gen_id: usize,
     },
 
     #[error("Partial solution {partial_number} ({partial_name}) does not pass subtask {subtask_number} ({subtask_name}) ({verdict}) (generator {gen_id}).")]

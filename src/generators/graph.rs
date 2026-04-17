@@ -1,8 +1,8 @@
+use crate::ToOutput;
+use rand::RngExt;
+use rand::prelude::SliceRandom;
 use std::collections::HashSet;
 use std::fmt::Write;
-use rand::prelude::SliceRandom;
-use rand::RngExt;
-use crate::ToOutput;
 
 /// This struct represents a combinatorial undirected graph.
 /// It is used to generate the input for test cases and to check the output of solutions.
@@ -179,7 +179,6 @@ impl Graph {
     pub fn edges_iter(&self) -> impl Iterator<Item = &(usize, usize)> {
         self.edges.iter()
     }
-
 
     /// This function returns the array of connected components in the graph.
     /// Each connected component is represented by an array of node indices.

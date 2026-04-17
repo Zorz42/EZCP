@@ -210,10 +210,7 @@ mod checker_tests {
 
         // The checker rejects every answer so the main solution is considered failing.
         let result = task.run();
-        assert!(
-            matches!(result, Err(Error::SolutionFailed { .. })),
-            "Expected SolutionFailed, got: {result:?}"
-        );
+        assert!(matches!(result, Err(Error::SolutionFailed { .. })), "Expected SolutionFailed, got: {result:?}");
     }
 
     /// When the checker accepts the main solution's output but rejects a "good"

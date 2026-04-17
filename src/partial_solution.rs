@@ -1,11 +1,11 @@
+use crate::runner::cpp_runner::{CppRunner, ProgramHandle};
+use crate::runner::exec_runner::RunResult;
+use crate::{Error, Result, Task, ToOutput};
+use console::style;
+use log::info;
 use std::collections::{BTreeMap, HashSet};
 use std::fmt::Display;
 use std::path::PathBuf;
-use console::style;
-use log::info;
-use crate::runner::exec_runner::RunResult;
-use crate::{Task, ToOutput, Result, Error};
-use crate::runner::cpp_runner::{CppRunner, ProgramHandle};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 enum TestResult {
@@ -49,8 +49,10 @@ impl<T: ToOutput> Task<T> {
         for subtask_tests in test_files {
             let mut test_handles_element = Vec::new();
             for (input_file, output_file) in subtask_tests {
-                let input_data = std::fs::read_to_string(input_file)
-                    .map_err(|err| Error::IOError { err, file: input_file.to_str().unwrap_or("???").to_owned() })?;
+                let input_data = std::fs::read_to_string(input_file).map_err(|err| Error::IOError {
+                    err,
+                    file: input_file.to_str().unwrap_or("???").to_owned(),
+                })?;
                 let handle = cpp_runner.add_task(program_handle, input_data, self.time_limit);
 
                 test_handles_element.push((handle, input_file.clone(), output_file.clone()));
@@ -69,8 +71,10 @@ impl<T: ToOutput> Task<T> {
             // count, which result was returned by how many tests
             let mut results = BTreeMap::new();
             for (handle, input_file, output_file) in subtask_test_handles {
-                let input_data = std::fs::read_to_string(input_file)
-                    .map_err(|err| Error::IOError { err, file: input_file.to_str().unwrap_or("???").to_owned() })?;
+                let input_data = std::fs::read_to_string(input_file).map_err(|err| Error::IOError {
+                    err,
+                    file: input_file.to_str().unwrap_or("???").to_owned(),
+                })?;
 
                 let run_result = cpp_runner.get_result(*handle);
                 let mut test_result = TestResult::from(&run_result);
@@ -81,8 +85,10 @@ impl<T: ToOutput> Task<T> {
                             max_time = Some(i32::max(max_time.unwrap(), time));
                         }
 
-                        let correct_output = std::fs::read_to_string(output_file)
-                            .map_err(|err| Error::IOError { err, file: output_file.to_str().unwrap_or("???").to_owned() })?;
+                        let correct_output = std::fs::read_to_string(output_file).map_err(|err| Error::IOError {
+                            err,
+                            file: output_file.to_str().unwrap_or("???").to_owned(),
+                        })?;
                         if !(self.checker)(&input_data, &correct_output, &program_output) {
                             test_result = TestResult::WrongAnswer;
                         }
@@ -94,10 +100,7 @@ impl<T: ToOutput> Task<T> {
 
                 // increment the count for the result
                 // keys are strings, because enum has time in the Ok variant
-                results
-                    .entry(test_result)
-                    .and_modify(|count| *count += 1)
-                    .or_insert(1);
+                results.entry(test_result).and_modify(|count| *count += 1).or_insert(1);
             }
 
             results_text += "\n";
