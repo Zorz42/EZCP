@@ -29,7 +29,7 @@ mod array_tests {
         task.task = task.task.with_solution_source(solution_contents);
 
         // create subtasks
-        let subtask1 = Subtask::new("")
+        let subtask1 = Subtask::new(0, "")
             .with_test(5, array_generator(1, 100, 1, 100))
             .with_test(5, array_generator(1, 100, 1, 1))
             .with_test(5, array_generator(100, 100, 1, 100))
@@ -37,13 +37,13 @@ mod array_tests {
             .with_test(1, array_generator(100, 100, 1, 1));
 
         // n = 42
-        let subtask2 = Subtask::new("")
+        let subtask2 = Subtask::new(0, "")
             .with_test(5, array_generator(42, 42, 1, 100))
             .with_test(5, array_generator(42, 42, 1, 1))
             .with_test(5, array_generator(42, 42, 100, 100));
 
         // all values are 47
-        let subtask3 = Subtask::new("")
+        let subtask3 = Subtask::new(0, "")
             .with_test(5, array_generator(1, 100, 47, 47))
             .with_test(5, array_generator(100, 100, 47, 47))
             .with_test(5, array_generator(1, 1, 47, 47));

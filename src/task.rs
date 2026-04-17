@@ -2,7 +2,6 @@ use crate::solution::Solution;
 use crate::subtask::Subtask;
 use crate::{Error, Result};
 
-use crate::Error::SolutionFailed;
 use crate::archiver::archive_files;
 use crate::logger_format::logger_format;
 use crate::runner::cpp_runner::CppRunner;
@@ -18,7 +17,7 @@ use std::sync::Once;
 pub static LOGGER_INIT: Once = Once::new();
 
 // Convert a Path to an owned String for error contexts and logs
-pub(crate) fn path_str(p: &Path) -> String {
+pub fn path_str(p: &Path) -> String {
     p.to_string_lossy().into_owned()
 }
 
@@ -313,7 +312,7 @@ impl<T: ToOutput> Task<T> {
 
         for (subtask_idx, subtask) in self.subtasks.iter().enumerate() {
             self.print_progress((subtask_idx + 1) as i32, num_subtasks as i32, &format!("Subtask {}: {}", subtask_idx + 1, subtask.name));
-            self.create_tests_for_subtask(subtask_idx, subtask, &mut global_test_id, &mut all_test_files, &solution_handles, solution_handle, &mut cpp_runner);
+            self.create_tests_for_subtask(subtask_idx, subtask, &mut global_test_id, &mut all_test_files, &solution_handles, solution_handle, &mut cpp_runner)?;
         }
 
         info!("Running official solution:");

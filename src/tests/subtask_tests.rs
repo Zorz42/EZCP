@@ -5,7 +5,7 @@ mod subtask_tests {
 
     #[test]
     fn test_subtask_new() {
-        let st = Subtask::<String>::new("my subtask");
+        let st = Subtask::<String>::new(0, "my subtask");
         assert_eq!(st.name, "my subtask");
         assert!(st.generators.is_empty());
         assert!(st.initial_counts.is_empty());
@@ -13,13 +13,13 @@ mod subtask_tests {
 
     #[test]
     fn test_subtask_default_name_empty() {
-        let st = Subtask::<String>::new("");
+        let st = Subtask::<String>::new(0, "");
         assert_eq!(st.name, "");
     }
 
     #[test]
     fn test_subtask_with_test_adds_generator() {
-        let st = Subtask::new("t").with_test(3, || "hello".to_owned());
+        let st = Subtask::new(0, "t").with_test(3, || "hello".to_owned());
         assert_eq!(st.generators.len(), 1);
         assert_eq!(st.initial_counts.len(), 1);
         assert_eq!(st.initial_counts[0], 3);
@@ -27,20 +27,20 @@ mod subtask_tests {
 
     #[test]
     fn test_subtask_with_test_multiple_generators() {
-        let st = Subtask::new("t").with_test(1, || "a".to_owned()).with_test(2, || "b".to_owned()).with_test(5, || "c".to_owned());
+        let st = Subtask::new(0, "t").with_test(1, || "a".to_owned()).with_test(2, || "b".to_owned()).with_test(5, || "c".to_owned());
         assert_eq!(st.generators.len(), 3);
         assert_eq!(st.initial_counts, vec![1, 2, 5]);
     }
 
     #[test]
     fn test_generate_random_test_no_generators_returns_none() {
-        let st = Subtask::<String>::new("empty");
+        let st = Subtask::<String>::new(0, "empty");
         assert!(st.generate_random_test().is_none());
     }
 
     #[test]
     fn test_generate_random_test_single_generator() {
-        let st = Subtask::new("t").with_test(1, || "42\n".to_owned());
+        let st = Subtask::new(0, "t").with_test(1, || "42\n".to_owned());
         for _ in 0..10 {
             let result = st.generate_random_test();
             assert_eq!(result.map(|x| x.0).as_deref(), Some("42\n"));
@@ -49,7 +49,7 @@ mod subtask_tests {
 
     #[test]
     fn test_generate_random_test_multiple_generators_returns_one_of_values() {
-        let st = Subtask::new("t").with_test(1, || "A".to_owned()).with_test(1, || "B".to_owned()).with_test(1, || "C".to_owned());
+        let st = Subtask::new(0, "t").with_test(1, || "A".to_owned()).with_test(1, || "B".to_owned()).with_test(1, || "C".to_owned());
 
         let mut seen = std::collections::HashSet::new();
         // Run enough times to likely hit all three generators
@@ -68,7 +68,7 @@ mod subtask_tests {
         use std::sync::atomic::{AtomicUsize, Ordering};
         let counter = Arc::new(AtomicUsize::new(0));
         let counter_clone = Arc::clone(&counter);
-        let st = Subtask::new("t").with_test(1, move || counter_clone.fetch_add(1, Ordering::SeqCst).to_string());
+        let st = Subtask::new(0, "t").with_test(1, move || counter_clone.fetch_add(1, Ordering::SeqCst).to_string());
 
         let _ = st.generate_random_test();
         let _ = st.generate_random_test();

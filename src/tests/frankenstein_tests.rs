@@ -50,7 +50,7 @@ mod frankenstein_tests {
         }
         ";
 
-        let subtask = Subtask::new("").with_test(0, || {
+        let subtask = Subtask::new(0, "").with_test(0, || {
             let mut rng = rand::rng();
             format!("{}", rng.random_range(0..50))
         });
@@ -59,9 +59,9 @@ mod frankenstein_tests {
             .with_solution_source(source_main)
             .with_subtask(subtask)
             // Solution A should fail subtask 0
-            .with_partial_solution(source_bad_a, &[])
+            .with_partial_solution("bad_a", source_bad_a, &[])
             // Solution B should fail subtask 0
-            .with_partial_solution(source_bad_b, &[])
+            .with_partial_solution("bad_b", source_bad_b, &[])
             .with_min_failures(5);
 
         // Run task
