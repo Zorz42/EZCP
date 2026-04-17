@@ -43,7 +43,7 @@ fn main() {
 
     // Constraint: n = 1
     // add 5 tests where an array is generated with length 1 and even values between 0 and 1_000_000_000 (inclusive)
-    let subtask1 = ezcp::Subtask::new("n = 1").with_test(5, ezcp::array_generator_custom(1, 1, |rng| rng.random_range(0..=500_000_000) * 2));
+    let subtask1 = ezcp::Subtask::new(10, "n = 1").with_test(5, ezcp::array_generator_custom(1, 1, |rng| rng.random_range(0..=500_000_000) * 2));
 
     // Constraint: all values are the same
     // add 5 random tests where each test is an array of length between 1 and 200_000 (inclusive) and all values are the same even value between 0 and 1_000_000_000 (inclusive)
@@ -52,7 +52,7 @@ fn main() {
     // add an edge case where all values and n are maximal
     let mut rng = rand::rng();
     let x = rng.random_range(0..=500_000_000) * 2;
-    let subtask2 = ezcp::Subtask::new("all values are the same")
+    let subtask2 = ezcp::Subtask::new(20, "all values are the same")
         .with_test(5, || {
             let mut rng = rand::rng();
             let n = rng.random_range(1..=200_000);
@@ -66,7 +66,7 @@ fn main() {
     // No additional constraints
     // add some random tests
     // add 5 edge cases where n is maximal (other edge cases are handled by subtask2)
-    let subtask3 = ezcp::Subtask::new("No additional constraints")
+    let subtask3 = ezcp::Subtask::new(70, "No additional constraints")
         .with_test(5, ezcp::array_generator_custom(1, 200_000, |rng| rng.random_range(0..=500_000_000) * 2))
         .with_test(5, ezcp::array_generator_custom(200_000, 200_000, |rng| rng.random_range(0..=500_000_000) * 2));
 
@@ -75,7 +75,7 @@ fn main() {
     task.with_subtask(subtask1)
         .with_subtask(subtask2)
         .with_subtask(subtask3)
-        .with_partial_solution(PARTIAL_SOLUTION, &[0])
+        .with_partial_solution("x/2", PARTIAL_SOLUTION, &[0])
         .run()
         .ok();
 }

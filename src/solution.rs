@@ -7,6 +7,7 @@ use std::collections::HashSet;
 /// to ensure that robust tests are found that correctly distinguish between
 /// different solution implementations.
 pub struct Solution {
+    pub name: String,
     /// The C++ source code for the solution.
     pub source: String,
     /// Indices of the subtasks this solution is designed to pass.
@@ -20,8 +21,9 @@ impl Solution {
     /// * `passes_subtasks` - A slice of subtask indices (0-indexed) that the
     ///   solution should successfully solve.
     #[must_use]
-    pub fn new(source: String, passes_subtasks: &[usize]) -> Self {
+    pub fn new(name: String, source: String, passes_subtasks: &[usize]) -> Self {
         Self {
+            name,
             source,
             passes_subtasks: passes_subtasks.iter().copied().collect(),
         }

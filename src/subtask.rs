@@ -11,6 +11,7 @@ use std::rc::Rc;
 #[derive(Default)]
 pub struct Subtask<T: ToOutput> {
     pub(super) name: String,
+    pub(super) points: i32,
     /// Generators that produce test inputs for this subtask
     pub(super) generators: Vec<Rc<TestGenerator<T>>>,
     /// Minimum number of tests to generate from each generator initially
@@ -22,9 +23,10 @@ pub struct Subtask<T: ToOutput> {
 impl<T: ToOutput> Subtask<T> {
     /// Creates a new, empty subtask.
     #[must_use]
-    pub fn new(name: &str) -> Self {
+    pub fn new(points: i32, name: &str) -> Self {
         Self {
             name: name.to_owned(),
+            points,
             generators: Vec::new(),
             initial_counts: Vec::new(),
             min_failures_per_solution: None,
