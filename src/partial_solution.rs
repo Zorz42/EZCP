@@ -2,7 +2,6 @@ use crate::runner::cpp_runner::{CppRunner, ProgramHandle};
 use crate::runner::exec_runner::RunResult;
 use crate::{Error, Result, Task, ToOutput};
 use console::style;
-use log::info;
 use std::collections::{BTreeMap, HashSet};
 use std::fmt::Display;
 use std::path::PathBuf;
@@ -120,9 +119,9 @@ impl<T: ToOutput> Task<T> {
             total_points += self.subtasks[subtask_id].points;
         }
 
-        info!("Points {got_points}/{total_points}");
-        info!("Lines of code: {lines_of_code}");
-        info!("Results: {results_text}");
+        self.log_result(&format!("Points {got_points}/{total_points}"))?;
+        self.log_result(&format!("Lines of code: {lines_of_code}"))?;
+        self.log_result(&format!("Results: {results_text}"))?;
 
         Ok(passed_subtasks)
     }

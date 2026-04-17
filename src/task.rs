@@ -11,6 +11,8 @@ use indicatif::MultiProgress;
 use indicatif_log_bridge::LogWrapper;
 use log::{LevelFilter, debug, error, info, warn};
 use std::fs;
+use std::fs::OpenOptions;
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::Once;
 
@@ -109,6 +111,20 @@ impl<T: ToOutput> Task<T> {
             checker: diff_checker,
             trim_whitespace: true,
         }
+    }
+
+    fn get_results_file(&self) -> PathBuf {
+        self.problem_path.join("results.txt")
+    }
+
+    pub(crate) fn log_result(&self, text: &str) -> Result<()> {
+        let mut file = OpenOptions::new()
+            .append(true)
+            .open(self.get_results_file())
+            .unwrap();
+        writeln!(file, "{text}").map_err(|e| Error::IOError { err: e, file: path_str(&self.get_results_file()) })?;
+        info!("{text}");
+        Ok(())
     }
 
     /// Sets the source code of the correct (main) solution.
@@ -306,6 +322,9 @@ impl<T: ToOutput> Task<T> {
             file: path_str(&self.tests_path),
         })?;
 
+        // clear log file
+        fs::File::create(self.get_results_file()).map_err(|e| Error::IOError { err: e, file: path_str(&self.get_results_file()) })?;
+
         let num_subtasks = self.subtasks.len();
         let mut global_test_id = 0;
         let mut all_test_files = Vec::new();
@@ -315,22 +334,22 @@ impl<T: ToOutput> Task<T> {
             self.create_tests_for_subtask(subtask_idx, subtask, &mut global_test_id, &mut all_test_files, &solution_handles, solution_handle, &mut cpp_runner)?;
         }
 
-        info!("Running official solution:");
+        self.log_result("Running official solution:")?;
         self.run_partial_solution(&all_test_files, &mut cpp_runner, solution_handle, self.solution_source.split('\n').count())?;
 
         for (i, partial) in solution_handles.iter().enumerate() {
-            info!("Running partial solution {}: {}", i + 1, self.solutions[i].name);
+            self.log_result(&format!("Running partial solution {}: {}", i + 1, self.solutions[i].name))?;
             self.run_partial_solution(&all_test_files, &mut cpp_runner, *partial, self.solutions[i].source.split('\n').count())?;
         }
 
         self.archive_tests(&all_test_files)?;
 
         let tests_size = fs_extra::dir::get_size(&self.tests_path).unwrap_or(0) as f32 / 1_000_000.0;
-        info!("Tests size: {}", style(format!("{tests_size:.2}MB")).bold());
+        self.log_result(&format!("Tests size: {}", style(format!("{tests_size:.2}MB")).bold()))?;
 
         // Log test counts per subtask
         for (i, tests) in all_test_files.iter().enumerate() {
-            info!("Subtask {}: {} tests", i + 1, tests.len());
+            self.log_result(&format!("Subtask {}: {} tests", i + 1, tests.len()))?;
         }
 
         Ok(())
