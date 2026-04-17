@@ -84,6 +84,26 @@ fn diff_checker(_test_input: &str, official_output: &str, program_output: &str) 
     parse_whitespace(official_output) == parse_whitespace(program_output)
 }
 
+fn strip_ansi(input: &str) -> String {
+    let mut out = String::with_capacity(input.len());
+    let mut chars = input.chars();
+    while let Some(c) = chars.next() {
+        if c == '\x1b' {
+            // Skip CSI sequence: ESC [ ... letter
+            if chars.next() == Some('[') {
+                for ch in chars.by_ref() {
+                    if ch.is_ascii_alphabetic() {
+                        break;
+                    }
+                }
+            }
+        } else {
+            out.push(c);
+        }
+    }
+    out
+}
+
 impl<T: ToOutput> Task<T> {
     /// Creates a new `Task` with the given name and root directory.
     ///
@@ -122,7 +142,7 @@ impl<T: ToOutput> Task<T> {
             .append(true)
             .open(self.get_results_file())
             .unwrap();
-        writeln!(file, "{text}").map_err(|e| Error::IOError { err: e, file: path_str(&self.get_results_file()) })?;
+        writeln!(file, "{}", strip_ansi(text)).map_err(|e| Error::IOError { err: e, file: path_str(&self.get_results_file()) })?;
         info!("{text}");
         Ok(())
     }
