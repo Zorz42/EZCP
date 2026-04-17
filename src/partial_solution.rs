@@ -60,6 +60,9 @@ impl<T: ToOutput> Task<T> {
 
         cpp_runner.run_tasks(Some(&self.logger), false)?;
 
+        let mut got_points = 0;
+        let mut total_points = 0;
+
         let mut results_text = String::new();
         for (subtask_id, subtask_test_handles) in test_handles.iter().enumerate() {
             let mut max_time = Some(0);
@@ -109,9 +112,12 @@ impl<T: ToOutput> Task<T> {
 
             if results.len() == 1 && results.contains_key(&TestResult::Ok) {
                 passed_subtasks.insert(subtask_id);
+                got_points += self.subtasks[subtask_id].points;
             }
+            total_points += self.subtasks[subtask_id].points;
         }
 
+        info!("Points {got_points}/{total_points}");
         info!("Results: {results_text}");
 
         Ok(passed_subtasks)
