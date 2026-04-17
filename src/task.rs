@@ -316,11 +316,11 @@ impl<T: ToOutput> Task<T> {
         }
 
         info!("Running official solution:");
-        self.run_partial_solution(&all_test_files, &mut cpp_runner, solution_handle)?;
+        self.run_partial_solution(&all_test_files, &mut cpp_runner, solution_handle, self.solution_source.split('\n').count())?;
 
         for (i, partial) in solution_handles.iter().enumerate() {
             info!("Running partial solution {} ({})", self.solutions[i].name, i + 1);
-            self.run_partial_solution(&all_test_files, &mut cpp_runner, *partial)?;
+            self.run_partial_solution(&all_test_files, &mut cpp_runner, *partial, self.solutions[i].source.split('\n').count())?;
         }
 
         self.archive_tests(&all_test_files)?;

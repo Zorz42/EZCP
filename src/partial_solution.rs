@@ -41,7 +41,7 @@ impl<T: ToOutput> Task<T> {
     /// This function takes an executable file and a list of test files.
     /// It runs the executable on each test file and compares the output with the expected output.
     /// It returns a set of subtasks that passed.
-    pub(crate) fn run_partial_solution(&self, test_files: &Vec<Vec<(PathBuf, PathBuf)>>, cpp_runner: &mut CppRunner, program_handle: ProgramHandle) -> Result<HashSet<usize>> {
+    pub(crate) fn run_partial_solution(&self, test_files: &Vec<Vec<(PathBuf, PathBuf)>>, cpp_runner: &mut CppRunner, program_handle: ProgramHandle, lines_of_code: usize) -> Result<HashSet<usize>> {
         cpp_runner.clear_tasks();
         let mut test_handles = Vec::new();
         let mut passed_subtasks = HashSet::new();
@@ -121,6 +121,7 @@ impl<T: ToOutput> Task<T> {
         }
 
         info!("Points {got_points}/{total_points}");
+        info!("Lines of code: {lines_of_code}");
         info!("Results: {results_text}");
 
         Ok(passed_subtasks)
