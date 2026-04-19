@@ -10,14 +10,18 @@ use std::rc::Rc;
 /// adhering to the subtask's limits.
 #[derive(Default)]
 pub struct Subtask<T: ToOutput> {
-    pub(super) name: String,
-    pub(super) points: i32,
+    pub(crate) name: String,
+    pub(crate) points: i32,
     /// Generators that produce test inputs for this subtask
-    pub(super) generators: Vec<Rc<TestGenerator<T>>>,
+    pub(crate) generators: Vec<Rc<TestGenerator<T>>>,
     /// Minimum number of tests to generate from each generator initially
-    pub(super) initial_counts: Vec<usize>,
+    pub(crate) initial_counts: Vec<usize>,
     /// Override custom `min_failures_per_solution`
-    pub(super) min_failures_per_solution: Option<usize>,
+    pub(crate) min_failures_per_solution: Option<usize>,
+    /// Stress tests are just dry runs of generators and solutions.
+    /// It may be ran many times (even 1000) to really make sure all solutions are correct.
+    /// By default it is disabled, because it can take a lot of time.
+    pub(crate) stress_tests: i32,
 }
 
 impl<T: ToOutput> Subtask<T> {
@@ -30,6 +34,7 @@ impl<T: ToOutput> Subtask<T> {
             generators: Vec::new(),
             initial_counts: Vec::new(),
             min_failures_per_solution: None,
+            stress_tests: 0,
         }
     }
 
@@ -49,6 +54,12 @@ impl<T: ToOutput> Subtask<T> {
     #[must_use]
     pub const fn with_min_failures(mut self, min_failures: usize) -> Self {
         self.min_failures_per_solution = Some(min_failures);
+        self
+    }
+
+    #[must_use]
+    pub const fn do_stress_test(mut self, num_tests: i32) -> Self {
+        self.stress_tests = num_tests;
         self
     }
 

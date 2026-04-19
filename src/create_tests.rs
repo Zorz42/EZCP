@@ -5,7 +5,7 @@ use crate::runner::exec_runner::RunResult;
 use crate::task::path_str;
 use crate::{Error, Subtask, Task, ToOutput};
 use indicatif::ProgressBar;
-use log::{error, warn};
+use log::{error, info, warn};
 use rand::prelude::SliceRandom;
 use std::collections::HashSet;
 use std::fs;
@@ -81,8 +81,25 @@ impl<T: ToOutput> Task<T> {
 
         let found_count_progress_bar = self.logger.add(ProgressBar::new((total_initial + target_robust) as u64));
         let tries_progress_bar = self.logger.add(ProgressBar::new(self.max_tries as u64));
+        
+        // Phase 1 (optional): Stress tests
+        if subtask.stress_tests != 0 {
+            for (gen_idx, generator) in subtask.generators.iter().enumerate() {
+                info!("Stress testing generator {gen_idx}");
+                let stress_testing_progress_bar = self.logger.add(ProgressBar::new(subtask.stress_tests as u64));
+                for _ in 0..subtask.stress_tests {
+                    let test_str = generator.generate().to_output();
+                    
+                    stress_testing_progress_bar.inc(1);
 
-        // Phase 1: Initial tests from each generator (only good solutions must pass)
+                    self.is_robust_test(&test_str, solution_handle, &good_solution_handles, &[], cpp_runner, subtask_idx, gen_idx)?;
+                }
+                self.logger.remove(&stress_testing_progress_bar);
+            }
+        }
+
+
+        // Phase 2: Initial tests from each generator (only good solutions must pass)
         for (gen_idx, generator) in subtask.generators.iter().enumerate() {
             let needed = subtask.initial_counts.get(gen_idx).copied().unwrap_or(0);
             let mut got = 0;
@@ -109,7 +126,7 @@ impl<T: ToOutput> Task<T> {
             }
         }
 
-        // Phase 2: Robust tests (failing bad solutions)
+        // Phase 3: Robust tests (failing bad solutions)
         let mut supplemental_tries = 0;
         while robust_found_count < target_robust && supplemental_tries < self.max_tries {
             supplemental_tries += 1;
