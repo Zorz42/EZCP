@@ -198,16 +198,24 @@ impl<T: ToOutput> Task<T> {
         // Run all solutions in parallel
         let results = runner.check_programs(input, &all_progs, self.time_limit)?;
 
+        let write_bad_test = || -> Result<()> {
+            let write_path = self.problem_path.join("failing_test.in");
+            fs::write(write_path.clone(), input).map_err(move |err| Error::IOError { file: path_str(&write_path), err })?;
+            Ok(())
+        };
+
         // Correct (Main) Solution Result
         let mut correct_output = match &results[0] {
             RunResult::Ok(_, output) => output.trim().to_owned() + "\n",
             RunResult::TimedOut => {
+                write_bad_test()?;
                 return Err(Error::SolutionTimedOut {
                     test_path: "generation phase".to_owned(),
                     gen_id: gen_idx + 1,
                 });
             }
             RunResult::Crashed => {
+                write_bad_test()?;
                 return Err(Error::SolutionCrash {
                     test_path: "generation phase".to_owned(),
                     gen_id: gen_idx + 1,
@@ -216,6 +224,7 @@ impl<T: ToOutput> Task<T> {
         };
 
         if !(self.checker)(input, &correct_output, &correct_output) {
+            write_bad_test()?;
             return Err(SolutionFailed {
                 test_path: "generation phase".to_owned(),
                 gen_id: gen_idx + 1,
