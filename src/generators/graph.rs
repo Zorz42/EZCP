@@ -251,6 +251,11 @@ impl Graph {
         }
         true
     }
+
+    #[must_use]
+    pub fn get_neighbours(&self, node: usize) -> Vec<usize> {
+        self.nodes[node].clone()
+    }
 }
 
 impl ToOutput for Graph {
