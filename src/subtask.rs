@@ -8,12 +8,11 @@ use std::rc::Rc;
 ///
 /// A subtask contains one or more test generators that produce input data
 /// adhering to the subtask's limits.
-#[derive(Default)]
 pub struct Subtask<T: ToOutput> {
     pub(crate) name: String,
     pub(crate) points: i32,
     /// Generators that produce test inputs for this subtask
-    pub(crate) generators: Vec<Rc<TestGenerator<T>>>,
+    generators: Vec<Rc<TestGenerator<T>>>,
     /// Minimum number of tests to generate from each generator initially
     pub(crate) initial_counts: Vec<usize>,
     /// Override custom `min_failures_per_solution`
@@ -22,6 +21,16 @@ pub struct Subtask<T: ToOutput> {
     /// It may be ran many times (even 1000) to really make sure all solutions are correct.
     /// By default it is disabled, because it can take a lot of time.
     pub(crate) stress_tests: i32,
+    /// Checker is a function that is executed when a test is generated.
+    /// It should panic when the test is not within constraints.
+    /// By default it does nothing.
+    checker: fn(T),
+}
+
+impl<T: ToOutput> Default for Subtask<T> {
+    fn default() -> Self {
+        Self::new(0, "")
+    }
 }
 
 impl<T: ToOutput> Subtask<T> {
@@ -35,6 +44,7 @@ impl<T: ToOutput> Subtask<T> {
             initial_counts: Vec::new(),
             min_failures_per_solution: None,
             stress_tests: 0,
+            checker: |_| {},
         }
     }
 
@@ -63,6 +73,21 @@ impl<T: ToOutput> Subtask<T> {
         self
     }
 
+    #[must_use]
+    pub const fn get_num_generators(&self) -> usize {
+        self.generators.len()
+    }
+
+    #[must_use]
+    pub fn with_checker(mut self, checker: fn(T)) -> Self {
+        self.checker = checker;
+        self
+    }
+
+    pub(crate) fn generate_test(&self, gen_idx: usize) -> T {
+        self.generators[gen_idx].generate()
+    }
+
     /// Randomly selects one of the registered generators and produces a test input.
     ///
     /// Returns `None` if no generators are registered.
@@ -73,6 +98,6 @@ impl<T: ToOutput> Subtask<T> {
 
         let mut rng = rand::rng();
         let idx = rng.random_range(0..self.generators.len());
-        Some((self.generators[idx].generate(), idx))
+        Some((self.generate_test(idx), idx))
     }
 }

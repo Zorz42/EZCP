@@ -84,11 +84,11 @@ impl<T: ToOutput> Task<T> {
         
         // Phase 1 (optional): Stress tests
         if subtask.stress_tests != 0 {
-            for (gen_idx, generator) in subtask.generators.iter().enumerate() {
+            for gen_idx in 0..subtask.get_num_generators() {
                 info!("Stress testing generator {gen_idx}");
                 let stress_testing_progress_bar = self.logger.add(ProgressBar::new(subtask.stress_tests as u64));
                 for _ in 0..subtask.stress_tests {
-                    let test_str = generator.generate().to_output();
+                    let test_str = subtask.generate_test(gen_idx).to_output();
                     
                     stress_testing_progress_bar.inc(1);
 
@@ -100,12 +100,12 @@ impl<T: ToOutput> Task<T> {
 
 
         // Phase 2: Initial tests from each generator (only good solutions must pass)
-        for (gen_idx, generator) in subtask.generators.iter().enumerate() {
+        for gen_idx in 0..subtask.get_num_generators() {
             let needed = subtask.initial_counts.get(gen_idx).copied().unwrap_or(0);
             let mut got = 0;
             let mut fails = 0;
             while got < needed && fails < 100 {
-                let candidate = generator.generate().to_output();
+                let candidate = subtask.generate_test(gen_idx).to_output();
                 // Each test must be unique within the subtask
                 if tried_inputs.contains(&hash_string(&candidate)) {
                     fails += 1;
