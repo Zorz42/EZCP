@@ -24,7 +24,7 @@ pub struct Subtask<T: ToOutput> {
     /// Checker is a function that is executed when a test is generated.
     /// It should panic when the test is not within constraints.
     /// By default it does nothing.
-    checker: fn(T),
+    checker: fn(&T),
 }
 
 impl<T: ToOutput> Default for Subtask<T> {
@@ -79,13 +79,15 @@ impl<T: ToOutput> Subtask<T> {
     }
 
     #[must_use]
-    pub fn with_checker(mut self, checker: fn(T)) -> Self {
+    pub fn with_checker(mut self, checker: fn(&T)) -> Self {
         self.checker = checker;
         self
     }
 
     pub(crate) fn generate_test(&self, gen_idx: usize) -> T {
-        self.generators[gen_idx].generate()
+        let res = self.generators[gen_idx].generate();
+        (self.checker)(&res);
+        res
     }
 
     /// Randomly selects one of the registered generators and produces a test input.
