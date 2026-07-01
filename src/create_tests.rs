@@ -88,8 +88,11 @@ impl<T: ToOutput> Task<T> {
                 info!("Stress testing generator {gen_idx}");
                 let stress_testing_progress_bar = self.logger.add(ProgressBar::new(subtask.stress_tests as u64));
                 for _ in 0..subtask.stress_tests {
-                    let test_str = subtask.generate_test(gen_idx).to_output();
-                    
+                    let mut test_str = subtask.generate_test(gen_idx).to_output();
+                    if self.trim_whitespace {
+                        test_str = trim_whitespace(&test_str);
+                    }
+
                     stress_testing_progress_bar.inc(1);
 
                     self.is_robust_test(&test_str, solution_handle, &good_solution_handles, &[], cpp_runner, subtask_idx, gen_idx)?;
@@ -105,7 +108,10 @@ impl<T: ToOutput> Task<T> {
             let mut got = 0;
             let mut fails = 0;
             while got < needed && fails < 100 {
-                let candidate = subtask.generate_test(gen_idx).to_output();
+                let mut candidate = subtask.generate_test(gen_idx).to_output();
+                if self.trim_whitespace {
+                    candidate = trim_whitespace(&candidate);
+                }
                 // Each test must be unique within the subtask
                 if tried_inputs.contains(&hash_string(&candidate)) {
                     fails += 1;
@@ -132,7 +138,10 @@ impl<T: ToOutput> Task<T> {
             supplemental_tries += 1;
             tries_progress_bar.inc(1);
             let Some((candidate, gen_idx)) = subtask.generate_random_test() else { break };
-            let candidate = candidate.to_output();
+            let mut candidate = candidate.to_output();
+            if self.trim_whitespace {
+                candidate = trim_whitespace(&candidate);
+            }
             if tried_inputs.contains(&hash_string(&candidate)) {
                 continue;
             }
@@ -188,7 +197,7 @@ impl<T: ToOutput> Task<T> {
         runner: &mut CppRunner,
         subtask_idx: usize,
         gen_idx: usize,
-    ) -> crate::Result<Option<String>> {
+    ) -> Result<Option<String>> {
         let mut all_progs = vec![main_prog];
         for &(_, handle) in good_progs {
             all_progs.push(handle);
