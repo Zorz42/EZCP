@@ -52,8 +52,13 @@ impl<T: ToOutput> Subtask<T> {
     ///
     /// * `count` - Initial number of tests to generate from this generator.
     /// * `function` - A closure that returns a generated input string.
+    ///
+    /// # Panics
+    /// Panics if `count` is negative, which would otherwise wrap around into an
+    /// effectively endless number of tests to generate.
     #[must_use]
     pub fn with_test<F: Fn() -> T + 'static>(mut self, count: i32, function: F) -> Self {
+        assert!(count >= 0, "a generator cannot produce {count} tests");
         let generator = Rc::new(TestGenerator::new(function));
         self.generators.push(generator);
         self.initial_counts.push(count as usize);

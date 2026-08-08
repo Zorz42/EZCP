@@ -4,12 +4,13 @@ use crate::runner::cpp_runner::{CppRunner, ProgramHandle};
 use crate::runner::exec_runner::RunResult;
 use crate::task::path_str;
 use crate::{Error, Subtask, Task, ToOutput};
-use indicatif::ProgressBar;
+use indicatif::{MultiProgress, ProgressBar};
 use log::{error, info, warn};
 use rand::prelude::SliceRandom;
 use std::collections::HashSet;
 use std::fs;
 use std::hash::{DefaultHasher, Hash, Hasher};
+use std::ops::Deref;
 use std::path::PathBuf;
 
 fn trim_whitespace(input: &str) -> String {
@@ -24,7 +25,10 @@ fn trim_whitespace(input: &str) -> String {
                 has_newline = true;
             }
         } else {
-            if in_block {
+            // Separate from the previous run of whitespace, unless nothing has been
+            // written yet: leading whitespace is dropped rather than turned into an
+            // indent or a blank first line.
+            if in_block && !result.is_empty() {
                 result.push(if has_newline { '\n' } else { ' ' });
             }
             in_block = false;
@@ -45,6 +49,38 @@ fn hash_string(s: &str) -> u64 {
     let mut hasher = DefaultHasher::new();
     s.hash(&mut hasher);
     hasher.finish()
+}
+
+/// A progress bar that takes itself off the screen once it goes out of scope.
+///
+/// Test generation gives up through `?` on a whole range of paths, and a bar that
+/// is only removed on the happy path stays behind as a frozen leftover.
+struct ScopedProgressBar<'logger> {
+    logger: &'logger MultiProgress,
+    bar: ProgressBar,
+}
+
+impl<'logger> ScopedProgressBar<'logger> {
+    fn new(logger: &'logger MultiProgress, len: u64) -> Self {
+        Self {
+            logger,
+            bar: logger.add(ProgressBar::new(len)),
+        }
+    }
+}
+
+impl Deref for ScopedProgressBar<'_> {
+    type Target = ProgressBar;
+
+    fn deref(&self) -> &Self::Target {
+        &self.bar
+    }
+}
+
+impl Drop for ScopedProgressBar<'_> {
+    fn drop(&mut self) {
+        self.logger.remove(&self.bar);
+    }
 }
 
 impl<T: ToOutput> Task<T> {
@@ -79,14 +115,14 @@ impl<T: ToOutput> Task<T> {
             subtask.min_failures_per_solution.unwrap_or(self.min_failures_per_solution)
         };
 
-        let found_count_progress_bar = self.logger.add(ProgressBar::new((total_initial + target_robust) as u64));
-        let tries_progress_bar = self.logger.add(ProgressBar::new(self.max_tries as u64));
+        let found_count_progress_bar = ScopedProgressBar::new(&self.logger, (total_initial + target_robust) as u64);
+        let tries_progress_bar = ScopedProgressBar::new(&self.logger, self.max_tries as u64);
 
         // Phase 1 (optional): Stress tests
         if subtask.stress_tests != 0 {
             for gen_idx in 0..subtask.get_num_generators() {
                 info!("Stress testing generator {gen_idx}");
-                let stress_testing_progress_bar = self.logger.add(ProgressBar::new(subtask.stress_tests as u64));
+                let stress_testing_progress_bar = ScopedProgressBar::new(&self.logger, subtask.stress_tests as u64);
                 for _ in 0..subtask.stress_tests {
                     let mut test_str = subtask.generate_test(gen_idx).to_output();
                     if self.trim_whitespace {
@@ -97,7 +133,6 @@ impl<T: ToOutput> Task<T> {
 
                     self.is_robust_test(&test_str, solution_handle, &good_solution_handles, &[], cpp_runner, subtask_idx, gen_idx)?;
                 }
-                self.logger.remove(&stress_testing_progress_bar);
             }
         }
 
@@ -112,13 +147,12 @@ impl<T: ToOutput> Task<T> {
                     candidate = trim_whitespace(&candidate);
                 }
                 // Each test must be unique within the subtask
-                if tried_inputs.contains(&hash_string(&candidate)) {
+                if !tried_inputs.insert(hash_string(&candidate)) {
                     fails += 1;
                     continue;
                 }
-                tried_inputs.insert(hash_string(&candidate));
 
-                // We check only good solutions in Phase 1 (no bad_progs passed)
+                // Only good solutions are checked here (no bad_progs passed)
                 let Some(main_output) = self.is_robust_test(&candidate, solution_handle, &good_solution_handles, &[], cpp_runner, subtask_idx, gen_idx)? else {
                     unreachable!("is_robust_test with no bad progs should always return Some or Err")
                 };
@@ -126,8 +160,11 @@ impl<T: ToOutput> Task<T> {
                 found_count_progress_bar.inc(1);
                 got += 1;
             }
-            if fails == 100 {
-                warn!("Skipped phase 1 of test generation, because it could not find any more non-repeating tests.");
+            if got < needed {
+                warn!(
+                    "Generator {gen_idx} of subtask {} produced only {got} of {needed} tests, because it kept repeating tests it had already generated.",
+                    subtask_idx + 1
+                );
             }
         }
 
@@ -141,10 +178,9 @@ impl<T: ToOutput> Task<T> {
             if self.trim_whitespace {
                 candidate = trim_whitespace(&candidate);
             }
-            if tried_inputs.contains(&hash_string(&candidate)) {
+            if !tried_inputs.insert(hash_string(&candidate)) {
                 continue;
             }
-            tried_inputs.insert(hash_string(&candidate));
 
             if let Some(main_output) = self.is_robust_test(&candidate, solution_handle, &good_solution_handles, &bad_solution_handles, cpp_runner, subtask_idx, gen_idx)? {
                 subtask_tests.push((candidate, main_output));
@@ -158,8 +194,6 @@ impl<T: ToOutput> Task<T> {
         if robust_found_count < target_robust {
             error!("Could not find enough robust tests for Subtask {} (found {}/{})", subtask_idx + 1, robust_found_count, target_robust);
         }
-        self.logger.remove(&found_count_progress_bar);
-        self.logger.remove(&tries_progress_bar);
 
         // Shuffle all tests for this subtask
         let mut rng = rand::rng();
@@ -297,5 +331,55 @@ impl<T: ToOutput> Task<T> {
             }
         }
         Ok(Some(correct_output))
+    }
+}
+
+#[cfg(test)]
+mod trim_whitespace_tests {
+    use super::trim_whitespace;
+
+    #[test]
+    fn collapses_runs_of_spaces() {
+        assert_eq!(trim_whitespace("1   2     3"), "1 2 3\n");
+    }
+
+    #[test]
+    fn a_run_containing_a_newline_becomes_a_newline() {
+        assert_eq!(trim_whitespace("1 2 \n  3"), "1 2\n3\n");
+        assert_eq!(trim_whitespace("1\n\n\n2"), "1\n2\n");
+    }
+
+    #[test]
+    fn drops_leading_whitespace() {
+        assert_eq!(trim_whitespace("   1 2"), "1 2\n");
+        assert_eq!(trim_whitespace("\n\n1 2"), "1 2\n");
+        assert_eq!(trim_whitespace("\t 1"), "1\n");
+    }
+
+    #[test]
+    fn drops_trailing_whitespace_and_ensures_one_newline() {
+        assert_eq!(trim_whitespace("1 2   "), "1 2\n");
+        assert_eq!(trim_whitespace("1 2\n\n\n"), "1 2\n");
+        assert_eq!(trim_whitespace("1 2\n"), "1 2\n");
+    }
+
+    #[test]
+    fn normalises_windows_line_endings() {
+        assert_eq!(trim_whitespace("1 2\r\n3 4\r\n"), "1 2\n3 4\n");
+    }
+
+    #[test]
+    fn whitespace_only_input_becomes_a_single_newline() {
+        assert_eq!(trim_whitespace(""), "\n");
+        assert_eq!(trim_whitespace("   "), "\n");
+        assert_eq!(trim_whitespace("\n\n"), "\n");
+    }
+
+    #[test]
+    fn is_idempotent() {
+        for input in ["  1  2 \n\n 3 ", "1\n2\n", "", "   ", "a\r\nb"] {
+            let once = trim_whitespace(input);
+            assert_eq!(trim_whitespace(&once), once, "not idempotent for {input:?}");
+        }
     }
 }

@@ -56,11 +56,3 @@ pub enum Error {
 }
 
 pub type Result<T, E = Error> = std::result::Result<T, E>;
-
-// macro bail that returns CustomError
-#[macro_export]
-macro_rules! bail {
-    ($($arg:tt)*) => {
-        return Err($crate::Error::CustomError { message: format!($($arg)*) });
-    };
-}

@@ -15,10 +15,28 @@ pub struct Graph {
     pub is_tree: bool,
 }
 
+/// The number of edges a simple undirected graph on `n` nodes can hold.
+///
+/// Computed in 64 bits: `n * (n - 1) / 2` overflows an `i32` from n = 65537 on.
+const fn max_simple_edges(n: i32) -> i64 {
+    let n = n as i64;
+    n * (n - 1) / 2
+}
+
+/// The number of edges the best possible bipartition of `n` nodes can hold.
+const fn max_bipartite_edges(n: i32) -> i64 {
+    let n = n as i64;
+    (n / 2) * ((n + 1) / 2)
+}
+
 impl Graph {
     /// This function creates a new empty graph with `n` nodes and no edges.
+    ///
+    /// # Panics
+    /// Panics if `n` is negative.
     #[must_use]
     pub fn new_empty(n: i32) -> Self {
+        assert!(n >= 0, "a graph cannot have {n} nodes");
         Self {
             nodes: vec![Vec::new(); n as usize],
             edges: HashSet::new(),
@@ -27,6 +45,9 @@ impl Graph {
     }
 
     /// This function creates a new full graph with `n` nodes and all possible edges.
+    ///
+    /// # Panics
+    /// Panics if `n` is negative.
     #[must_use]
     pub fn new_full(n: i32) -> Self {
         let mut result = Self::new_empty(n);
@@ -40,9 +61,19 @@ impl Graph {
 
     /// This function creates a new random graph with `n` nodes and `m` edges.
     /// The edges are chosen randomly.
+    ///
+    /// # Panics
+    /// Panics if `m` edges do not fit in a simple graph on `n` nodes, which would
+    /// otherwise leave the generator looking for an edge that cannot exist.
     #[must_use]
     pub fn new_random(n: i32, m: i32) -> Self {
         let mut result = Self::new_empty(n);
+        assert!(m >= 0, "a graph cannot have {m} edges");
+        assert!(
+            i64::from(m) <= max_simple_edges(n),
+            "cannot fit {m} edges in a graph with {n} nodes (at most {} are possible)",
+            max_simple_edges(n)
+        );
         let mut rng = rand::rng();
         while result.get_num_edges() < m {
             let u = rng.random_range(0..n);
@@ -53,8 +84,12 @@ impl Graph {
     }
 
     /// This function create a new random path (that is also a tree)
+    ///
+    /// # Panics
+    /// Panics if `n` is not positive; a tree needs at least one node.
     #[must_use]
     pub fn new_random_path(n: i32) -> Self {
+        assert!(n >= 1, "a tree needs at least one node, got {n}");
         let mut result = Self::new_empty(n);
         result.is_tree = true;
         let mut rng = rand::rng();
@@ -70,8 +105,12 @@ impl Graph {
 
     /// This function creates a new random tree with `n` nodes and `n - 1` edges by the definition of a tree.
     /// The edges are chosen randomly.
+    ///
+    /// # Panics
+    /// Panics if `n` is not positive; a tree needs at least one node.
     #[must_use]
     pub fn new_random_tree(n: i32) -> Self {
+        assert!(n >= 1, "a tree needs at least one node, got {n}");
         let mut result = Self::new_empty(n);
         result.is_tree = true;
         let mut rng = rand::rng();
@@ -86,8 +125,12 @@ impl Graph {
     }
 
     /// this creates a random tree that has O(n) depth
+    ///
+    /// # Panics
+    /// Panics if `n` is not positive; a tree needs at least one node.
     #[must_use]
     pub fn new_random_deep_tree(n: i32) -> Self {
+        assert!(n >= 1, "a tree needs at least one node, got {n}");
         let mut result = Self::new_empty(n);
         result.is_tree = true;
         let mut rng = rand::rng();
@@ -111,8 +154,17 @@ impl Graph {
     /// This function creates a new random connected graph with `n` nodes and `m` edges.
     /// The edges are chosen randomly and the graph is guaranteed to be connected.
     /// If m <= n - 1, the graph will be a tree.
+    ///
+    /// # Panics
+    /// Panics if `n` is not positive, or if `m` edges do not fit in a simple graph
+    /// on `n` nodes.
     #[must_use]
     pub fn new_random_connected(n: i32, m: i32) -> Self {
+        assert!(
+            i64::from(m) <= max_simple_edges(n),
+            "cannot fit {m} edges in a graph with {n} nodes (at most {} are possible)",
+            max_simple_edges(n)
+        );
         let mut result = Self::new_random_tree(n);
         result.is_tree = false;
         let mut rng = rand::rng();
@@ -126,18 +178,34 @@ impl Graph {
 
     /// This function creates a new random bipartite graph with `n` nodes and `m` edges.
     /// The edges are chosen randomly and the graph is guaranteed to be bipartite.
+    ///
+    /// # Panics
+    /// Panics if `n` is less than two, or if `m` edges do not fit in any bipartition
+    /// of `n` nodes.
     #[must_use]
     pub fn new_random_bipartite(n: i32, m: i32) -> Self {
+        assert!(n >= 2, "a bipartite graph needs at least two nodes, got {n}");
+        assert!(m >= 0, "a graph cannot have {m} edges");
+        assert!(
+            i64::from(m) <= max_bipartite_edges(n),
+            "cannot fit {m} edges in a bipartite graph with {n} nodes (at most {} are possible)",
+            max_bipartite_edges(n)
+        );
+
         let mut result = Self::new_empty(n);
         let mut rng = rand::rng();
         let mut nodes = (0..n).collect::<Vec<_>>();
         nodes.shuffle(&mut rng);
-        let size1 = loop {
-            let size1 = rng.random_range(1..n);
-            if size1 * (n - size1) >= m {
-                break size1;
-            }
-        };
+
+        // `size1 * (n - size1)` is concave in `size1`, so the splits that are big
+        // enough for `m` edges form one interval, symmetric around n / 2. Pick from
+        // that interval directly instead of guessing until a guess fits.
+        let mut smallest_side = 1_i64;
+        while smallest_side * (i64::from(n) - smallest_side) < i64::from(m) {
+            smallest_side += 1;
+        }
+        let size1 = rng.random_range(smallest_side..=i64::from(n) - smallest_side) as i32;
+
         while result.get_num_edges() < m {
             let u = nodes[rng.random_range(0..size1) as usize];
             let v = nodes[rng.random_range(size1..n) as usize];
@@ -222,7 +290,8 @@ impl Graph {
     /// This function returns true if the graph has every possible edge.
     #[must_use]
     pub fn is_full(&self) -> bool {
-        self.get_num_edges() == self.get_num_nodes() * (self.get_num_nodes() - 1) / 2
+        // In 64 bits: the node count squared overflows an i32 from n = 65537 on.
+        i64::from(self.get_num_edges()) == max_simple_edges(self.get_num_nodes())
     }
 
     /// This function returns true if the graph is bipartite.

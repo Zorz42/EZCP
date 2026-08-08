@@ -537,4 +537,85 @@ mod graph_tests {
         edge.sort_unstable();
         assert_eq!(edge, vec![1, 2]);
     }
+
+    // --- impossible parameters must fail fast ---
+    //
+    // Each of these used to spin forever looking for an edge that cannot exist, or
+    // to panic somewhere deep inside with an unrelated message.
+
+    #[test]
+    #[should_panic(expected = "at most 3 are possible")]
+    fn test_random_rejects_too_many_edges() {
+        let _ = Graph::new_random(3, 10);
+    }
+
+    #[test]
+    #[should_panic(expected = "at most 0 are possible")]
+    fn test_random_rejects_edge_on_single_node() {
+        let _ = Graph::new_random(1, 1);
+    }
+
+    #[test]
+    #[should_panic(expected = "at most 6 are possible")]
+    fn test_random_connected_rejects_too_many_edges() {
+        let _ = Graph::new_random_connected(4, 100);
+    }
+
+    #[test]
+    #[should_panic(expected = "at most 4 are possible")]
+    fn test_random_bipartite_rejects_too_many_edges() {
+        let _ = Graph::new_random_bipartite(4, 100);
+    }
+
+    #[test]
+    #[should_panic(expected = "at least two nodes")]
+    fn test_random_bipartite_rejects_single_node() {
+        let _ = Graph::new_random_bipartite(1, 0);
+    }
+
+    #[test]
+    #[should_panic(expected = "at least one node")]
+    fn test_random_deep_tree_rejects_zero_nodes() {
+        let _ = Graph::new_random_deep_tree(0);
+    }
+
+    #[test]
+    #[should_panic(expected = "at least one node")]
+    fn test_random_tree_rejects_zero_nodes() {
+        let _ = Graph::new_random_tree(0);
+    }
+
+    #[test]
+    #[should_panic(expected = "cannot have -1 nodes")]
+    fn test_new_empty_rejects_negative_nodes() {
+        let _ = Graph::new_empty(-1);
+    }
+
+    /// The densest feasible parameters are the ones closest to looping forever, so
+    /// make sure they still terminate and produce exactly what was asked for.
+    #[test]
+    fn test_maximum_density_graphs_terminate() {
+        for n in 2..12 {
+            let complete = Graph::new_random(n, n * (n - 1) / 2);
+            assert_eq!(complete.get_num_edges(), n * (n - 1) / 2);
+            assert!(complete.is_full());
+
+            let max_bipartite = (n / 2) * ((n + 1) / 2);
+            let bipartite = Graph::new_random_bipartite(n, max_bipartite);
+            assert_eq!(bipartite.get_num_edges(), max_bipartite);
+            assert!(bipartite.is_bipartite());
+
+            let connected = Graph::new_random_connected(n, n * (n - 1) / 2);
+            assert_eq!(connected.get_num_edges(), n * (n - 1) / 2);
+            assert!(connected.is_connected());
+        }
+    }
+
+    /// `n * (n - 1) / 2` overflows an i32 well below the node counts a competitive
+    /// programming task can reasonably use.
+    #[test]
+    fn test_is_full_does_not_overflow_for_large_node_counts() {
+        let graph = Graph::new_empty(100_000);
+        assert!(!graph.is_full());
+    }
 }

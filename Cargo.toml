@@ -16,7 +16,9 @@ readme = "README.md"
 members = ["ezcp_macros"]
 
 [dependencies]
-ezcp_macros = { path = "ezcp_macros" }
+# Both a version and a path: the path is used in the workspace, the version is
+# what a published crate depends on (packaging fails without it).
+ezcp_macros = { version = "0.1.0", path = "ezcp_macros" }
 rand = { version = "0.10", default-features = false, features = ["thread_rng"] }
 fs_extra = { version = "1.3", default-features = false }
 zip = { version = "8.4", default-features = false, features = ["deflate"] }

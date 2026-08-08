@@ -81,7 +81,11 @@ macro_rules! impl_tuple_to_output {
                 if res.ends_with(' ') {
                     res.pop();
                 }
-                res.push('\n');
+                // Only terminate the line if the last field did not already do so,
+                // matching how `Vec` formats itself instead of adding a blank line.
+                if !res.ends_with('\n') {
+                    res.push('\n');
+                }
                 res
             }
         }

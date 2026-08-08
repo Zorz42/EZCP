@@ -319,8 +319,10 @@ impl<T: ToOutput> Task<T> {
 
     fn print_title(&self, text: &str) {
         // print title with ===== before and after text
+        // Measure how wide the title actually prints, not how many bytes it takes,
+        // so a task name with non-ASCII characters still gets a matching border.
         let mut border_text = String::from(" ");
-        for _ in 0..text.len() + 6 {
+        for _ in 0..console::measure_text_width(text) + 6 {
             border_text.push('=');
         }
         self.logger.println(&border_text).ok();

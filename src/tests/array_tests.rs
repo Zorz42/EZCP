@@ -97,6 +97,15 @@ mod array_unit_tests {
         assert_eq!(lines_with[0], "3");
     }
 
+    /// The other tests only check that the pieces are present, which happily
+    /// accepted a stray space before the newline.
+    #[test]
+    fn test_array_to_string_exact_format() {
+        assert_eq!(array_to_string(&[1, 2, 3], true), "3\n1 2 3\n");
+        assert_eq!(array_to_string(&[1, 2, 3], false), "1 2 3\n");
+        assert_eq!(array_to_string(&[7], true), "1\n7\n");
+    }
+
     #[test]
     fn test_array_to_string_values_present() {
         let arr = vec![10, 20, 30];

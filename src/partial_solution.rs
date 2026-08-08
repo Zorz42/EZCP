@@ -1,5 +1,6 @@
 use crate::runner::cpp_runner::{CppRunner, ProgramHandle};
 use crate::runner::exec_runner::RunResult;
+use crate::task::path_str;
 use crate::{Error, Result, Task, ToOutput};
 use console::style;
 use std::collections::{BTreeMap, HashSet};
@@ -48,13 +49,10 @@ impl<T: ToOutput> Task<T> {
         for subtask_tests in test_files {
             let mut test_handles_element = Vec::new();
             for (input_file, output_file) in subtask_tests {
-                let input_data = std::fs::read_to_string(input_file).map_err(|err| Error::IOError {
-                    err,
-                    file: input_file.to_str().unwrap_or("???").to_owned(),
-                })?;
+                let input_data = std::fs::read_to_string(input_file).map_err(|err| Error::IOError { err, file: path_str(input_file) })?;
                 let handle = cpp_runner.add_task(program_handle, input_data, self.time_limit);
 
-                test_handles_element.push((handle, input_file.clone(), output_file.clone()));
+                test_handles_element.push((handle, output_file.clone()));
             }
             test_handles.push(test_handles_element);
         }
@@ -69,11 +67,10 @@ impl<T: ToOutput> Task<T> {
             let mut max_time = Some(0);
             // count, which result was returned by how many tests
             let mut results = BTreeMap::new();
-            for (handle, input_file, output_file) in subtask_test_handles {
-                let input_data = std::fs::read_to_string(input_file).map_err(|err| Error::IOError {
-                    err,
-                    file: input_file.to_str().unwrap_or("???").to_owned(),
-                })?;
+            for (handle, output_file) in subtask_test_handles {
+                // The runner still holds the input we fed the solution, so take it
+                // back rather than reading the whole test from disk a second time.
+                let input_data = cpp_runner.take_input(*handle);
 
                 let run_result = cpp_runner.get_result(*handle);
                 let mut test_result = TestResult::from(&run_result);
@@ -84,10 +81,7 @@ impl<T: ToOutput> Task<T> {
                             max_time = Some(i32::max(max_time.unwrap(), time));
                         }
 
-                        let correct_output = std::fs::read_to_string(output_file).map_err(|err| Error::IOError {
-                            err,
-                            file: output_file.to_str().unwrap_or("???").to_owned(),
-                        })?;
+                        let correct_output = std::fs::read_to_string(output_file).map_err(|err| Error::IOError { err, file: path_str(output_file) })?;
                         if !(self.checker)(&input_data, &correct_output, &program_output) {
                             test_result = TestResult::WrongAnswer;
                         }

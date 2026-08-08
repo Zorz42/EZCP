@@ -10,39 +10,45 @@ pub fn to_output_derive(input: TokenStream) -> TokenStream {
     let generics = input.generics;
     let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
 
+    // Each field goes on its own line. A field that produced nothing is skipped
+    // entirely, so an empty collection does not turn into a blank line.
+    let field_output = |accessor: proc_macro2::TokenStream| {
+        quote! {
+            {
+                let field = #accessor.to_output();
+                if !field.is_empty() {
+                    res.push_str(&field);
+                    if !res.ends_with('\n') {
+                        res.push('\n');
+                    }
+                }
+            }
+        }
+    };
+
     let fields_output = match input.data {
         Data::Struct(data_struct) => match data_struct.fields {
             syn::Fields::Named(fields_named) => {
-                let mut field_calls = Vec::new();
-                for field in fields_named.named {
-                    let field_name = field.ident.unwrap();
-                    field_calls.push(quote! {
-                        res.push_str(&self.#field_name.to_output());
-                        if res.chars().last() != Some('\n') {
-                            res.push('\n');
-                        }
-                    });
-                }
+                let field_calls = fields_named.named.into_iter().map(|field| {
+                    let field_name = field.ident.expect("named fields always have an identifier");
+                    field_output(quote! { self.#field_name })
+                });
                 quote! { #(#field_calls)* }
             }
             syn::Fields::Unnamed(fields_unnamed) => {
-                let mut field_calls = Vec::new();
-                for (idx, _) in fields_unnamed.unnamed.into_iter().enumerate() {
+                let field_calls = (0..fields_unnamed.unnamed.len()).map(|idx| {
                     let index = syn::Index::from(idx);
-                    field_calls.push(quote! {
-                        res.push_str(&self.#index.to_output());
-                        if res.chars().last() != Some('\n') {
-                            res.push('\n');
-                        }
-                    });
-                }
+                    field_output(quote! { self.#index })
+                });
                 quote! { #(#field_calls)* }
             }
-            syn::Fields::Unit => {
-                quote! {}
-            }
+            syn::Fields::Unit => quote! {},
         },
-        _ => panic!("ToOutput can only be derived for structs"),
+        // Report through the compiler rather than panicking, so the user gets an
+        // error pointing at their type instead of a proc macro backtrace.
+        _ => {
+            return syn::Error::new(name.span(), "ToOutput can only be derived for structs").to_compile_error().into();
+        }
     };
 
     let expanded = quote! {

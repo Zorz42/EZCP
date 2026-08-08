@@ -3,6 +3,9 @@ name = "ezcp_macros"
 version = "0.1.0"
 edition = "2024"
 description = "Procedural macros for EZCP"
+license-file = "../LICENSE"
+repository = "https://github.com/Zorz42/EZCP"
+rust-version = "1.88"
 
 [lib]
 proc-macro = true

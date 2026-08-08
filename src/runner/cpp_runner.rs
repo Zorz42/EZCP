@@ -1,6 +1,7 @@
 use crate::Error::IOError;
 use crate::runner::exec_runner::{RunResult, run_solution};
 use crate::runner::gcc::{Gcc, GccOptimization, GccStandard, canonicalize};
+use crate::task::path_str;
 use crate::{Error, Result};
 use indicatif::{MultiProgress, ProgressBar};
 use log::{trace, warn};
@@ -9,10 +10,6 @@ use std::hash::{DefaultHasher, Hash, Hasher};
 use std::path::{Path, PathBuf};
 use std::thread::spawn;
 use std::time::Duration;
-
-fn path_str(p: &Path) -> String {
-    p.to_string_lossy().into_owned()
-}
 
 /// A unique handle for a compiled C++ program.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -110,9 +107,10 @@ impl CppRunner {
         self.necessary_files.insert(source_file.clone());
         self.necessary_files.insert(executable_file.clone());
 
-        if !source_file.exists() {
-            std::fs::write(&source_file, source_code).map_err(|err| IOError { err, file: path_str(&source_file) })?;
-        }
+        // Always rewrite the source. Skipping it when the file exists means a run
+        // that was interrupted mid-write leaves a truncated source behind that is
+        // never repaired, and every later run fails to compile it.
+        std::fs::write(&source_file, source_code).map_err(|err| IOError { err, file: path_str(&source_file) })?;
 
         if !executable_file.exists() {
             trace!("Compiling: {}", executable_file.to_string_lossy());
@@ -143,6 +141,16 @@ impl CppRunner {
     /// Removes all registered tasks.
     pub fn clear_tasks(&mut self) {
         self.tasks.clear();
+    }
+
+    /// Moves the input of a task out of the runner.
+    ///
+    /// Once a task has run the runner has no further use for its input, while the
+    /// caller usually needs it one more time to run the checker. Handing it over
+    /// saves reading the whole test back from disk and keeps only one copy of it
+    /// in memory.
+    pub fn take_input(&mut self, task_handle: TaskHandle) -> String {
+        std::mem::take(&mut self.tasks[task_handle.id].input)
     }
 
     /// Retrieves the result of a completed task.

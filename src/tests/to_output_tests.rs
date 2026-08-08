@@ -195,6 +195,32 @@ mod test_to_output_tests {
         assert_eq!(s.to_output(), "");
     }
 
+    /// A field that renders to nothing (an empty collection, say) must not leave a
+    /// blank line behind, wherever in the struct it sits.
+    #[test]
+    fn derive_struct_skips_empty_fields() {
+        #[derive(ToOutput)]
+        struct WithEmpty {
+            first: Vec<i32>,
+            middle: i32,
+            last: Vec<i32>,
+        }
+
+        let s = WithEmpty {
+            first: vec![],
+            middle: 7,
+            last: vec![],
+        };
+        assert_eq!(s.to_output(), "7\n");
+
+        let s = WithEmpty {
+            first: vec![1],
+            middle: 7,
+            last: vec![2],
+        };
+        assert_eq!(s.to_output(), "1\n7\n2\n");
+    }
+
     // --- Tuple ---
 
     #[test]
@@ -220,5 +246,14 @@ mod test_to_output_tests {
     #[test]
     fn tuple_large() {
         assert_eq!((1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12).to_output(), "1 2 3 4 5 6 7 8 9 10 11 12\n");
+    }
+
+    /// A field that already ends in a newline must not get a second one, the same
+    /// way `Vec` behaves.
+    #[test]
+    fn tuple_ending_in_newline_is_not_double_terminated() {
+        assert_eq!((1, "x\n").to_output(), "1 x\n");
+        assert_eq!(("a\n",).to_output(), "a\n");
+        assert_eq!((vec![1, 2], vec![3, 4]).to_output(), "1 2\n3 4\n");
     }
 }
