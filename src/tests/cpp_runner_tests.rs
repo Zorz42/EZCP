@@ -212,17 +212,17 @@ pub mod cpp_runner_tests {
         let mut runner = CppRunner::new(tempdir.path()).unwrap();
 
         // Force access violation by writing through null pointer, should crash
-        let program_source = r#"
+        let program_source = "
         #include <windows.h>
         int main() {
             int* p = 0;
             *p = 1;
             return 0;
         }
-        "#;
+        ";
 
         let program_handle = runner.add_program(program_source).unwrap();
-        let task_handle = runner.add_task(program_handle, "".to_owned(), 1000);
+        let task_handle = runner.add_task(program_handle, String::new(), 1000);
 
         runner.run_tasks(None, false).unwrap();
 
