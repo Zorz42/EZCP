@@ -105,11 +105,51 @@ int main() {
   PROCESS_INFORMATION process_info;
   ZeroMemory(&process_info, sizeof(process_info));
 
+  // Round the CPU limit up to whole seconds. Unix has to do that because
+  // RLIMIT_CPU only has second granularity, and both platforms must reach the
+  // same verdict for the same solution.
+  const long long cpu_limit_ms = (long long)((time_limit_ms + 999) / 1000) * 1000;
+
+  // Put the solution in a job object, which gives two guarantees that do not
+  // depend on this timer staying alive:
+  //   * KILL_ON_JOB_CLOSE - Windows does not kill children together with their
+  //     parent, so without it a solution stuck in an endless loop would keep
+  //     burning a core forever if this timer were killed instead of exiting on
+  //     its own. Closing the last handle (which happens even on abnormal exit)
+  //     tears the whole job down.
+  //   * PerProcessUserTimeLimit - a kernel enforced CPU backstop, the counterpart
+  //     of the RLIMIT_CPU hard limit on Unix. The generous margin over the real
+  //     limit keeps the polling loop below in charge of the actual verdict.
+  // The handle is deliberately never closed by hand.
+  HANDLE job = CreateJobObjectW(NULL, NULL);
+  if (job != NULL) {
+    JOBOBJECT_EXTENDED_LIMIT_INFORMATION job_limits;
+    ZeroMemory(&job_limits, sizeof(job_limits));
+    job_limits.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE | JOB_OBJECT_LIMIT_PROCESS_TIME;
+    // The field counts 100ns ticks.
+    job_limits.BasicLimitInformation.PerProcessUserTimeLimit.QuadPart = (cpu_limit_ms + 5000) * 10000LL;
+    SetInformationJobObject(job, JobObjectExtendedLimitInformation, &job_limits, sizeof(job_limits));
+  }
+
   LARGE_INTEGER frequency, start_counter;
   QueryPerformanceFrequency(&frequency);
   QueryPerformanceCounter(&start_counter);
 
-  if (!CreateProcessW(executable, command_line.data(), NULL, NULL, TRUE, CREATE_NO_WINDOW, NULL, NULL, &startup_info, &process_info)) {
+  // Start suspended so the solution cannot fork anything off before it is inside
+  // the job.
+  if (!CreateProcessW(executable, command_line.data(), NULL, NULL, TRUE, CREATE_NO_WINDOW | CREATE_SUSPENDED, NULL, NULL, &startup_info, &process_info)) {
+    report("ERR", 0);
+    return 1;
+  }
+
+  if (job != NULL) {
+    AssignProcessToJobObject(job, process_info.hProcess);
+  }
+
+  if (ResumeThread(process_info.hThread) == (DWORD)-1) {
+    TerminateProcess(process_info.hProcess, 1);
+    CloseHandle(process_info.hProcess);
+    CloseHandle(process_info.hThread);
     report("ERR", 0);
     return 1;
   }
@@ -118,11 +158,6 @@ int main() {
   // after the solution exits, and EZCP would block forever writing input that
   // nobody is going to read.
   _close(0);
-
-  // Round the CPU limit up to whole seconds. Unix has to do that because
-  // RLIMIT_CPU only has second granularity, and both platforms must reach the
-  // same verdict for the same solution.
-  const long long cpu_limit_ms = (long long)((time_limit_ms + 999) / 1000) * 1000;
 
   // Solutions that block instead of burning CPU never hit the CPU limit, so
   // keep a wall-clock safety net as well. The multiplier is small so that a
@@ -179,6 +214,10 @@ int main() {
 #include <time.h>
 #include <unistd.h>
 
+#ifdef __linux__
+#include <sys/prctl.h>
+#endif
+
 static void report(const char *verdict, long long elapsed_ms) {
   fprintf(stderr, "\n__EZCP_RESULT__ %s %lld\n", verdict, elapsed_ms);
   fflush(stderr);
@@ -211,6 +250,8 @@ int main(int argc, char *argv[]) {
 
   long long start = get_wall_time_ms();
 
+  pid_t parent_pid = getpid();
+
   pid_t pid = fork();
   if (pid < 0) {
     report("ERR", 0);
@@ -218,6 +259,19 @@ int main(int argc, char *argv[]) {
   }
 
   if (pid == 0) {
+#ifdef __linux__
+    // Have the kernel kill the solution if this timer dies without being able to
+    // clean up, so an endless loop can never be left burning a core. Re-check the
+    // parent afterwards: it may already have died before the call landed, in
+    // which case the signal would never be delivered.
+    prctl(PR_SET_PDEATHSIG, SIGKILL);
+    if (getppid() != parent_pid) {
+      _exit(127);
+    }
+#else
+    (void)parent_pid;
+#endif
+
     // Child: limit CPU time before exec, so that TLE reflects the CPU the
     // solution actually consumed and is unaffected by scheduler delays or by
     // the other solutions EZCP runs in parallel.
