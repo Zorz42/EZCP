@@ -5,8 +5,20 @@ pub mod cpp_runner_tests {
     use crate::runner::cpp_runner::CppRunner;
     use crate::runner::exec_runner::RunResult;
     use crate::tests::test_shared::initialize_logger;
-    use std::time::Instant;
+    use std::time::{Duration, Instant};
     use tempfile::TempDir;
+
+    /// Runs `body` on a helper thread and fails the test if it does not finish in
+    /// time, so that a regression shows up as a failure instead of a test run
+    /// that hangs until CI kills it.
+    #[allow(clippy::panic)]
+    fn run_within<F: FnOnce() -> T + Send + 'static, T: Send + 'static>(timeout: Duration, what: &str, body: F) -> T {
+        let (sender, receiver) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            let _ = sender.send(body());
+        });
+        receiver.recv_timeout(timeout).unwrap_or_else(|_| panic!("{what} did not finish within {timeout:?}"))
+    }
 
     const HELLO_WORLD_PROGRAM: &str = r#"
     #include <iostream>
@@ -212,10 +224,142 @@ pub mod cpp_runner_tests {
         let program_handle = runner.add_program(program_source).unwrap();
         let task_handle = runner.add_task(program_handle, "".to_owned(), 1000);
 
-        runner.run_tasks(None).unwrap();
+        runner.run_tasks(None, false).unwrap();
 
         let result = runner.get_result(task_handle);
         assert!(matches!(result, RunResult::Crashed));
+
+        drop(tempdir);
+    }
+
+    /// A solution is free to stop reading once it has what it needs, which stalls
+    /// EZCP on a full input pipe until the solution (and the timer holding the
+    /// other read end) goes away.
+    #[test]
+    fn test_solution_that_ignores_most_of_its_input() {
+        initialize_logger();
+
+        let program_source = "
+        #include <iostream>
+        int main() {
+            long long n;
+            std::cin >> n;
+            std::cout << n << std::endl;
+            return 0;
+        }
+        ";
+
+        // Comfortably larger than the pipe buffer on every supported platform.
+        let mut input = String::from("7\n");
+        for i in 0..500_000 {
+            input += &format!("{i} ");
+        }
+
+        let result = run_within(Duration::from_secs(90), "running a solution that ignores its input", move || {
+            let tempdir = TempDir::new().unwrap();
+            let mut runner = CppRunner::new(tempdir.path()).unwrap();
+            let program_handle = runner.add_program(program_source).unwrap();
+            runner.check_programs(&input, &[program_handle], 5000).unwrap().remove(0)
+        });
+
+        assert!(matches!(result, RunResult::Ok(..)), "Expected OK but got {result:?}");
+        if let RunResult::Ok(_, output) = result {
+            assert_eq!(output.trim(), "7");
+        }
+    }
+
+    /// Reading a large input while writing a large output means neither side may
+    /// block waiting for the other.
+    #[test]
+    fn test_large_input_and_large_output() {
+        initialize_logger();
+
+        let program_source = r#"
+        #include <iostream>
+        int main() {
+            std::ios_base::sync_with_stdio(false);
+            long long sum = 0, x;
+            while (std::cin >> x) { sum += x; std::cout << x << "\n"; }
+            std::cout << "sum " << sum << "\n";
+            return 0;
+        }
+        "#;
+
+        let count = 200_000_i64;
+        let mut input = String::new();
+        for i in 0..count {
+            input += &format!("{i}\n");
+        }
+        let expected_sum = count * (count - 1) / 2;
+
+        let result = run_within(Duration::from_secs(90), "running a solution with large input and output", move || {
+            let tempdir = TempDir::new().unwrap();
+            let mut runner = CppRunner::new(tempdir.path()).unwrap();
+            let program_handle = runner.add_program(program_source).unwrap();
+            runner.check_programs(&input, &[program_handle], 10000).unwrap().remove(0)
+        });
+
+        assert!(matches!(result, RunResult::Ok(..)), "Expected OK but got {result:?}");
+        if let RunResult::Ok(_, output) = result {
+            let lines: Vec<&str> = output.lines().collect();
+            assert_eq!(lines.len(), count as usize + 1, "output was truncated");
+            assert_eq!(lines[count as usize], format!("sum {expected_sum}"));
+        }
+    }
+
+    /// Solutions routinely keep debug prints on stderr. That must not be mistaken
+    /// for the timer's own report.
+    #[test]
+    fn test_solution_writing_to_stderr_is_still_measured() {
+        initialize_logger();
+
+        let tempdir = TempDir::new().unwrap();
+        let mut runner = CppRunner::new(tempdir.path()).unwrap();
+
+        // Includes text that looks like a timing line and an unterminated line.
+        let program_source = r#"
+        #include <iostream>
+        int main() {
+            std::cerr << "debug 123\nnot a number\n__EZCP_RESULT__ TLE 999\n";
+            std::cerr << "trailing without newline";
+            std::cout << "42\n";
+            return 0;
+        }
+        "#;
+
+        let program_handle = runner.add_program(program_source).unwrap();
+        let result = &runner.check_programs("", &[program_handle], 1000).unwrap()[0];
+
+        assert!(matches!(result, RunResult::Ok(..)), "Expected OK but got {result:?}");
+        if let RunResult::Ok(_, output) = result {
+            assert_eq!(output.trim(), "42");
+        }
+
+        drop(tempdir);
+    }
+
+    /// Cleaning the build folder must drop strays but keep everything the runner
+    /// still needs, which only holds if all paths are normalised the same way.
+    #[test]
+    fn test_clean_build_folder_keeps_compiled_programs() {
+        initialize_logger();
+
+        let tempdir = TempDir::new().unwrap();
+        let mut runner = CppRunner::new(tempdir.path()).unwrap();
+        let program_handle = runner.add_program(HELLO_WORLD_PROGRAM).unwrap();
+
+        let stray = tempdir.path().join("stray.txt");
+        std::fs::write(&stray, "junk").unwrap();
+
+        runner.add_task(program_handle, String::new(), 1000);
+        runner.run_tasks(None, true).unwrap();
+
+        assert!(!stray.exists(), "cleanup should have removed the stray file");
+
+        // Both the solution and the timer must have survived the cleanup.
+        runner.clear_tasks();
+        let result = &runner.check_programs("", &[program_handle], 1000).unwrap()[0];
+        assert!(matches!(result, RunResult::Ok(..)), "Expected OK but got {result:?}");
 
         drop(tempdir);
     }

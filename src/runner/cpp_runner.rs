@@ -1,9 +1,9 @@
 use crate::Error::IOError;
-use crate::Result;
 use crate::runner::exec_runner::{RunResult, run_solution};
-use crate::runner::gcc::{Gcc, GccOptimization, GccStandard};
+use crate::runner::gcc::{Gcc, GccOptimization, GccStandard, canonicalize};
+use crate::{Error, Result};
 use indicatif::{MultiProgress, ProgressBar};
-use log::trace;
+use log::{trace, warn};
 use std::collections::{HashMap, HashSet};
 use std::hash::{DefaultHasher, Hash, Hasher};
 use std::path::{Path, PathBuf};
@@ -67,10 +67,7 @@ impl CppRunner {
         let mut gcc = Gcc::new()?;
         gcc.standard = Some(GccStandard::Cpp17);
         gcc.optimization = Some(GccOptimization::Level2);
-        let build_folder = build_folder.canonicalize().map_err(|err| IOError {
-            err,
-            file: build_folder.to_string_lossy().to_string(),
-        })?;
+        let build_folder = canonicalize(build_folder)?;
         let mut res = Self {
             gcc,
             build_folder,
@@ -190,8 +187,15 @@ impl CppRunner {
                 file: path_str(&self.build_folder),
             })?;
             let path = entry.path();
-            if !self.necessary_files.contains(&path) {
-                std::fs::remove_file(&path).map_err(|err| IOError { err, file: path_str(&path) })?;
+            // Only ever remove plain files, so a directory somebody put in the
+            // build folder is left alone.
+            if !self.necessary_files.contains(&path) && path.is_file() {
+                // Best effort: a leftover we cannot delete (a binary another EZCP
+                // run still has open, an antivirus holding the file on Windows)
+                // costs some disk space, which is no reason to fail the run.
+                if let Err(err) = std::fs::remove_file(&path) {
+                    warn!("Could not remove {} from the build folder: {err}", path_str(&path));
+                }
             }
         }
         Ok(())
@@ -224,13 +228,15 @@ impl CppRunner {
                 }
 
                 let timer_path = timer_path.clone();
-                threads.push((spawn(move || run_solution(&executable_file, &input_data, time_limit, &timer_path)), it - 1));
+                threads.push((spawn(move || run_solution(&executable_file, input_data, time_limit, &timer_path)), it - 1));
             }
 
             let mut threads_upd = Vec::new();
             for (thread, idx) in threads {
                 if thread.is_finished() {
-                    let result = thread.join().unwrap()?;
+                    let result = thread.join().map_err(|_panic| Error::TimerFailed {
+                        details: format!("the worker thread for task {idx} panicked"),
+                    })??;
                     trace!("Task {idx} finished with result: {result:?}");
                     self.tasks[idx].result = Some(result);
                 } else {
@@ -247,8 +253,8 @@ impl CppRunner {
             }
         }
 
-        if let Some(logger) = logger {
-            logger.remove(&progress_bar.unwrap());
+        if let (Some(logger), Some(progress_bar)) = (logger, &progress_bar) {
+            logger.remove(progress_bar);
         }
 
         Ok(())

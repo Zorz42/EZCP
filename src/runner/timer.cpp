@@ -1,191 +1,293 @@
+// Timer utility used by EZCP to run one compiled solution under a time limit.
+//
+// Usage: timer <executable> <time_limit_ms>
+//
+// The solution inherits stdin/stdout/stderr, so it reads its input and writes
+// its answer straight through EZCP's pipes. Once the solution is done the timer
+// appends a single result line to stderr:
+//
+//     \n__EZCP_RESULT__ <OK|TLE|RTE|ERR> <wall_time_ms>\n
+//
+// EZCP parses the *last* occurrence of that marker, so a solution that writes to
+// stderr itself cannot confuse the protocol, and no information has to be
+// smuggled through the exit code (exit codes are not portable: Unix reports
+// signals separately, Windows reports 32-bit NTSTATUS values).
+//
+// ERR means the timer could not start the solution at all; every other verdict
+// describes the solution itself.
+//
+// The time limit is enforced on CPU time on both platforms so that a machine
+// under load (EZCP runs several solutions in parallel) does not turn correct
+// solutions into false TLEs. A wall-clock safety net catches solutions that
+// block forever without burning CPU.
+
 #ifdef _WIN32
-#include <chrono>
-#include <iostream>
-#include <string>
-#include <thread>
+
+#define WIN32_LEAN_AND_MEAN
+// windows.h has to come first: shellapi.h relies on the types it defines.
 #include <windows.h>
 
-using namespace std;
+#include <io.h>
+#include <shellapi.h>
+#include <stdio.h>
+#include <string>
+#include <vector>
 
-long long get_rusage(HANDLE process) {
-  FILETIME creationTime, exitTime, kernelTime, userTime;
-  GetProcessTimes(process, &creationTime, &exitTime, &kernelTime, &userTime);
-
-  ULARGE_INTEGER userTimeInt, sysTimeInt;
-  userTimeInt.LowPart = userTime.dwLowDateTime;
-  userTimeInt.HighPart = userTime.dwHighDateTime;
-  sysTimeInt.LowPart = kernelTime.dwLowDateTime;
-  sysTimeInt.HighPart = kernelTime.dwHighDateTime;
-
-  long long user_ms = userTimeInt.QuadPart / 10000; // Convert to milliseconds
-  long long sys_ms = sysTimeInt.QuadPart / 10000;   // Convert to milliseconds
-
-  return user_ms + sys_ms;
+static void report(const char *verdict, long long elapsed_ms) {
+  fprintf(stderr, "\n__EZCP_RESULT__ %s %lld\n", verdict, elapsed_ms);
+  fflush(stderr);
 }
 
-int main(int argc, const char *argv[]) {
-  string command = argv[1];
-  int timeout_ms = stoi(argv[2]);
+static long long filetime_to_ms(const FILETIME &ft) {
+  ULARGE_INTEGER value;
+  value.LowPart = ft.dwLowDateTime;
+  value.HighPart = ft.dwHighDateTime;
+  return (long long)(value.QuadPart / 10000ULL); // 100ns ticks -> ms
+}
 
-  // Use STARTUPINFOW for wide characters
-  STARTUPINFOW si = {sizeof(si)};
-  PROCESS_INFORMATION pi;
-  ZeroMemory(&pi, sizeof(pi));
+// User + kernel time consumed by the process so far.
+static long long get_cpu_time_ms(HANDLE process) {
+  FILETIME creation_time, exit_time, kernel_time, user_time;
+  if (!GetProcessTimes(process, &creation_time, &exit_time, &kernel_time, &user_time)) {
+    return 0;
+  }
+  return filetime_to_ms(kernel_time) + filetime_to_ms(user_time);
+}
 
-  // Convert command to wide string for Windows (needed for CreateProcessW)
-  wstring wcommand(command.begin(), command.end());
-  // Quote the command path in case it contains spaces and build a mutable
-  // buffer
-  wstring quoted = L"\"" + wcommand + L"\"";
-  // CreateProcessW requires a modifiable buffer for the command line
-  vector<wchar_t> cmdline(quoted.begin(), quoted.end());
-  cmdline.push_back(L'\0');
+static void make_inheritable(HANDLE handle) {
+  if (handle != NULL && handle != INVALID_HANDLE_VALUE) {
+    SetHandleInformation(handle, HANDLE_FLAG_INHERIT, HANDLE_FLAG_INHERIT);
+  }
+}
 
-  // Use CreateProcessW (wide character version)
-  if (!CreateProcessW(NULL, cmdline.data(), NULL, NULL, TRUE, CREATE_NO_WINDOW,
-                      NULL, NULL, &si, &pi)) {
-    return -1; // Error in creating process
+int main() {
+  // A crashing solution must never pop up the Windows Error Reporting dialog:
+  // it would block the whole test run until somebody clicks it away. Child
+  // processes inherit the error mode of their parent.
+  SetErrorMode(SEM_FAILCRITICALERRORS | SEM_NOGPFAULTERRORBOX | SEM_NOOPENFILEERRORBOX);
+
+  // Take the arguments as UTF-16 so that paths containing non-ASCII characters
+  // (a user name with an accent is enough) survive; the narrow argv would have
+  // been mangled by the process code page.
+  int argc = 0;
+  LPWSTR *argv = CommandLineToArgvW(GetCommandLineW(), &argc);
+  if (argv == NULL || argc < 3) {
+    report("ERR", 0);
+    return 1;
   }
 
-  DWORD waitResult;
-  int elapsed = 0;
-  int wait_time_ms = 10; // check every 10ms
+  const wchar_t *executable = argv[1];
+  int time_limit_ms = _wtoi(argv[2]);
+  if (time_limit_ms <= 0) {
+    time_limit_ms = 1000;
+  }
 
-  while (elapsed < timeout_ms) {
-    waitResult = WaitForSingleObject(pi.hProcess, wait_time_ms);
-    if (waitResult == WAIT_OBJECT_0) {
-      long long elapsed_time = get_rusage(pi.hProcess);
-      cerr << elapsed_time << endl; // Output the elapsed time
+  // CreateProcessW needs a modifiable command line buffer. The executable path
+  // is passed separately as well, so quoting only has to keep argv[0] intact.
+  std::wstring quoted;
+  quoted.push_back(L'"');
+  quoted.append(executable);
+  quoted.push_back(L'"');
+  std::vector<wchar_t> command_line(quoted.begin(), quoted.end());
+  command_line.push_back(L'\0');
 
-      DWORD exitCode;
-      GetExitCodeProcess(pi.hProcess, &exitCode);
-      CloseHandle(pi.hProcess);
-      CloseHandle(pi.hThread);
-      return exitCode;
+  STARTUPINFOW startup_info;
+  ZeroMemory(&startup_info, sizeof(startup_info));
+  startup_info.cb = sizeof(startup_info);
+  startup_info.dwFlags = STARTF_USESTDHANDLES;
+  startup_info.hStdInput = GetStdHandle(STD_INPUT_HANDLE);
+  startup_info.hStdOutput = GetStdHandle(STD_OUTPUT_HANDLE);
+  startup_info.hStdError = GetStdHandle(STD_ERROR_HANDLE);
+  make_inheritable(startup_info.hStdInput);
+  make_inheritable(startup_info.hStdOutput);
+  make_inheritable(startup_info.hStdError);
+
+  PROCESS_INFORMATION process_info;
+  ZeroMemory(&process_info, sizeof(process_info));
+
+  LARGE_INTEGER frequency, start_counter;
+  QueryPerformanceFrequency(&frequency);
+  QueryPerformanceCounter(&start_counter);
+
+  if (!CreateProcessW(executable, command_line.data(), NULL, NULL, TRUE, CREATE_NO_WINDOW, NULL, NULL, &startup_info, &process_info)) {
+    report("ERR", 0);
+    return 1;
+  }
+
+  // Drop our own copy of the input pipe. Without this the pipe stays open even
+  // after the solution exits, and EZCP would block forever writing input that
+  // nobody is going to read.
+  _close(0);
+
+  // Round the CPU limit up to whole seconds. Unix has to do that because
+  // RLIMIT_CPU only has second granularity, and both platforms must reach the
+  // same verdict for the same solution.
+  const long long cpu_limit_ms = (long long)((time_limit_ms + 999) / 1000) * 1000;
+
+  // Solutions that block instead of burning CPU never hit the CPU limit, so
+  // keep a wall-clock safety net as well. The multiplier is small so that a
+  // sleeping solution does not hold up the whole run.
+  const long long wall_deadline_ms = (long long)time_limit_ms * 2 + 2000;
+  const char *verdict = "RTE";
+
+  for (;;) {
+    DWORD wait_result = WaitForSingleObject(process_info.hProcess, 5);
+
+    if (wait_result == WAIT_OBJECT_0) {
+      DWORD exit_code = 1;
+      GetExitCodeProcess(process_info.hProcess, &exit_code);
+      verdict = (exit_code == 0) ? "OK" : "RTE";
+      break;
     }
 
-    Sleep(wait_time_ms);
-    elapsed += wait_time_ms;
+    if (wait_result == WAIT_FAILED) {
+      verdict = "ERR";
+      break;
+    }
+
+    LARGE_INTEGER now;
+    QueryPerformanceCounter(&now);
+    long long wall_ms = (frequency.QuadPart > 0) ? ((now.QuadPart - start_counter.QuadPart) * 1000 / frequency.QuadPart) : 0;
+
+    if (get_cpu_time_ms(process_info.hProcess) > cpu_limit_ms || wall_ms > wall_deadline_ms) {
+      TerminateProcess(process_info.hProcess, 1);
+      WaitForSingleObject(process_info.hProcess, INFINITE);
+      verdict = "TLE";
+      break;
+    }
   }
 
-  TerminateProcess(pi.hProcess, 1);           // Kill the process
-  WaitForSingleObject(pi.hProcess, INFINITE); // Wait for it to terminate
+  LARGE_INTEGER end_counter;
+  QueryPerformanceCounter(&end_counter);
+  long long elapsed_ms = (frequency.QuadPart > 0) ? ((end_counter.QuadPart - start_counter.QuadPart) * 1000 / frequency.QuadPart) : 0;
 
-  CloseHandle(pi.hProcess);
-  CloseHandle(pi.hThread);
+  CloseHandle(process_info.hProcess);
+  CloseHandle(process_info.hThread);
 
-  return 175; // Timeout occurred
+  report(verdict, elapsed_ms);
+  return 0;
 }
 
 #else
-#include <chrono>
-#include <iostream>
+
+#include <errno.h>
 #include <signal.h>
+#include <stdio.h>
+#include <stdlib.h>
 #include <sys/resource.h>
 #include <sys/wait.h>
 #include <time.h>
-#include <thread>
 #include <unistd.h>
-using namespace std;
 
-long long get_wall_time_ms() {
-  struct timespec ts;
-  clock_gettime(CLOCK_MONOTONIC, &ts);
-  return 1LL * ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
+static void report(const char *verdict, long long elapsed_ms) {
+  fprintf(stderr, "\n__EZCP_RESULT__ %s %lld\n", verdict, elapsed_ms);
+  fflush(stderr);
 }
 
-// Runs `command` with a CPU-time limit of `time_limit_ms` milliseconds.
-// Returns:
-//   175           – TLE (CPU limit exceeded or wall-time safety-kill)
-//   0             – exited successfully
-//   positive int  – exit code or signal number for crashes
-int run_command_with_timeout(const string &command, int time_limit_ms) {
-  pid_t pid = fork();
+static long long get_wall_time_ms() {
+  struct timespec ts;
+  clock_gettime(CLOCK_MONOTONIC, &ts);
+  return (long long)ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
+}
 
+static void sleep_ms(long ms) {
+  struct timespec ts;
+  ts.tv_sec = ms / 1000;
+  ts.tv_nsec = (ms % 1000) * 1000000L;
+  nanosleep(&ts, NULL);
+}
+
+int main(int argc, char *argv[]) {
+  if (argc < 3) {
+    report("ERR", 0);
+    return 1;
+  }
+
+  const char *command = argv[1];
+  int time_limit_ms = atoi(argv[2]);
+  if (time_limit_ms <= 0) {
+    time_limit_ms = 1000;
+  }
+
+  long long start = get_wall_time_ms();
+
+  pid_t pid = fork();
   if (pid < 0) {
-    // fork failed
-    return -1;
+    report("ERR", 0);
+    return 1;
   }
 
   if (pid == 0) {
-    // Child: set a CPU-time limit before exec so TLE is determined by actual
-    // CPU consumption, not wall time. This is unaffected by scheduler delays
-    // or parallel test load.
+    // Child: limit CPU time before exec, so that TLE reflects the CPU the
+    // solution actually consumed and is unaffected by scheduler delays or by
+    // the other solutions EZCP runs in parallel.
     int limit_s = (time_limit_ms + 999) / 1000; // round up to whole seconds
-    struct rlimit rl;
-    rl.rlim_cur = (rlim_t)limit_s;       // soft limit  -> SIGXCPU
-    rl.rlim_max = (rlim_t)(limit_s + 5); // hard limit  -> SIGKILL
-    setrlimit(RLIMIT_CPU, &rl);
+    struct rlimit cpu_limit;
+    cpu_limit.rlim_cur = (rlim_t)limit_s;       // soft limit -> SIGXCPU
+    cpu_limit.rlim_max = (rlim_t)(limit_s + 5); // hard limit -> SIGKILL
+    setrlimit(RLIMIT_CPU, &cpu_limit);
 
-    // Set stack and memory limits to unlimited (common in CP)
-    // Set stack and memory limits as high as possible
-    struct rlimit rl_stack;
-    if (getrlimit(RLIMIT_STACK, &rl_stack) != -1) {
-        rl_stack.rlim_cur = rl_stack.rlim_max;
-        setrlimit(RLIMIT_STACK, &rl_stack);
+    // Raise the stack and address space limits as far as the system allows;
+    // competitive programming solutions routinely recurse very deeply.
+    struct rlimit stack_limit;
+    if (getrlimit(RLIMIT_STACK, &stack_limit) == 0 && stack_limit.rlim_cur != stack_limit.rlim_max) {
+      stack_limit.rlim_cur = stack_limit.rlim_max;
+      setrlimit(RLIMIT_STACK, &stack_limit);
     }
 
-    struct rlimit rl_as;
-    if (getrlimit(RLIMIT_AS, &rl_as) != -1) {
-        rl_as.rlim_cur = rl_as.rlim_max;
-        setrlimit(RLIMIT_AS, &rl_as);
+    struct rlimit address_space_limit;
+    if (getrlimit(RLIMIT_AS, &address_space_limit) == 0 && address_space_limit.rlim_cur != address_space_limit.rlim_max) {
+      address_space_limit.rlim_cur = address_space_limit.rlim_max;
+      setrlimit(RLIMIT_AS, &address_space_limit);
     }
 
-    execl(command.c_str(), command.c_str(), (char *)nullptr);
+    execl(command, command, (char *)NULL);
     _exit(127);
   }
 
-  int status;
-  bool killed_by_us = false;
-  // Safety-net wall-time kill: 2x the CPU limit + 2 s. This only fires when
-  // the process is somehow not consuming CPU (e.g., sleeping in a syscall
-  // forever). Normal programs and infinite loops are caught by RLIMIT_CPU.
-  // Keep the multiplier small so that blocking/sleeping TLE solutions don't
-  // hold up the tester for a long time.
-  long long wall_deadline = get_wall_time_ms() + (long long)time_limit_ms * 2 + 2000;
+  // Parent: drop our own copy of the input pipe. Without this the pipe stays
+  // open even after the solution exits, and EZCP would block forever writing
+  // input that nobody is going to read.
+  close(STDIN_FILENO);
 
-  while (true) {
+  // Solutions that block instead of burning CPU never hit RLIMIT_CPU, so keep a
+  // wall-clock safety net as well. The multiplier is small so that a sleeping
+  // solution does not hold up the whole run.
+  long long wall_deadline = start + (long long)time_limit_ms * 2 + 2000;
+
+  for (;;) {
+    int status = 0;
     pid_t result = waitpid(pid, &status, WNOHANG);
+
     if (result == pid) {
+      long long elapsed = get_wall_time_ms() - start;
       if (WIFEXITED(status)) {
-        return WEXITSTATUS(status);
+        report(WEXITSTATUS(status) == 0 ? "OK" : "RTE", elapsed);
       } else if (WIFSIGNALED(status)) {
-        int sig = WTERMSIG(status);
-        // SIGXCPU: CPU soft limit hit (TLE).
-        // SIGKILL: either CPU hard limit hit or our wall-time safety kill.
-        if (sig == SIGXCPU || sig == SIGKILL) {
-          return 175;
-        }
-        // Any other signal (SIGSEGV, SIGABRT, …) is a crash.
-        return sig;
+        int signal_number = WTERMSIG(status);
+        // SIGXCPU: CPU soft limit reached.
+        // SIGKILL: CPU hard limit reached, or our wall-clock safety kill.
+        report((signal_number == SIGXCPU || signal_number == SIGKILL) ? "TLE" : "RTE", elapsed);
+      } else {
+        report("RTE", elapsed);
       }
+      return 0;
+    }
+
+    if (result < 0 && errno != EINTR) {
+      report("ERR", get_wall_time_ms() - start);
+      return 1;
     }
 
     if (get_wall_time_ms() >= wall_deadline) {
       kill(pid, SIGKILL);
-      killed_by_us = true;
       waitpid(pid, &status, 0);
-      return 175;
+      report("TLE", get_wall_time_ms() - start);
+      return 0;
     }
 
-    this_thread::sleep_for(chrono::milliseconds(10));
+    sleep_ms(2);
   }
-}
-
-int main(int argc, const char *argv[]) {
-  string command = argv[1];
-  int time_limit_ms = stoi(argv[2]);
-
-  long long start = get_wall_time_ms();
-  int exit_status = run_command_with_timeout(command, time_limit_ms);
-  long long end = get_wall_time_ms();
-
-  if (exit_status == 175) {
-    return 175;
-  }
-
-  cerr << end - start;
-  return exit_status;
 }
 
 #endif

@@ -125,6 +125,41 @@ pub mod gcc_tests {
         drop(tempdir);
     }
 
+    /// On Unix the binary name is the source name without its extension, so a
+    /// source that has no extension must not be overwritten by its own binary.
+    #[test]
+    fn test_transform_output_file_never_overwrites_the_source() {
+        let tempdir = tempfile::TempDir::new().unwrap();
+        let source_path = tempdir.path().join("noextension");
+        std::fs::write(&source_path, "int main(){return 0;}").unwrap();
+
+        let transformed = Gcc::transform_output_file(&source_path, None).unwrap();
+
+        assert_ne!(transformed, source_path);
+        assert!(transformed.is_absolute(), "{transformed:?} should be absolute");
+        // Predicting the path must not leave a placeholder behind.
+        assert!(!transformed.exists(), "{transformed:?} should not have been created");
+        assert_eq!(std::fs::read_to_string(&source_path).unwrap(), "int main(){return 0;}");
+
+        drop(tempdir);
+    }
+
+    /// The predicted path has to land in the requested directory, which is what
+    /// lets the build folder cleanup recognise its own binaries.
+    #[test]
+    fn test_transform_output_file_stays_in_its_directory() {
+        let tempdir = tempfile::TempDir::new().unwrap();
+        let source_path = tempdir.path().join("prog.cpp");
+        std::fs::write(&source_path, "int main(){return 0;}").unwrap();
+
+        let transformed = Gcc::transform_output_file(&source_path, None).unwrap();
+
+        let canonical_dir = dunce::canonicalize(tempdir.path()).unwrap();
+        assert_eq!(transformed.parent(), Some(canonical_dir.as_path()));
+
+        drop(tempdir);
+    }
+
     #[test]
     fn test_compile_error() {
         let gcc = Gcc::new().unwrap();

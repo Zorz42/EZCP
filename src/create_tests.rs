@@ -81,7 +81,7 @@ impl<T: ToOutput> Task<T> {
 
         let found_count_progress_bar = self.logger.add(ProgressBar::new((total_initial + target_robust) as u64));
         let tries_progress_bar = self.logger.add(ProgressBar::new(self.max_tries as u64));
-        
+
         // Phase 1 (optional): Stress tests
         if subtask.stress_tests != 0 {
             for gen_idx in 0..subtask.get_num_generators() {
@@ -100,7 +100,6 @@ impl<T: ToOutput> Task<T> {
                 self.logger.remove(&stress_testing_progress_bar);
             }
         }
-
 
         // Phase 2: Initial tests from each generator (only good solutions must pass)
         for gen_idx in 0..subtask.get_num_generators() {

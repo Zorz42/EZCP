@@ -3,50 +3,69 @@ use crate::{Error, Result};
 use log::debug;
 use std::path::{Path, PathBuf};
 
+/// Resolves a path to an absolute one without the `\\?\` prefix that
+/// [`std::fs::canonicalize`] adds on Windows.
+///
+/// Everything that stores or compares paths has to go through this, otherwise a
+/// verbatim and a plain form of the same path compare unequal and, for example,
+/// the build folder cleanup would not recognise its own binaries.
+pub fn canonicalize(path: &Path) -> Result<PathBuf> {
+    dunce::canonicalize(path).map_err(|err| Error::IOError {
+        err,
+        file: path.to_string_lossy().into_owned(),
+    })
+}
+
 fn find_gcc() -> Result<PathBuf> {
-    if let Ok(gcc_path) = std::env::var("GCC_PATH") {
-        return Ok(PathBuf::from(gcc_path));
+    if let Ok(gcc_path) = std::env::var("GCC_PATH")
+        && !gcc_path.is_empty()
+    {
+        // Accept both a full path and a bare program name, and fail with the
+        // "compiler not found" hint instead of an obscure spawn error later on.
+        return which::which(&gcc_path).map_or_else(|_| Err(CompilerNotFound), Ok);
     }
 
-    #[cfg(unix)]
-    {
-        // use which to find gcc in the PATH
-        which::which("g++").map_or(Err(CompilerNotFound), Ok)
+    let candidates = if cfg!(windows) {
+        ["g++", "mingw32-g++", "x86_64-w64-mingw32-g++", "c++"].as_slice()
+    } else {
+        ["g++", "c++", "clang++"].as_slice()
+    };
+
+    for candidate in candidates {
+        if let Ok(gcc_path) = which::which(candidate) {
+            return Ok(gcc_path);
+        }
     }
+
     #[cfg(windows)]
     {
-        let candidates = ["g++", "mingw32-g++", "x86_64-w64-mingw32-g++", "c++"];
-
-        for candidate in candidates {
-            if let Ok(gcc_path) = which::which(candidate) {
-                return Ok(gcc_path);
-            }
-        }
-
+        // Common toolchain locations that installers do not always add to PATH.
         let possible_dirs = [
             // MSYS2
+            "C:\\msys64\\ucrt64\\bin",
             "C:\\msys64\\mingw64\\bin",
             "C:\\msys64\\mingw32\\bin",
             "C:\\msys32\\mingw32\\bin",
             // MinGW standalone
             "C:\\MinGW\\bin",
+            "C:\\mingw64\\bin",
             "C:\\mingw-w64\\bin",
-            // Visual Studio (uncommon for gcc, but you may want cl.exe)
-            "C:\\Program Files (x86)\\Microsoft Visual Studio\\2019\\Community\\VC\\Tools\\MSVC",
-            "C:\\Program Files\\Microsoft Visual Studio\\2022\\Community\\VC\\Tools\\MSVC",
+            // Chocolatey / winlibs
+            "C:\\ProgramData\\chocolatey\\bin",
+            "C:\\Program Files\\mingw64\\bin",
         ];
 
         for dir in possible_dirs {
-            for candidate in &candidates {
+            for candidate in candidates {
                 let path = PathBuf::from(dir).join(format!("{candidate}.exe"));
-                if path.exists() {
+                if path.is_file() {
                     return Ok(path);
                 }
             }
         }
-
-        Err(CompilerNotFound)
     }
+
+    Err(CompilerNotFound)
 }
 
 /// C++ standards supported by GCC.
@@ -117,85 +136,53 @@ impl Gcc {
         })
     }
 
-    /// Predicts and prepares the output binary path for a given source file.
+    /// Predicts the output binary path for a given source file.
     ///
     /// This method ensures parent directories exist and handles platform-specific
-    /// extensions (.exe on Windows).
+    /// extensions (.exe on Windows). The returned path is absolute.
     pub fn transform_output_file(source_file: &PathBuf, output_file: Option<&PathBuf>) -> Result<PathBuf> {
-        let mut output_file = output_file.map_or(source_file, |p| p).to_owned();
-        #[cfg(windows)]
-        {
+        let mut output_file = output_file.map_or(source_file, |path| path).clone();
+        if cfg!(windows) {
             output_file.set_extension("exe");
-        }
-        #[cfg(unix)]
-        {
+        } else {
             output_file.set_extension("");
         }
 
-        // create output file and its parent directories if they do not exist
-        if let Some(parent) = output_file.parent()
-            && !parent.exists()
-        {
-            std::fs::create_dir_all(parent).map_err(|err| Error::IOError {
+        // A source file without an extension would otherwise be overwritten by
+        // its own binary.
+        if output_file == *source_file {
+            let mut file_name = output_file.file_name().unwrap_or_default().to_os_string();
+            file_name.push("_bin");
+            output_file.set_file_name(file_name);
+        }
+
+        // create the parent directory if it does not exist
+        let parent = match output_file.parent() {
+            Some(parent) if !parent.as_os_str().is_empty() => parent.to_path_buf(),
+            _ => PathBuf::from("."),
+        };
+        if !parent.exists() {
+            std::fs::create_dir_all(&parent).map_err(|err| Error::IOError {
                 err,
-                file: parent.to_string_lossy().to_string(),
+                file: parent.to_string_lossy().into_owned(),
             })?;
         }
 
-        let output_existed = output_file.exists();
-        if !output_file.exists() {
-            std::fs::File::create(&output_file).map_err(|err| Error::IOError {
-                err,
-                file: output_file.to_string_lossy().to_string(),
-            })?;
-        }
-
-        // convert to absolute path; use dunce to normalize UNC on Windows
-        let output_file = {
-            #[cfg(windows)]
-            {
-                dunce::canonicalize(&output_file)
-            }
-            #[cfg(unix)]
-            {
-                std::fs::canonicalize(&output_file)
-            }
-        }
-        .map_err(|err| Error::IOError {
-            err,
-            file: output_file.to_string_lossy().to_string(),
+        // Canonicalize the directory rather than the binary itself: the binary
+        // usually does not exist yet, and creating a placeholder just to resolve
+        // it would race with a compile running in parallel.
+        let file_name = output_file.file_name().ok_or_else(|| Error::IOError {
+            err: std::io::Error::new(std::io::ErrorKind::InvalidInput, "output path has no file name"),
+            file: output_file.to_string_lossy().into_owned(),
         })?;
-
-        if !output_existed {
-            std::fs::remove_file(&output_file).map_err(|err| Error::IOError {
-                err,
-                file: output_file.to_string_lossy().to_string(),
-            })?;
-        }
-
-        Ok(output_file)
+        Ok(canonicalize(&parent)?.join(file_name))
     }
 
     /// Compiles a C++ source file into an executable.
     ///
     /// Returns the absolute path to the generated binary.
     pub fn compile(&self, source_file: &Path, output_file: Option<&PathBuf>) -> Result<PathBuf> {
-        // transform the path to absolute path; use dunce on Windows to avoid UNC (\\?\) paths
-        let source_file = {
-            #[cfg(windows)]
-            {
-                dunce::canonicalize(source_file)
-            }
-            #[cfg(unix)]
-            {
-                std::fs::canonicalize(source_file)
-            }
-        }
-        .map_err(|err| Error::IOError {
-            err,
-            file: source_file.to_string_lossy().to_string(),
-        })?;
-
+        let source_file = canonicalize(source_file)?;
         let output_file = Self::transform_output_file(&source_file, output_file)?;
 
         let mut command = std::process::Command::new(&self.path);
@@ -211,6 +198,10 @@ impl Gcc {
         #[cfg(windows)]
         {
             command.arg("-static"); // Use static linking on Windows to avoid DLL issues
+            // MinGW defaults to a 2MB stack, far too little for the deep
+            // recursion competitive programming solutions rely on. Unix gets the
+            // same headroom from setrlimit / -stack_size.
+            command.arg("-Wl,--stack,536870912");
         }
 
         #[cfg(target_os = "macos")]
@@ -220,8 +211,17 @@ impl Gcc {
             command.arg("-Wl,-stack_size,0x20000000");
         }
 
-        command.arg(source_file).arg("-o").arg(&output_file);
+        command.arg(&source_file).arg("-o").arg(&output_file);
         // Do not override current_dir; pass absolute paths instead
+
+        #[cfg(windows)]
+        {
+            // The timer calls CommandLineToArgvW. Shell32 is part of the default
+            // MinGW link line, but ask for it explicitly so an unusual toolchain
+            // configuration cannot break the build. Libraries have to follow the
+            // objects that reference them.
+            command.arg("-lshell32");
+        }
 
         debug!("Running command: {command:?}");
         let process = command.output().map_err(|err| Error::IOError { err, file: String::new() })?;

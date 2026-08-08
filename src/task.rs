@@ -75,6 +75,31 @@ pub struct Task<T: ToOutput> {
     pub(crate) logger: MultiProgress,
 }
 
+/// Removes a directory tree, retrying briefly before giving up.
+///
+/// The previous run leaves hundreds of test files behind, and on Windows an
+/// antivirus scanner or the search indexer routinely still holds one of them
+/// open for a moment, which makes a single `remove_dir_all` fail for no lasting
+/// reason.
+fn remove_dir_all_with_retry(path: &Path) -> Result<()> {
+    const ATTEMPTS: u32 = 5;
+
+    for attempt in 1..=ATTEMPTS {
+        match fs::remove_dir_all(path) {
+            Ok(()) => return Ok(()),
+            Err(err) if attempt == ATTEMPTS => {
+                return Err(Error::IOError { err, file: path_str(path) });
+            }
+            Err(err) => {
+                debug!("Could not remove {} (attempt {attempt}/{ATTEMPTS}): {err}", path_str(path));
+                std::thread::sleep(std::time::Duration::from_millis(50 * u64::from(attempt)));
+            }
+        }
+    }
+
+    Ok(())
+}
+
 fn diff_checker(_test_input: &str, official_output: &str, program_output: &str) -> bool {
     fn parse_whitespace(s: &str) -> Vec<&str> {
         let mut res = s.split_whitespace().collect::<Vec<_>>();
@@ -138,11 +163,15 @@ impl<T: ToOutput> Task<T> {
     }
 
     pub(crate) fn log_result(&self, text: &str) -> Result<()> {
-        let mut file = OpenOptions::new()
-            .append(true)
-            .open(self.get_results_file())
-            .unwrap();
-        writeln!(file, "{}", strip_ansi(text)).map_err(|e| Error::IOError { err: e, file: path_str(&self.get_results_file()) })?;
+        let results_file = self.get_results_file();
+        let mut file = OpenOptions::new().append(true).create(true).open(&results_file).map_err(|e| Error::IOError {
+            err: e,
+            file: path_str(&results_file),
+        })?;
+        writeln!(file, "{}", strip_ansi(text)).map_err(|e| Error::IOError {
+            err: e,
+            file: path_str(&results_file),
+        })?;
         info!("{text}");
         Ok(())
     }
@@ -332,10 +361,7 @@ impl<T: ToOutput> Task<T> {
 
         // Prepare test directory
         if self.tests_path.exists() {
-            fs::remove_dir_all(&self.tests_path).map_err(|err| Error::IOError {
-                err,
-                file: path_str(&self.tests_path),
-            })?;
+            remove_dir_all_with_retry(&self.tests_path)?;
         }
         fs::create_dir_all(&self.tests_path).map_err(|err| Error::IOError {
             err,
@@ -343,7 +369,10 @@ impl<T: ToOutput> Task<T> {
         })?;
 
         // clear log file
-        fs::File::create(self.get_results_file()).map_err(|e| Error::IOError { err: e, file: path_str(&self.get_results_file()) })?;
+        fs::File::create(self.get_results_file()).map_err(|e| Error::IOError {
+            err: e,
+            file: path_str(&self.get_results_file()),
+        })?;
 
         let num_subtasks = self.subtasks.len();
         let mut global_test_id = 0;

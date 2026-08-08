@@ -20,6 +20,9 @@ pub enum Error {
     #[error("Compiler error: {stderr}\n{stdout}")]
     CompilerError { stderr: String, stdout: String },
 
+    #[error("Could not measure a solution's run: {details}")]
+    TimerFailed { details: String },
+
     #[error("Solution timed out on test {test_path} (generator {gen_id})")]
     SolutionTimedOut { test_path: String, gen_id: usize },
 

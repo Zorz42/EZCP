@@ -3,6 +3,9 @@ name = "ezcp"
 version = "0.4.0"
 edition = "2024"
 description = "A simple tool to automatically generate test cases for competitive programming problems."
+# Let chains and the `zip` dependency both need 1.88; declaring it turns an
+# unsupported toolchain into a clear message instead of a syntax error.
+rust-version = "1.88"
 license-file = "LICENSE"
 repository = "https://github.com/Zorz42/EZCP"
 keywords = ["cp", "test_data", "framework", "generator"]
