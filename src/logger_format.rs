@@ -11,16 +11,16 @@ pub fn logger_format(buf: &mut Formatter, record: &Record) -> std::io::Result<()
         log::Level::Trace => "T",
     };
 
-    // split the message into lines
+    // Continuation lines line up under the first one instead of repeating the
+    // prefix, so a multi-line message still reads as a single entry.
+    let continuation_indent = " ".repeat(prefix.len());
+
     let message = record.args().to_string();
     for (line_num, line) in message.lines().enumerate() {
         if line_num == 0 {
-            // For the first line, write the prefix
             writeln!(buf, "[{prefix}] {line}")?;
         } else {
-            // For subsequent lines, just write the line
-            let prefix_space = " ".repeat(prefix.len());
-            writeln!(buf, "{prefix_space}|  {line}")?;
+            writeln!(buf, "{continuation_indent}|  {line}")?;
         }
     }
     Ok(())

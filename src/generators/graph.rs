@@ -74,13 +74,49 @@ impl Graph {
             "cannot fit {m} edges in a graph with {n} nodes (at most {} are possible)",
             max_simple_edges(n)
         );
-        let mut rng = rand::rng();
-        while result.get_num_edges() < m {
-            let u = rng.random_range(0..n);
-            let v = rng.random_range(0..n);
-            result.add_edge(u as usize, v as usize);
-        }
+        result.add_random_edges(m);
         result
+    }
+
+    /// Adds random edges until the graph holds `m` of them.
+    ///
+    /// Guessing pairs is fine while the graph is sparse, but once most of the
+    /// possible edges are already taken almost every guess is a repeat, and the
+    /// last few edges would take unboundedly many attempts to find. Past that
+    /// point the candidates are enumerated and shuffled instead, which costs a
+    /// number of pairs comparable to `m` itself.
+    fn add_random_edges(&mut self, m: i32) {
+        let mut rng = rand::rng();
+        let n = self.get_num_nodes();
+
+        // Half of the possible edges is where guessing still succeeds every other
+        // attempt on average; beyond it the expected number of guesses grows
+        // without bound.
+        if i64::from(m) * 2 <= max_simple_edges(n) {
+            while self.get_num_edges() < m {
+                let u = rng.random_range(0..n);
+                let v = rng.random_range(0..n);
+                self.add_edge(u as usize, v as usize);
+            }
+            return;
+        }
+
+        let mut candidates = Vec::new();
+        for u in 0..n as usize {
+            for v in 0..u {
+                if !self.has_edge(u, v) {
+                    candidates.push((u, v));
+                }
+            }
+        }
+        candidates.shuffle(&mut rng);
+
+        for (u, v) in candidates {
+            if self.get_num_edges() >= m {
+                break;
+            }
+            self.add_edge(u, v);
+        }
     }
 
     /// This function create a new random path (that is also a tree)
@@ -167,12 +203,7 @@ impl Graph {
         );
         let mut result = Self::new_random_tree(n);
         result.is_tree = false;
-        let mut rng = rand::rng();
-        while result.get_num_edges() < m {
-            let u = rng.random_range(0..n);
-            let v = rng.random_range(0..n);
-            result.add_edge(u as usize, v as usize);
-        }
+        result.add_random_edges(m);
         result
     }
 
@@ -334,15 +365,19 @@ impl ToOutput for Graph {
     /// The next m lines will contain two integers u and v, representing an edge between nodes u and v.
     /// The nodes are 1-indexed.
     /// The edges will be randomly shuffled and pair may be swapped.
+    ///
+    /// # Panics
+    /// Panics if the graph was built as a tree but is not one, which would make
+    /// the omitted edge count wrong.
     fn to_output(self) -> String {
         if self.is_tree {
             assert!(self.is_tree());
         }
         let mut result = String::new();
         if self.is_tree {
-            result += &format!("{}\n", self.get_num_nodes());
+            writeln!(result, "{}", self.get_num_nodes()).ok();
         } else {
-            result += &format!("{} {}\n", self.get_num_nodes(), self.get_num_edges());
+            writeln!(result, "{} {}", self.get_num_nodes(), self.get_num_edges()).ok();
         }
         let mut edges = self.edges_iter().collect::<Vec<_>>();
         let mut rng = rand::rng();

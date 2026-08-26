@@ -1,16 +1,15 @@
 use crate::Error::SolutionFailed;
 use crate::Result;
+use crate::progress::ScopedProgressBar;
 use crate::runner::cpp_runner::{CppRunner, ProgramHandle};
 use crate::runner::exec_runner::RunResult;
 use crate::task::path_str;
 use crate::{Error, Subtask, Task, ToOutput};
-use indicatif::{MultiProgress, ProgressBar};
 use log::{error, info, warn};
 use rand::prelude::SliceRandom;
 use std::collections::HashSet;
 use std::fs;
 use std::hash::{DefaultHasher, Hash, Hasher};
-use std::ops::Deref;
 use std::path::PathBuf;
 
 fn trim_whitespace(input: &str) -> String {
@@ -45,42 +44,17 @@ fn trim_whitespace(input: &str) -> String {
     result
 }
 
+/// How many times in a row a generator may repeat a test it has already produced
+/// before the initial batch gives up on it.
+///
+/// A generator with a small range runs out of distinct tests long before it has
+/// produced the requested count, and without a bound it would spin forever.
+const MAX_REPEATED_TESTS: usize = 100;
+
 fn hash_string(s: &str) -> u64 {
     let mut hasher = DefaultHasher::new();
     s.hash(&mut hasher);
     hasher.finish()
-}
-
-/// A progress bar that takes itself off the screen once it goes out of scope.
-///
-/// Test generation gives up through `?` on a whole range of paths, and a bar that
-/// is only removed on the happy path stays behind as a frozen leftover.
-struct ScopedProgressBar<'logger> {
-    logger: &'logger MultiProgress,
-    bar: ProgressBar,
-}
-
-impl<'logger> ScopedProgressBar<'logger> {
-    fn new(logger: &'logger MultiProgress, len: u64) -> Self {
-        Self {
-            logger,
-            bar: logger.add(ProgressBar::new(len)),
-        }
-    }
-}
-
-impl Deref for ScopedProgressBar<'_> {
-    type Target = ProgressBar;
-
-    fn deref(&self) -> &Self::Target {
-        &self.bar
-    }
-}
-
-impl Drop for ScopedProgressBar<'_> {
-    fn drop(&mut self) {
-        self.logger.remove(&self.bar);
-    }
 }
 
 impl<T: ToOutput> Task<T> {
@@ -141,7 +115,7 @@ impl<T: ToOutput> Task<T> {
             let needed = subtask.initial_counts.get(gen_idx).copied().unwrap_or(0);
             let mut got = 0;
             let mut fails = 0;
-            while got < needed && fails < 100 {
+            while got < needed && fails < MAX_REPEATED_TESTS {
                 let mut candidate = subtask.generate_test(gen_idx).to_output();
                 if self.trim_whitespace {
                     candidate = trim_whitespace(&candidate);

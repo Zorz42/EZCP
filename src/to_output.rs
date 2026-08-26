@@ -44,10 +44,6 @@ impl_to_output!(i8, i16, i32, i64, i128, isize, u8, u16, u32, u64, u128, usize, 
 
 impl<T: ToOutput> ToOutput for Vec<T> {
     fn to_output(self) -> String {
-        if self.is_empty() {
-            return String::new();
-        }
-
         let mut res = String::new();
         for i in self {
             let s = i.to_output();

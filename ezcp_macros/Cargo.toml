@@ -10,7 +10,12 @@ rust-version = "1.88"
 [lib]
 proc-macro = true
 
+[lints]
+workspace = true
+
 [dependencies]
-syn = { version = "2.0", features = ["full"] }
+# A derive macro only ever parses a type definition, which the default features
+# already cover; "full" would pull in the whole expression grammar.
+syn = "2.0"
 quote = "1.0"
 proc-macro2 = "1.0"

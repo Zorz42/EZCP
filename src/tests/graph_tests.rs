@@ -69,6 +69,35 @@ mod graph_tests {
         assert!(!graph.has_edge(4, 4));
     }
 
+    /// A graph that is asked for (nearly) every possible edge used to be built by
+    /// guessing pairs, so the last edges took unboundedly many attempts to find.
+    #[test]
+    fn test_random_dense() {
+        for n in 2..80 {
+            let max_edges = n * (n - 1) / 2;
+            for m in [max_edges, max_edges - 1, max_edges * 3 / 4] {
+                let graph = Graph::new_random(n, m);
+                assert_eq!(graph.get_num_nodes(), n);
+                assert_eq!(graph.get_num_edges(), m, "for {n} nodes and {m} edges");
+            }
+        }
+
+        assert!(Graph::new_random(200, 200 * 199 / 2).is_full());
+    }
+
+    /// The same for a connected graph, which starts from a spanning tree and then
+    /// fills the rest in.
+    #[test]
+    fn test_random_connected_dense() {
+        for n in 2..80 {
+            let max_edges = n * (n - 1) / 2;
+            let graph = Graph::new_random_connected(n, max_edges);
+            assert_eq!(graph.get_num_edges(), max_edges);
+            assert!(graph.is_connected());
+            assert!(graph.is_full());
+        }
+    }
+
     #[test]
     fn test_random() {
         for i in 5..100 {

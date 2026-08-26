@@ -15,6 +15,9 @@ readme = "README.md"
 [workspace]
 members = ["ezcp_macros"]
 
+[lints]
+workspace = true
+
 [dependencies]
 # Both a version and a path: the path is used in the workspace, the version is
 # what a published crate depends on (packaging fails without it).
@@ -33,7 +36,7 @@ env_logger = { version = "0.11", default-features = false, features = [] }
 log = { version = "0.4", default-features = false, features = [] }
 dunce = { version = "1.0", default-features = false }
 
-[lints.clippy]
+[workspace.lints.clippy]
 all = { level = "warn", priority = -1 }
 pedantic = { level = "warn", priority = -1 }
 nursery = { level = "warn", priority = -1 }
@@ -69,7 +72,6 @@ unnecessary_self_imports = "warn"
 unneeded_field_pattern = "warn"
 verbose_file_reads = "warn"
 if_not_else = "warn"
-from_iter_instead_of_collect = "warn"
 ignored_unit_patterns = "warn"
 inefficient_to_string = "warn"
 impl_trait_in_params = "warn"
@@ -169,4 +171,3 @@ zero_ptr = "allow"
 indexing_slicing = "allow"
 allow_attributes_without_reason = "allow"
 assigning_clones = "allow"
-format-push-string = "allow"

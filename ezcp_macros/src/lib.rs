@@ -29,9 +29,11 @@ pub fn to_output_derive(input: TokenStream) -> TokenStream {
     let fields_output = match input.data {
         Data::Struct(data_struct) => match data_struct.fields {
             syn::Fields::Named(fields_named) => {
-                let field_calls = fields_named.named.into_iter().map(|field| {
-                    let field_name = field.ident.expect("named fields always have an identifier");
-                    field_output(quote! { self.#field_name })
+                let field_calls = fields_named.named.into_iter().filter_map(|field| {
+                    // A named field always has an identifier; this only spells that
+                    // out for the type system rather than asserting it.
+                    let field_name = field.ident?;
+                    Some(field_output(quote! { self.#field_name }))
                 });
                 quote! { #(#field_calls)* }
             }

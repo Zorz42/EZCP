@@ -5,6 +5,8 @@ pub mod cpp_runner_tests {
     use crate::runner::cpp_runner::CppRunner;
     use crate::runner::exec_runner::RunResult;
     use crate::tests::test_shared::initialize_logger;
+    use std::fmt::Write as _;
+    use std::sync::Arc;
     use std::time::{Duration, Instant};
     use tempfile::TempDir;
 
@@ -222,7 +224,7 @@ pub mod cpp_runner_tests {
         ";
 
         let program_handle = runner.add_program(program_source).unwrap();
-        let task_handle = runner.add_task(program_handle, String::new(), 1000);
+        let task_handle = runner.add_task(program_handle, Arc::from(""), 1000);
 
         runner.run_tasks(None, false).unwrap();
 
@@ -252,7 +254,7 @@ pub mod cpp_runner_tests {
         // Comfortably larger than the pipe buffer on every supported platform.
         let mut input = String::from("7\n");
         for i in 0..500_000 {
-            input += &format!("{i} ");
+            write!(input, "{i} ").unwrap();
         }
 
         let result = run_within(Duration::from_secs(90), "running a solution that ignores its input", move || {
@@ -288,7 +290,7 @@ pub mod cpp_runner_tests {
         let count = 200_000_i64;
         let mut input = String::new();
         for i in 0..count {
-            input += &format!("{i}\n");
+            writeln!(input, "{i}").unwrap();
         }
         let expected_sum = count * (count - 1) / 2;
 
@@ -338,6 +340,42 @@ pub mod cpp_runner_tests {
         drop(tempdir);
     }
 
+    fn build_folder_files(build_folder: &std::path::Path) -> Vec<std::path::PathBuf> {
+        std::fs::read_dir(build_folder).unwrap().flatten().map(|entry| entry.path()).collect()
+    }
+
+    /// A failing task must not strand the ones that are still running, and it must
+    /// not leave `run_tasks` waiting for tasks it has decided never to start.
+    #[test]
+    #[cfg(not(windows))]
+    fn test_run_tasks_reports_failure_without_hanging() {
+        initialize_logger();
+
+        let result = run_within(Duration::from_secs(60), "running tasks that all fail to start", || {
+            let tempdir = TempDir::new().unwrap();
+            // Creating the runner builds the timer, which is the only binary in the
+            // build folder at this point.
+            let mut runner = CppRunner::new(tempdir.path()).unwrap();
+            let binaries: Vec<_> = build_folder_files(tempdir.path()).into_iter().filter(|path| path.extension().is_none()).collect();
+            assert_eq!(binaries.len(), 1, "the timer should be the only binary in a fresh build folder");
+            let timer = binaries[0].clone();
+
+            let program_handle = runner.add_program(HELLO_WORLD_PROGRAM).unwrap();
+
+            // With the timer gone no task can be started at all, so every one of
+            // them fails. More tasks than worker threads, so some are still queued
+            // when the first failure comes in.
+            std::fs::remove_file(&timer).unwrap();
+
+            for _ in 0..20 {
+                runner.add_task(program_handle, Arc::from(""), 1000);
+            }
+            runner.run_tasks(None, false)
+        });
+
+        assert!(result.is_err(), "a task that cannot be started must be reported, got {result:?}");
+    }
+
     /// Cleaning the build folder must drop strays but keep everything the runner
     /// still needs, which only holds if all paths are normalised the same way.
     #[test]
@@ -351,7 +389,7 @@ pub mod cpp_runner_tests {
         let stray = tempdir.path().join("stray.txt");
         std::fs::write(&stray, "junk").unwrap();
 
-        runner.add_task(program_handle, String::new(), 1000);
+        runner.add_task(program_handle, Arc::from(""), 1000);
         runner.run_tasks(None, true).unwrap();
 
         assert!(!stray.exists(), "cleanup should have removed the stray file");

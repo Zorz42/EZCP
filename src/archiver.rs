@@ -1,6 +1,7 @@
 use crate::Error;
 use crate::Result;
-use indicatif::{MultiProgress, ProgressBar};
+use crate::progress::ScopedProgressBar;
+use indicatif::MultiProgress;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use zip::write::SimpleFileOptions;
@@ -14,7 +15,7 @@ pub fn archive_files(files: &[PathBuf], archive_path: &Path, logger: &MultiProgr
     })?);
     let options = SimpleFileOptions::default().compression_method(zip::CompressionMethod::Deflated);
 
-    let progress_bar = logger.add(ProgressBar::new(files.len() as u64));
+    let progress_bar = ScopedProgressBar::new(logger, files.len() as u64);
 
     for file in files {
         progress_bar.inc(1);
@@ -27,7 +28,10 @@ pub fn archive_files(files: &[PathBuf], archive_path: &Path, logger: &MultiProgr
         zipper.write_all(&input_file).map_err(|err| Error::IOError { err, file: file_name.clone() })?;
     }
 
-    logger.remove(&progress_bar);
+    // Write the central directory by hand instead of leaving it to `Drop`, which
+    // has nowhere to report a failure to. Without this a full disk would leave a
+    // truncated archive behind and the run would still be reported as a success.
+    zipper.finish().map_err(|err| Error::ZipError { err })?;
 
     Ok(())
 }

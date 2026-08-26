@@ -102,7 +102,7 @@ pub mod generic_tests {
     fn test_fails_without_solution() {
         let task = Test::<String>::new();
 
-        assert!(matches!(task.task.run(), Err(Error::MissingSolution { .. })));
+        assert!(matches!(task.task.run(), Err(Error::MissingSolution)));
     }
 
     #[test]

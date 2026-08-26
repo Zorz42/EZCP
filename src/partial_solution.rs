@@ -4,8 +4,9 @@ use crate::task::path_str;
 use crate::{Error, Result, Task, ToOutput};
 use console::style;
 use std::collections::{BTreeMap, HashSet};
-use std::fmt::Display;
+use std::fmt::{Display, Write as _};
 use std::path::PathBuf;
+use std::sync::Arc;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 enum TestResult {
@@ -27,8 +28,8 @@ impl Display for TestResult {
     }
 }
 
-impl TestResult {
-    pub const fn from(result: &RunResult) -> Self {
+impl From<&RunResult> for TestResult {
+    fn from(result: &RunResult) -> Self {
         match result {
             RunResult::Ok(_, _) => Self::Ok,
             RunResult::TimedOut => Self::TimedOut,
@@ -41,7 +42,7 @@ impl<T: ToOutput> Task<T> {
     /// This function takes an executable file and a list of test files.
     /// It runs the executable on each test file and compares the output with the expected output.
     /// It returns a set of subtasks that passed.
-    pub(crate) fn run_partial_solution(&self, test_files: &Vec<Vec<(PathBuf, PathBuf)>>, cpp_runner: &mut CppRunner, program_handle: ProgramHandle, lines_of_code: usize) -> Result<HashSet<usize>> {
+    pub(crate) fn run_partial_solution(&self, test_files: &[Vec<(PathBuf, PathBuf)>], cpp_runner: &mut CppRunner, program_handle: ProgramHandle, lines_of_code: usize) -> Result<HashSet<usize>> {
         cpp_runner.clear_tasks();
         let mut test_handles = Vec::new();
         let mut passed_subtasks = HashSet::new();
@@ -50,7 +51,7 @@ impl<T: ToOutput> Task<T> {
             let mut test_handles_element = Vec::new();
             for (input_file, output_file) in subtask_tests {
                 let input_data = std::fs::read_to_string(input_file).map_err(|err| Error::IOError { err, file: path_str(input_file) })?;
-                let handle = cpp_runner.add_task(program_handle, input_data, self.time_limit);
+                let handle = cpp_runner.add_task(program_handle, Arc::from(input_data), self.time_limit);
 
                 test_handles_element.push((handle, output_file.clone()));
             }
@@ -77,9 +78,9 @@ impl<T: ToOutput> Task<T> {
 
                 match run_result {
                     RunResult::Ok(time, program_output) => {
-                        if max_time.is_some() {
-                            max_time = Some(i32::max(max_time.unwrap(), time));
-                        }
+                        // `None` means some earlier test already failed, and then no
+                        // running time is worth reporting for the subtask.
+                        max_time = max_time.map(|slowest| slowest.max(time));
 
                         let correct_output = std::fs::read_to_string(output_file).map_err(|err| Error::IOError { err, file: path_str(output_file) })?;
                         if !(self.checker)(&input_data, &correct_output, &program_output) {
@@ -96,14 +97,13 @@ impl<T: ToOutput> Task<T> {
                 results.entry(test_result).and_modify(|count| *count += 1).or_insert(1);
             }
 
-            results_text += "\n";
-            results_text += &format!("- Subtask {}: ", subtask_id + 1);
+            write!(results_text, "\n- Subtask {}: ", subtask_id + 1).ok();
             for (result, count) in &results {
-                results_text += &format!("{result} ({count}) ");
+                write!(results_text, "{result} ({count}) ").ok();
             }
 
             if let Some(max_time) = max_time {
-                results_text += &format!("{max_time}ms");
+                write!(results_text, "{max_time}ms").ok();
             }
 
             if results.len() == 1 && results.contains_key(&TestResult::Ok) {

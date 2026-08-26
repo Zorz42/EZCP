@@ -6,7 +6,7 @@
 // its answer straight through EZCP's pipes. Once the solution is done the timer
 // appends a single result line to stderr:
 //
-//     \n__EZCP_RESULT__ <OK|TLE|RTE|ERR> <wall_time_ms>\n
+//     \n__EZCP_RESULT__ <OK|TLE|RTE|ERR> <cpu_time_ms>\n
 //
 // EZCP parses the *last* occurrence of that marker, so a solution that writes to
 // stderr itself cannot confuse the protocol, and no information has to be
@@ -20,6 +20,10 @@
 // under load (EZCP runs several solutions in parallel) does not turn correct
 // solutions into false TLEs. A wall-clock safety net catches solutions that
 // block forever without burning CPU.
+//
+// The reported time is CPU time too, for the same reason: a wall-clock figure
+// would swing with the load on the machine, so the same solution on the same
+// test would be reported differently from one run to the next.
 
 #ifdef _WIN32
 
@@ -192,14 +196,13 @@ int main() {
     }
   }
 
-  LARGE_INTEGER end_counter;
-  QueryPerformanceCounter(&end_counter);
-  long long elapsed_ms = (frequency.QuadPart > 0) ? ((end_counter.QuadPart - start_counter.QuadPart) * 1000 / frequency.QuadPart) : 0;
+  // Read the CPU time before closing the handle it is read from.
+  long long cpu_time_ms = get_cpu_time_ms(process_info.hProcess);
 
   CloseHandle(process_info.hProcess);
   CloseHandle(process_info.hThread);
 
-  report(verdict, elapsed_ms);
+  report(verdict, cpu_time_ms);
   return 0;
 }
 
@@ -221,6 +224,18 @@ int main() {
 static void report(const char *verdict, long long elapsed_ms) {
   fprintf(stderr, "\n__EZCP_RESULT__ %s %lld\n", verdict, elapsed_ms);
   fflush(stderr);
+}
+
+// User + kernel time consumed by the solution. RUSAGE_CHILDREN only counts
+// children that have been reaped, and this timer only ever has the one.
+static long long get_child_cpu_time_ms() {
+  struct rusage usage;
+  if (getrusage(RUSAGE_CHILDREN, &usage) != 0) {
+    return 0;
+  }
+  long long user_ms = (long long)usage.ru_utime.tv_sec * 1000 + usage.ru_utime.tv_usec / 1000;
+  long long system_ms = (long long)usage.ru_stime.tv_sec * 1000 + usage.ru_stime.tv_usec / 1000;
+  return user_ms + system_ms;
 }
 
 static long long get_wall_time_ms() {
@@ -314,7 +329,7 @@ int main(int argc, char *argv[]) {
     pid_t result = waitpid(pid, &status, WNOHANG);
 
     if (result == pid) {
-      long long elapsed = get_wall_time_ms() - start;
+      long long elapsed = get_child_cpu_time_ms();
       if (WIFEXITED(status)) {
         report(WEXITSTATUS(status) == 0 ? "OK" : "RTE", elapsed);
       } else if (WIFSIGNALED(status)) {
@@ -329,14 +344,14 @@ int main(int argc, char *argv[]) {
     }
 
     if (result < 0 && errno != EINTR) {
-      report("ERR", get_wall_time_ms() - start);
+      report("ERR", get_child_cpu_time_ms());
       return 1;
     }
 
     if (get_wall_time_ms() >= wall_deadline) {
       kill(pid, SIGKILL);
       waitpid(pid, &status, 0);
-      report("TLE", get_wall_time_ms() - start);
+      report("TLE", get_child_cpu_time_ms());
       return 0;
     }
 

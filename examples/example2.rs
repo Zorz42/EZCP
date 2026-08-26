@@ -2,6 +2,7 @@ use rand::prelude::*;
 use std::path::PathBuf;
 
 const SOLUTION: &str = "
+#include <algorithm>
 #include <iostream>
 using namespace std;
 int main() {
@@ -29,7 +30,7 @@ int main() {
 }
 ";
 
-fn main() {
+fn main() -> ezcp::Result<()> {
     // In this task you have n coins with values a1, a2, ..., an. You need to find the smallest sum, you cannot get using these coins.
     // For example, if you have coins with values 1, 2 and 4, you can get any sum from 1 to 7, but you cannot get 8.
 
@@ -68,5 +69,5 @@ fn main() {
         .with_test(1, ezcp::array_generator(200_000, 200_000, 1, 1));
 
     // add subtasks to task
-    task.with_subtask(subtask1).with_subtask(subtask2).with_subtask(subtask3).with_subtask(subtask4).run().ok();
+    task.with_subtask(subtask1).with_subtask(subtask2).with_subtask(subtask3).with_subtask(subtask4).run()
 }

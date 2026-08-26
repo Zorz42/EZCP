@@ -1,9 +1,11 @@
 use crate::Error;
 use crate::Result;
+use crate::task::path_str;
 use log::trace;
 use std::io::Write;
 use std::path::Path;
 use std::process::{Command, Stdio};
+use std::sync::Arc;
 
 /// Marker the `timer` utility appends to stderr to report its verdict.
 /// See `timer.cpp` for the protocol.
@@ -48,7 +50,7 @@ fn parse_result_marker(stderr: &str) -> Option<(&str, i32)> {
 /// * `input_data` - Input to be sent via stdin.
 /// * `time_limit` - Maximum CPU time in milliseconds.
 /// * `timer_path` - Path to the pre-compiled `timer` utility.
-pub fn run_solution(executable_file: &Path, input_data: String, time_limit: i32, timer_path: &Path) -> Result<RunResult> {
+pub fn run_solution(executable_file: &Path, input_data: Arc<str>, time_limit: i32, timer_path: &Path) -> Result<RunResult> {
     let mut solution_process = Command::new(timer_path);
     solution_process.arg(executable_file);
     solution_process.arg(format!("{time_limit}"));
@@ -59,7 +61,7 @@ pub fn run_solution(executable_file: &Path, input_data: String, time_limit: i32,
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
-        .map_err(|err| Error::IOError { err, file: String::new() })?;
+        .map_err(|err| Error::IOError { err, file: path_str(timer_path) })?;
 
     // Feed stdin from a helper thread. Writing it inline would deadlock as soon
     // as the input outgrows the pipe buffer and the solution either stops
@@ -74,7 +76,7 @@ pub fn run_solution(executable_file: &Path, input_data: String, time_limit: i32,
         })
     });
 
-    let output_result = solution_process.wait_with_output().map_err(|err| Error::IOError { err, file: String::new() })?;
+    let output_result = solution_process.wait_with_output().map_err(|err| Error::IOError { err, file: path_str(executable_file) })?;
 
     // The solution and the timer are both gone by now, so every read end of the
     // input pipe is closed and the writer cannot still be blocked.

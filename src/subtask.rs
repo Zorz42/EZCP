@@ -2,7 +2,6 @@ use crate::test::TestGenerator;
 
 use crate::to_output::ToOutput;
 use rand::RngExt;
-use std::rc::Rc;
 
 /// Represents a problem subtask with specific constraints.
 ///
@@ -12,7 +11,7 @@ pub struct Subtask<T: ToOutput> {
     pub(crate) name: String,
     pub(crate) points: i32,
     /// Generators that produce test inputs for this subtask
-    generators: Vec<Rc<TestGenerator<T>>>,
+    generators: Vec<TestGenerator<T>>,
     /// Minimum number of tests to generate from each generator initially
     pub(crate) initial_counts: Vec<usize>,
     /// Override custom `min_failures_per_solution`
@@ -59,8 +58,7 @@ impl<T: ToOutput> Subtask<T> {
     #[must_use]
     pub fn with_test<F: Fn() -> T + 'static>(mut self, count: i32, function: F) -> Self {
         assert!(count >= 0, "a generator cannot produce {count} tests");
-        let generator = Rc::new(TestGenerator::new(function));
-        self.generators.push(generator);
+        self.generators.push(TestGenerator::new(function));
         self.initial_counts.push(count as usize);
         self
     }

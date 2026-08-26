@@ -33,7 +33,7 @@ int main(){
 }
 "#;
 
-fn main() {
+fn main() -> ezcp::Result<()> {
     // The first task you get an array of integers. You need to find the sum of all elements in the array minus the half of the maximum element.
     // Also all elements in the array are even.
 
@@ -77,5 +77,4 @@ fn main() {
         .with_subtask(subtask3)
         .with_partial_solution("x/2", PARTIAL_SOLUTION, &[0])
         .run()
-        .ok();
 }

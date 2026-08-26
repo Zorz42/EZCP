@@ -23,17 +23,14 @@ pub fn path_str(p: &Path) -> String {
     p.to_string_lossy().into_owned()
 }
 
-/// This struct represents an entire task.
-/// You can add subtasks, solutions (main and partial) and set the time limit.
-/// Once you are done, you can create tests for the task.
-///
-/// The system dynamically generates tests until each solution that is expected
-/// to fail on a subtask has failed on at least `min_failures_per_solution` tests.
 /// Represents an entire competitive programming task.
 ///
-/// A `Task` manages subtasks, solutions, and test generation configurations.
-/// It uses a builder-like pattern to set up the problem before running the
-/// test generation and verification process.
+/// A `Task` manages subtasks, solutions and test generation settings. It is put
+/// together with a builder-like pattern and then run with [`Task::run`], which
+/// compiles every solution, generates the tests and verifies the outcomes.
+///
+/// Test generation keeps going until each solution that is expected to fail on a
+/// subtask has failed on at least `min_failures_per_solution` tests.
 pub struct Task<T: ToOutput> {
     /// Name of the task
     pub(crate) name: String,
@@ -109,26 +106,6 @@ fn diff_checker(_test_input: &str, official_output: &str, program_output: &str) 
     parse_whitespace(official_output) == parse_whitespace(program_output)
 }
 
-fn strip_ansi(input: &str) -> String {
-    let mut out = String::with_capacity(input.len());
-    let mut chars = input.chars();
-    while let Some(c) = chars.next() {
-        if c == '\x1b' {
-            // Skip CSI sequence: ESC [ ... letter
-            if chars.next() == Some('[') {
-                for ch in chars.by_ref() {
-                    if ch.is_ascii_alphabetic() {
-                        break;
-                    }
-                }
-            }
-        } else {
-            out.push(c);
-        }
-    }
-    out
-}
-
 impl<T: ToOutput> Task<T> {
     /// Creates a new `Task` with the given name and root directory.
     ///
@@ -168,7 +145,7 @@ impl<T: ToOutput> Task<T> {
             err: e,
             file: path_str(&results_file),
         })?;
-        writeln!(file, "{}", strip_ansi(text)).map_err(|e| Error::IOError {
+        writeln!(file, "{}", console::strip_ansi_codes(text)).map_err(|e| Error::IOError {
             err: e,
             file: path_str(&results_file),
         })?;
@@ -178,7 +155,8 @@ impl<T: ToOutput> Task<T> {
 
     /// Sets the source code of the correct (main) solution.
     ///
-    /// Panics if it is called the second time.
+    /// # Panics
+    /// Panics if it is called a second time.
     #[must_use]
     pub fn with_solution_source(mut self, source: &str) -> Self {
         assert!(self.solution_source.is_empty());
@@ -321,17 +299,13 @@ impl<T: ToOutput> Task<T> {
         // print title with ===== before and after text
         // Measure how wide the title actually prints, not how many bytes it takes,
         // so a task name with non-ASCII characters still gets a matching border.
-        let mut border_text = String::from(" ");
-        for _ in 0..console::measure_text_width(text) + 6 {
-            border_text.push('=');
-        }
+        let border_text = format!(" {}", "=".repeat(console::measure_text_width(text) + 6));
         self.logger.println(&border_text).ok();
         self.logger.println(format!(" || {} ||", style(text).bold())).ok();
         self.logger.println(&border_text).ok();
     }
 
     /// This function builds solution and then calls `generate_tests`.
-    #[allow(clippy::too_many_lines)]
     fn create_tests_inner(&self) -> Result<()> {
         self.logger.println("").ok();
         let text = format!("Creating tests for task \"{}\"", self.name);
@@ -351,7 +325,7 @@ impl<T: ToOutput> Task<T> {
 
         // check if solution source exists
         if self.solution_source.is_empty() {
-            return Err(Error::MissingSolution {});
+            return Err(Error::MissingSolution);
         }
         // add all cpp files (solution and partial solutions)
         let mut cpp_runner = CppRunner::new(&self.build_folder_path)?;
