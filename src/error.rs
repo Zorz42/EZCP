@@ -32,13 +32,12 @@ pub enum Error {
     #[error("Solution produces wrong answer on {test_path} (generator {gen_id})")]
     SolutionFailed { test_path: String, gen_id: usize },
 
-    #[error("Partial solution {partial_number} ({partial_name}) passes extra subtask {subtask_number} ({subtask_name}) (generator {gen_id})")]
+    #[error("Partial solution {partial_number} ({partial_name}) passes subtask {subtask_number} ({subtask_name}), which it is not supposed to pass")]
     PartialSolutionPassesExtraSubtask {
         subtask_number: usize,
         partial_number: usize,
         partial_name: String,
         subtask_name: String,
-        gen_id: usize,
     },
 
     #[error("Partial solution {partial_number} ({partial_name}) does not pass subtask {subtask_number} ({subtask_name}) ({verdict}) (generator {gen_id}).")]
@@ -53,6 +52,14 @@ pub enum Error {
 
     #[error("Missing solution")]
     MissingSolution,
+
+    #[error("Partial solution {partial_number} ({partial_name}) is declared to pass subtask index {subtask_number}, but the task only has {num_subtasks} subtasks (subtask indices are 0-based).")]
+    InvalidSubtaskIndex {
+        partial_number: usize,
+        partial_name: String,
+        subtask_number: usize,
+        num_subtasks: usize,
+    },
 }
 
 pub type Result<T, E = Error> = std::result::Result<T, E>;

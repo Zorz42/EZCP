@@ -187,7 +187,7 @@ impl CppRunner {
         for &program in programs {
             handles.push(self.add_task(program, Arc::clone(&input), time_limit));
         }
-        self.run_tasks(None, false)?;
+        self.run_tasks(None)?;
         let mut results = Vec::new();
         for handle in handles {
             results.push(self.get_result(handle));
@@ -198,7 +198,12 @@ impl CppRunner {
 
     /// Deletes all files in the build directory that are not associated with
     /// currently registered programs.
-    fn clean_build_folder(&self) -> Result<()> {
+    ///
+    /// Every edit to a solution compiles to a new binary under a new name, so
+    /// without this the build folder keeps every binary the task has ever had.
+    /// Call it once all programs have been added, never before: a binary that is
+    /// removed here has to be compiled again.
+    pub fn clean_build_folder(&self) -> Result<()> {
         trace!("Cleaning build folder: {}", self.build_folder.to_string_lossy());
 
         let entries = std::fs::read_dir(&self.build_folder).map_err(|err| IOError {
@@ -225,11 +230,7 @@ impl CppRunner {
         Ok(())
     }
 
-    pub fn run_tasks(&mut self, logger: Option<&MultiProgress>, clean: bool) -> Result<()> {
-        if clean {
-            self.clean_build_folder()?;
-        }
-
+    pub fn run_tasks(&mut self, logger: Option<&MultiProgress>) -> Result<()> {
         let timer_path = self.programs[self.timer.id].clone();
 
         let num_threads = num_cpus::get().min(MAX_CONCURRENT_SOLUTIONS);

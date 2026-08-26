@@ -640,6 +640,21 @@ mod graph_tests {
         }
     }
 
+    /// Filling a bipartite graph right up to its capacity is the case where
+    /// guessing pairs almost always finds one that is already there, so it has to
+    /// take the enumerating path instead of guessing its way to the last edges.
+    #[test]
+    fn test_dense_bipartite_graph_is_generated() {
+        let n = 400;
+        let m = (n / 2) * ((n + 1) / 2);
+
+        let graph = Graph::new_random_bipartite(n, m);
+
+        assert_eq!(graph.get_num_edges(), m);
+        assert!(graph.is_bipartite());
+        assert!(graph.is_connected());
+    }
+
     /// `n * (n - 1) / 2` overflows an i32 well below the node counts a competitive
     /// programming task can reasonably use.
     #[test]

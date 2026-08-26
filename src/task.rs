@@ -10,6 +10,7 @@ use console::style;
 use indicatif::MultiProgress;
 use indicatif_log_bridge::LogWrapper;
 use log::{LevelFilter, debug, error, info, warn};
+use std::collections::HashSet;
 use std::fs;
 use std::fs::OpenOptions;
 use std::io::Write;
@@ -196,7 +197,13 @@ impl<T: ToOutput> Task<T> {
 
     /// Adds a solution (partial or incorrect) to be verified.
     ///
-    /// * `passes_subtasks` - List of subtask indices this solution is expected to pass.
+    /// * `passes_subtasks` - List of subtask indices this solution is expected to
+    ///   pass, counted from zero. An index the task does not have is reported as
+    ///   an error rather than ignored.
+    ///
+    /// Every other subtask has to reject the solution: test generation looks for
+    /// tests that break it, and [`Task::run`] fails if the finished test data
+    /// still lets it through a subtask it was not declared to pass.
     #[must_use]
     pub fn with_partial_solution(mut self, name: &str, source: &str, passes_subtasks: &[usize]) -> Self {
         self.solutions.push(Solution::new(name.to_owned(), source.to_owned(), passes_subtasks));
@@ -232,6 +239,9 @@ impl<T: ToOutput> Task<T> {
     }
 
     /// Sets the time limit in milliseconds for solutions.
+    ///
+    /// The limit is on CPU time, so a machine under load does not turn a correct
+    /// solution into a timeout.
     #[must_use]
     pub const fn with_time_limit(mut self, limit: i32) -> Self {
         self.time_limit = limit;
@@ -246,6 +256,10 @@ impl<T: ToOutput> Task<T> {
     }
 
     /// Sets the closure to determine input file names.
+    ///
+    /// The closure has to give every test its own name — it is passed the global
+    /// test id, the subtask id and the id within the subtask for that. Two tests
+    /// landing on the same name is reported as an error.
     #[must_use]
     pub fn with_get_input_file_name<F: Fn(i32, i32, i32) -> String + 'static>(mut self, f: F) -> Self {
         self.get_input_file_name = Box::new(f);
@@ -253,6 +267,9 @@ impl<T: ToOutput> Task<T> {
     }
 
     /// Sets the closure to determine output file names.
+    ///
+    /// The same uniqueness requirement as for [`Task::with_get_input_file_name`]
+    /// applies.
     #[must_use]
     pub fn with_get_output_file_name<F: Fn(i32, i32, i32) -> String + 'static>(mut self, f: F) -> Self {
         self.get_output_file_name = Box::new(f);
@@ -315,6 +332,8 @@ impl<T: ToOutput> Task<T> {
             warn!("No subtasks defined.");
         }
 
+        self.check_declared_subtasks_exist()?;
+
         // create build directory if it doesn't exist
         if !self.build_folder_path.exists() {
             fs::create_dir_all(&self.build_folder_path).map_err(|err| Error::IOError {
@@ -334,6 +353,9 @@ impl<T: ToOutput> Task<T> {
         for solution in &self.solutions {
             solution_handles.push(cpp_runner.add_program(&solution.source)?);
         }
+        // Everything that will be run has been compiled by now, so whatever else
+        // is still in the build folder is left over from an earlier run.
+        cpp_runner.clean_build_folder()?;
 
         // Prepare test directory
         if self.tests_path.exists() {
@@ -360,11 +382,25 @@ impl<T: ToOutput> Task<T> {
         }
 
         self.log_result("Running official solution:")?;
-        self.run_partial_solution(&all_test_files, &mut cpp_runner, solution_handle, self.solution_source.split('\n').count())?;
+        let passed_subtasks = self.run_partial_solution(&all_test_files, &mut cpp_runner, solution_handle, self.solution_source.split('\n').count())?;
+        // Every test was checked against the official solution as it was
+        // generated, so this only fires when a run is not reproducible - a
+        // solution sitting right on its time limit is the usual reason, and a
+        // silent "Success!" would hide it.
+        for (subtask_idx, subtask) in self.subtasks.iter().enumerate() {
+            if !passed_subtasks.contains(&subtask_idx) && !all_test_files[subtask_idx].is_empty() {
+                warn!(
+                    "The official solution did not pass subtask {} ({}) when it was run on the finished tests.",
+                    subtask_idx + 1,
+                    subtask.name
+                );
+            }
+        }
 
         for (i, partial) in solution_handles.iter().enumerate() {
             self.log_result(&format!("Running partial solution {}: {}", i + 1, self.solutions[i].name))?;
-            self.run_partial_solution(&all_test_files, &mut cpp_runner, *partial, self.solutions[i].source.split('\n').count())?;
+            let passed_subtasks = self.run_partial_solution(&all_test_files, &mut cpp_runner, *partial, self.solutions[i].source.split('\n').count())?;
+            self.check_partial_solution_outcome(i, &passed_subtasks)?;
         }
 
         self.archive_tests(&all_test_files)?;
@@ -377,6 +413,54 @@ impl<T: ToOutput> Task<T> {
             self.log_result(&format!("Subtask {}: {} tests", i + 1, tests.len()))?;
         }
 
+        Ok(())
+    }
+
+    /// Rejects a partial solution that names a subtask the task does not have.
+    ///
+    /// Such an index is always a mistake (1-based numbering is the usual one),
+    /// and it is a quiet one: the solution would simply be treated as one that
+    /// has to fail everywhere, and the run would go on generating test data
+    /// around a declaration that means nothing.
+    fn check_declared_subtasks_exist(&self) -> Result<()> {
+        for (partial_idx, solution) in self.solutions.iter().enumerate() {
+            // Sorted, so the message does not depend on the iteration order of
+            // the set behind it.
+            let mut declared = solution.passes_subtasks.iter().copied().collect::<Vec<_>>();
+            declared.sort_unstable();
+
+            if let Some(&subtask_idx) = declared.iter().find(|&&idx| idx >= self.subtasks.len()) {
+                return Err(Error::InvalidSubtaskIndex {
+                    partial_number: partial_idx + 1,
+                    partial_name: solution.name.clone(),
+                    subtask_number: subtask_idx,
+                    num_subtasks: self.subtasks.len(),
+                });
+            }
+        }
+        Ok(())
+    }
+
+    /// Checks the tests really do reject a partial solution everywhere it said
+    /// it would fail.
+    ///
+    /// Test generation aims for this, but it can only report an error when it
+    /// runs out of tries; without this check a task whose generators never
+    /// produced a test that breaks a partial solution would still be reported as
+    /// a success, and the subtask scores it hands out would be wrong.
+    fn check_partial_solution_outcome(&self, partial_idx: usize, passed_subtasks: &HashSet<usize>) -> Result<()> {
+        let solution = &self.solutions[partial_idx];
+
+        for (subtask_idx, subtask) in self.subtasks.iter().enumerate() {
+            if passed_subtasks.contains(&subtask_idx) && solution.should_fail(subtask_idx) {
+                return Err(Error::PartialSolutionPassesExtraSubtask {
+                    subtask_number: subtask_idx + 1,
+                    partial_number: partial_idx + 1,
+                    partial_name: solution.name.clone(),
+                    subtask_name: subtask.name.clone(),
+                });
+            }
+        }
         Ok(())
     }
 

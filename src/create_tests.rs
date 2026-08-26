@@ -173,11 +173,28 @@ impl<T: ToOutput> Task<T> {
         let mut rng = rand::rng();
         subtask_tests.shuffle(&mut rng);
 
-        // Write shuffled tests to disk
+        all_test_files.push(self.write_subtask_tests(subtask_idx, subtask_tests, global_test_id)?);
+        Ok(())
+    }
+
+    /// Writes the finished tests of one subtask to disk and returns the
+    /// (input, output) paths they went to.
+    fn write_subtask_tests(&self, subtask_idx: usize, tests: Vec<(String, String)>, global_test_id: &mut i32) -> Result<Vec<(PathBuf, PathBuf)>> {
         let mut subtask_files = Vec::new();
-        for (test_id_in_subtask, (input, output)) in subtask_tests.into_iter().enumerate() {
+
+        for (test_id_in_subtask, (input, output)) in tests.into_iter().enumerate() {
             let input_path = self.get_input_file_path(*global_test_id, subtask_idx as i32, test_id_in_subtask as i32);
             let output_path = self.get_output_file_path(*global_test_id, subtask_idx as i32, test_id_in_subtask as i32);
+
+            // The names come from user supplied closures, and two tests that map
+            // to the same name would silently overwrite each other here and then
+            // both end up in the archive under that one name. The test directory
+            // starts out empty, so anything already there is from this run.
+            for path in [&input_path, &output_path] {
+                if path.exists() {
+                    return Err(Error::TestAlreadyExists { path: path_str(path) });
+                }
+            }
 
             fs::write(&input_path, &input).map_err(|err| Error::IOError { err, file: path_str(&input_path) })?;
             fs::write(&output_path, output).map_err(|err| Error::IOError { err, file: path_str(&output_path) })?;
@@ -185,8 +202,8 @@ impl<T: ToOutput> Task<T> {
             subtask_files.push((input_path, output_path));
             *global_test_id += 1;
         }
-        all_test_files.push(subtask_files);
-        Ok(())
+
+        Ok(subtask_files)
     }
 
     /// Checks if a candidate test input effectively distinguishes between the correct solution

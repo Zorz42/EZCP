@@ -115,13 +115,12 @@ mod checker_tests {
 
     /// When the checker accepts every output, a "bad" solution whose output
     /// differs from the main solution's output will always be considered
-    /// correct by the checker.  That means every test looks non-robust (the
-    /// bad solution appears to pass), so the task cannot accumulate enough
-    /// robust tests and will stop after `max_tries` without erroring – it
-    /// just logs a warning and writes 0 supplemental tests.
+    /// correct by the checker. That means every test looks non-robust (the bad
+    /// solution appears to pass), so the task cannot accumulate enough robust
+    /// tests and gives up after `max_tries`.
     ///
-    /// The task itself should still *succeed* (return `Ok(())`); it only
-    /// warns that not enough robust tests were found.
+    /// The run must then fail: the test data does not do what the partial
+    /// solution declared it would, so its subtask scores would be wrong.
     #[test]
     fn always_accept_checker_with_bad_solution() {
         let tempdir = TempDir::new().unwrap();
@@ -152,8 +151,14 @@ mod checker_tests {
             .with_min_failures(1)
             .with_max_tries(10);
 
-        // Task should complete without returning an Err – it just warns.
-        task.run().unwrap();
+        assert!(matches!(
+            task.run(),
+            Err(Error::PartialSolutionPassesExtraSubtask {
+                subtask_number: 1,
+                partial_number: 1,
+                ..
+            })
+        ));
     }
 
     /// When the checker accepts every output, a partial solution that is

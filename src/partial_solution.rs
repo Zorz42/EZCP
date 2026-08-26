@@ -58,7 +58,7 @@ impl<T: ToOutput> Task<T> {
             test_handles.push(test_handles_element);
         }
 
-        cpp_runner.run_tasks(Some(&self.logger), false)?;
+        cpp_runner.run_tasks(Some(&self.logger))?;
 
         let mut got_points = 0;
         let mut total_points = 0;

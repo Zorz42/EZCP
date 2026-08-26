@@ -3,6 +3,7 @@
 mod partial_solution_tests {
     use crate::array_generator;
     use crate::tests::generic_tests::generic_tests::Test;
+    use crate::{Error, Subtask};
 
     #[test]
     fn test_partial_solution() {
@@ -241,5 +242,84 @@ mod partial_solution_tests {
             .with_partial_solution("partial", partial_solution_contents, &[]);
 
         task.test();
+    }
+
+    /// The point of declaring the subtasks a partial solution passes is that the
+    /// generated tests really do break it everywhere else. A partial solution
+    /// that survives a subtask it was declared to fail means the test data is
+    /// weaker than the declaration claims, so the run has to fail rather than
+    /// hand out subtask scores nobody can trust.
+    #[test]
+    fn test_partial_solution_that_is_never_broken_is_reported() {
+        let mut task = Test::new();
+
+        let solution_contents = r#"
+        #include <iostream>
+        using namespace std;
+        int main() {
+            int n;
+            cin>>n;
+            cout<<n<<"\n";
+            return 0;
+        }
+        "#;
+
+        // Identical behaviour to the correct solution, so no generated test can
+        // ever tell the two apart.
+        let partial_solution_contents = r#"
+        #include <iostream>
+        using namespace std;
+        int main() {
+            int n;
+            cin>>n;
+            cout<<n<<"\n"; // same answer as the official solution
+            return 0;
+        }
+        "#;
+
+        task.task = task
+            .task
+            .with_solution_source(solution_contents)
+            .with_subtask(Subtask::new(0, "first").with_test(2, || "1\n".to_owned()))
+            .with_subtask(Subtask::new(0, "second").with_test(2, || "2\n".to_owned()))
+            // Declared to pass only the first subtask, but it passes both.
+            .with_partial_solution("indistinguishable", partial_solution_contents, &[0])
+            .with_min_failures(1)
+            .with_max_tries(3);
+
+        assert!(matches!(
+            task.task.run(),
+            Err(Error::PartialSolutionPassesExtraSubtask {
+                subtask_number: 2,
+                partial_number: 1,
+                ..
+            })
+        ));
+    }
+
+    /// A subtask index that does not exist is a typo (1-based numbering is the
+    /// usual one), and it would otherwise quietly turn into "this solution has to
+    /// fail everywhere".
+    #[test]
+    fn test_partial_solution_with_unknown_subtask_index_is_rejected() {
+        let mut task = Test::new();
+
+        let solution_contents = "int main() { return 0; }";
+
+        task.task = task
+            .task
+            .with_solution_source(solution_contents)
+            .with_subtask(Subtask::new(0, "only subtask").with_test(1, || "1\n".to_owned()))
+            .with_partial_solution("partial", solution_contents, &[1]);
+
+        assert!(matches!(
+            task.task.run(),
+            Err(Error::InvalidSubtaskIndex {
+                subtask_number: 1,
+                num_subtasks: 1,
+                partial_number: 1,
+                ..
+            })
+        ));
     }
 }

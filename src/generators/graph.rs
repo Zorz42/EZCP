@@ -109,6 +109,16 @@ impl Graph {
                 }
             }
         }
+        self.add_edges_from(candidates, m);
+    }
+
+    /// Adds edges drawn from `candidates`, in random order, until the graph holds
+    /// `m` of them.
+    ///
+    /// This is what the generators fall back to once so many of the possible
+    /// edges are taken that guessing pairs mostly finds repeats.
+    fn add_edges_from(&mut self, mut candidates: Vec<(usize, usize)>, m: i32) {
+        let mut rng = rand::rng();
         candidates.shuffle(&mut rng);
 
         for (u, v) in candidates {
@@ -237,11 +247,25 @@ impl Graph {
         }
         let size1 = rng.random_range(smallest_side..=i64::from(n) - smallest_side) as i32;
 
-        while result.get_num_edges() < m {
-            let u = nodes[rng.random_range(0..size1) as usize];
-            let v = nodes[rng.random_range(size1..n) as usize];
-            result.add_edge(u as usize, v as usize);
+        // Guessing pairs is only cheap while a good half of the pairs across the
+        // partition are still free; past that point the last few edges take
+        // unboundedly many guesses to find, exactly as in `add_random_edges`.
+        if i64::from(m) * 2 <= i64::from(size1) * i64::from(n - size1) {
+            while result.get_num_edges() < m {
+                let u = nodes[rng.random_range(0..size1) as usize];
+                let v = nodes[rng.random_range(size1..n) as usize];
+                result.add_edge(u as usize, v as usize);
+            }
+            return result;
         }
+
+        let mut candidates = Vec::new();
+        for &u in &nodes[..size1 as usize] {
+            for &v in &nodes[size1 as usize..] {
+                candidates.push((u as usize, v as usize));
+            }
+        }
+        result.add_edges_from(candidates, m);
         result
     }
 

@@ -179,6 +179,41 @@ pub mod cpp_runner_tests {
         drop(tempdir);
     }
 
+    /// The kernel side of the limit only has whole-second granularity, so a
+    /// solution can finish a run that used more CPU than the limit allows. The
+    /// verdict has to follow the limit that was asked for, not the rounded one.
+    #[test]
+    fn test_program_over_a_sub_second_limit_is_a_timeout() {
+        initialize_logger();
+
+        let tempdir = TempDir::new().unwrap();
+        let mut runner = CppRunner::new(tempdir.path()).unwrap();
+
+        // Spins for 400 ms: well past a 100 ms limit, but comfortably inside the
+        // one second the kernel limit rounds up to, so the timer itself reports
+        // the run as finished.
+        let program_source = "
+        #include <chrono>
+        int main() {
+            auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(400);
+            while (std::chrono::steady_clock::now() < deadline) {
+            }
+            return 0;
+        }
+        ";
+
+        let program_handle = runner.add_program(program_source).unwrap();
+
+        let over_the_limit = &runner.check_programs("", &[program_handle], 100).unwrap()[0];
+        assert!(matches!(over_the_limit, RunResult::TimedOut), "expected TLE, got {over_the_limit:?}");
+
+        // The very same run is fine once it is given enough time.
+        let within_the_limit = &runner.check_programs("", &[program_handle], 5000).unwrap()[0];
+        assert!(matches!(within_the_limit, RunResult::Ok(_, _)), "expected OK, got {within_the_limit:?}");
+
+        drop(tempdir);
+    }
+
     #[test]
     #[cfg(not(windows))]
     fn test_runner_program_crash() {
@@ -226,7 +261,7 @@ pub mod cpp_runner_tests {
         let program_handle = runner.add_program(program_source).unwrap();
         let task_handle = runner.add_task(program_handle, Arc::from(""), 1000);
 
-        runner.run_tasks(None, false).unwrap();
+        runner.run_tasks(None).unwrap();
 
         let result = runner.get_result(task_handle);
         assert!(matches!(result, RunResult::Crashed));
@@ -340,6 +375,7 @@ pub mod cpp_runner_tests {
         drop(tempdir);
     }
 
+    #[cfg(not(windows))]
     fn build_folder_files(build_folder: &std::path::Path) -> Vec<std::path::PathBuf> {
         std::fs::read_dir(build_folder).unwrap().flatten().map(|entry| entry.path()).collect()
     }
@@ -370,7 +406,7 @@ pub mod cpp_runner_tests {
             for _ in 0..20 {
                 runner.add_task(program_handle, Arc::from(""), 1000);
             }
-            runner.run_tasks(None, false)
+            runner.run_tasks(None)
         });
 
         assert!(result.is_err(), "a task that cannot be started must be reported, got {result:?}");
@@ -389,8 +425,7 @@ pub mod cpp_runner_tests {
         let stray = tempdir.path().join("stray.txt");
         std::fs::write(&stray, "junk").unwrap();
 
-        runner.add_task(program_handle, Arc::from(""), 1000);
-        runner.run_tasks(None, true).unwrap();
+        runner.clean_build_folder().unwrap();
 
         assert!(!stray.exists(), "cleanup should have removed the stray file");
 

@@ -96,6 +96,16 @@ pub fn run_solution(executable_file: &Path, input_data: Arc<str>, time_limit: i3
         "TLE" => Ok(RunResult::TimedOut),
         "RTE" => Ok(RunResult::Crashed),
         "OK" => {
+            // The kernel side of the limit (RLIMIT_CPU on Unix, the job object on
+            // Windows) only has whole-second granularity, so a solution can run to
+            // completion having used more CPU than it was given. Hold it to the
+            // limit that was actually asked for, otherwise a time limit that is
+            // not a whole number of seconds means nothing.
+            if time_limit > 0 && elapsed_time_ms > time_limit {
+                trace!("Solution used {elapsed_time_ms} ms of CPU time, more than the {time_limit} ms limit");
+                return Ok(RunResult::TimedOut);
+            }
+
             let output = String::from_utf8_lossy(&output_result.stdout).into_owned();
             // MinGW runs stdout in text mode, so every "\n" the solution printed
             // arrives as "\r\n". Undo that, otherwise the same solution produces

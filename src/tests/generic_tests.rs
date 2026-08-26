@@ -286,6 +286,61 @@ pub mod generic_tests {
         task.task.run().unwrap();
     }
 
+    /// Every edit to a solution compiles to a binary of its own, so a build
+    /// folder that is never swept keeps growing with binaries no run will ever
+    /// use again.
+    #[test]
+    fn test_stale_build_artifacts_are_removed_on_the_next_run() {
+        let tempdir = TempDir::new().unwrap();
+        let task_path = tempdir.path().join("stale_artifacts");
+
+        let sources_in_build_folder = || {
+            let mut sources = std::fs::read_dir(task_path.join("build"))
+                .unwrap()
+                .flatten()
+                .map(|entry| entry.path())
+                .filter(|path| path.extension().is_some_and(|extension| extension == "cpp"))
+                .collect::<Vec<_>>();
+            sources.sort();
+            sources
+        };
+
+        let run_with = |solution: &str| {
+            Task::new("stale artifacts", &task_path)
+                .with_solution_source(solution)
+                .with_subtask(Subtask::new(0, "").with_test(1, || "1\n".to_owned()))
+                .run()
+                .unwrap();
+        };
+
+        run_with("int main() { return 0; }");
+        // The timer and the solution.
+        let after_first_run = sources_in_build_folder();
+        assert_eq!(after_first_run.len(), 2, "expected the timer and one solution, got {after_first_run:?}");
+
+        run_with("int main() { return 1 - 1; }");
+        let after_second_run = sources_in_build_folder();
+        assert_eq!(after_second_run.len(), 2, "the first solution should not have been kept, got {after_second_run:?}");
+        assert_ne!(after_first_run, after_second_run, "the edited solution should have replaced the original one");
+    }
+
+    /// A naming closure that ignores the ids it is given maps every test to the
+    /// same file. Without a check the tests would overwrite each other and the
+    /// archive would end up with one entry where the task promised many.
+    #[test]
+    fn test_colliding_test_file_names_are_reported() {
+        let mut task = Test::new();
+
+        task.task = task
+            .task
+            .with_solution_source("int main() { return 0; }")
+            .with_get_input_file_name(|_test_id, _subtask_id, _test_id_in_subtask| "test.in".to_owned())
+            .with_get_output_file_name(|_test_id, _subtask_id, _test_id_in_subtask| "test.out".to_owned())
+            .with_subtask(Subtask::new(0, "").with_test(1, || "1\n".to_owned()).with_test(1, || "2\n".to_owned()));
+
+        assert!(matches!(task.task.run(), Err(Error::TestAlreadyExists { .. })));
+    }
+
     #[test]
     fn test_task_large_time_limit_does_not_panic() {
         let mut task = Test::new();
