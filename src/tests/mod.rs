@@ -2,17 +2,22 @@ mod archiver_tests;
 mod array_tests;
 mod checker_tests;
 mod cpp_runner_tests;
+mod exec_runner_tests;
 mod frankenstein_tests;
 mod gcc_tests;
 mod generic_tests;
 mod graph_tests;
+mod manifest_tests;
+mod mode_tests;
 mod partial_solution_tests;
+mod rng_tests;
 mod seed_mode_tests;
 mod solution_tests;
 mod stack_limit_tests;
 mod subtask_tests;
 mod test_generator_tests;
 mod to_output_tests;
+mod trim_whitespace_tests;
 
 #[cfg(test)]
 mod test_shared {
