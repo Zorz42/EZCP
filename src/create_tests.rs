@@ -1,18 +1,18 @@
 use crate::Error::SolutionFailed;
 use crate::Result;
+use crate::manifest::stable_hash;
 use crate::progress::ScopedProgressBar;
+use crate::rng::Rng;
 use crate::runner::cpp_runner::{CppRunner, ProgramHandle};
 use crate::runner::exec_runner::RunResult;
 use crate::task::path_str;
 use crate::{Error, Subtask, Task, ToOutput};
 use log::{error, info, warn};
-use rand::prelude::SliceRandom;
 use std::collections::HashSet;
 use std::fs;
-use std::hash::{DefaultHasher, Hash, Hasher};
-use std::path::PathBuf;
+use std::sync::Arc;
 
-fn trim_whitespace(input: &str) -> String {
+pub fn trim_whitespace(input: &str) -> String {
     let mut result = String::with_capacity(input.len());
     let mut in_block = false;
     let mut has_newline = false;
@@ -51,23 +51,65 @@ fn trim_whitespace(input: &str) -> String {
 /// produced the requested count, and without a bound it would spin forever.
 const MAX_REPEATED_TESTS: usize = 100;
 
-fn hash_string(s: &str) -> u64 {
-    let mut hasher = DefaultHasher::new();
-    s.hash(&mut hasher);
-    hasher.finish()
+/// A finished test, together with the recipe that produced it.
+///
+/// The recipe is what makes the test disposable: `generator` and `seed` are
+/// enough to build `input` again from nothing, which is what the seed manifest
+/// records and what the on-demand server replays.
+pub struct GeneratedTest {
+    /// Which of the subtask's generators produced this test.
+    pub generator: usize,
+    /// The seed that generator was run with.
+    pub seed: u64,
+    /// The test input, exactly as it would be written to a `.in` file.
+    pub input: Arc<str>,
+    /// The official solution's output, exactly as it would be written to a
+    /// `.out` file.
+    pub output: Arc<str>,
 }
 
 impl<T: ToOutput> Task<T> {
+    /// Applies to a generated input whatever normalisation the task asked for.
+    ///
+    /// Both test generation and the on-demand server go through here, which is
+    /// what makes a served test byte-for-byte the file a normal run would write.
+    pub(crate) fn normalise_input(&self, raw: String) -> String {
+        if self.trim_whitespace { trim_whitespace(&raw) } else { raw }
+    }
+
+    /// Applies to the official solution's output whatever normalisation the task
+    /// asked for.
+    pub(crate) fn normalise_output(&self, raw: &str) -> String {
+        // The trailing newline is added regardless of `trim_whitespace`: an output
+        // file that does not end in one is a nuisance for every judge that reads it.
+        let trimmed = raw.trim().to_owned() + "\n";
+        if self.trim_whitespace { trim_whitespace(&trimmed) } else { trimmed }
+    }
+
+    /// Generates the input that `generator` produces from `seed`.
+    ///
+    /// This is the single definition of what a (generator, seed) pair means, used
+    /// by generation and by the server alike.
+    ///
+    /// # Panics
+    /// Panics if `subtask_idx` or `generator` name something the task does not have.
+    pub(crate) fn generate_input(&self, subtask_idx: usize, generator: usize, seed: u64) -> String {
+        self.normalise_input(self.subtasks[subtask_idx].generate_test(generator, seed).to_output())
+    }
+
+    /// Generates and verifies every test of one subtask.
+    ///
+    /// Nothing is written to disk here: the tests come back in memory, and what
+    /// happens to them depends on the mode the task is running in.
     pub(super) fn create_tests_for_subtask(
         &self,
         subtask_idx: usize,
         subtask: &Subtask<T>,
-        global_test_id: &mut i32,
-        all_test_files: &mut Vec<Vec<(PathBuf, PathBuf)>>,
+        rng: &mut Rng,
         solution_handles: &[ProgramHandle],
         solution_handle: ProgramHandle,
         cpp_runner: &mut CppRunner,
-    ) -> Result<()> {
+    ) -> Result<Vec<GeneratedTest>> {
         let mut good_solution_handles = Vec::new();
         let mut bad_solution_handles = Vec::new();
         for (i, solution) in self.solutions.iter().enumerate() {
@@ -98,10 +140,7 @@ impl<T: ToOutput> Task<T> {
                 info!("Stress testing generator {gen_idx}");
                 let stress_testing_progress_bar = ScopedProgressBar::new(&self.logger, subtask.stress_tests as u64);
                 for _ in 0..subtask.stress_tests {
-                    let mut test_str = subtask.generate_test(gen_idx).to_output();
-                    if self.trim_whitespace {
-                        test_str = trim_whitespace(&test_str);
-                    }
+                    let test_str = self.generate_input(subtask_idx, gen_idx, rng.next_seed());
 
                     stress_testing_progress_bar.inc(1);
 
@@ -116,12 +155,10 @@ impl<T: ToOutput> Task<T> {
             let mut got = 0;
             let mut fails = 0;
             while got < needed && fails < MAX_REPEATED_TESTS {
-                let mut candidate = subtask.generate_test(gen_idx).to_output();
-                if self.trim_whitespace {
-                    candidate = trim_whitespace(&candidate);
-                }
+                let seed = rng.next_seed();
+                let candidate = self.generate_input(subtask_idx, gen_idx, seed);
                 // Each test must be unique within the subtask
-                if !tried_inputs.insert(hash_string(&candidate)) {
+                if !tried_inputs.insert(stable_hash(&candidate)) {
                     fails += 1;
                     continue;
                 }
@@ -130,7 +167,12 @@ impl<T: ToOutput> Task<T> {
                 let Some(main_output) = self.is_robust_test(&candidate, solution_handle, &good_solution_handles, &[], cpp_runner, subtask_idx, gen_idx)? else {
                     unreachable!("is_robust_test with no bad progs should always return Some or Err")
                 };
-                subtask_tests.push((candidate, main_output));
+                subtask_tests.push(GeneratedTest {
+                    generator: gen_idx,
+                    seed,
+                    input: Arc::from(candidate),
+                    output: Arc::from(main_output),
+                });
                 found_count_progress_bar.inc(1);
                 got += 1;
             }
@@ -147,17 +189,20 @@ impl<T: ToOutput> Task<T> {
         while robust_found_count < target_robust && supplemental_tries < self.max_tries {
             supplemental_tries += 1;
             tries_progress_bar.inc(1);
-            let Some((candidate, gen_idx)) = subtask.generate_random_test() else { break };
-            let mut candidate = candidate.to_output();
-            if self.trim_whitespace {
-                candidate = trim_whitespace(&candidate);
-            }
-            if !tried_inputs.insert(hash_string(&candidate)) {
+            let Some(gen_idx) = subtask.pick_generator(rng) else { break };
+            let seed = rng.next_seed();
+            let candidate = self.generate_input(subtask_idx, gen_idx, seed);
+            if !tried_inputs.insert(stable_hash(&candidate)) {
                 continue;
             }
 
             if let Some(main_output) = self.is_robust_test(&candidate, solution_handle, &good_solution_handles, &bad_solution_handles, cpp_runner, subtask_idx, gen_idx)? {
-                subtask_tests.push((candidate, main_output));
+                subtask_tests.push(GeneratedTest {
+                    generator: gen_idx,
+                    seed,
+                    input: Arc::from(candidate),
+                    output: Arc::from(main_output),
+                });
                 robust_found_count += 1;
                 supplemental_tries = 0;
                 found_count_progress_bar.inc(1);
@@ -169,41 +214,11 @@ impl<T: ToOutput> Task<T> {
             error!("Could not find enough robust tests for Subtask {} (found {}/{})", subtask_idx + 1, robust_found_count, target_robust);
         }
 
-        // Shuffle all tests for this subtask
-        let mut rng = rand::rng();
-        subtask_tests.shuffle(&mut rng);
+        // Shuffle all tests for this subtask, from the run's own generator so that
+        // the order is part of what a seed reproduces.
+        rng.shuffle(&mut subtask_tests);
 
-        all_test_files.push(self.write_subtask_tests(subtask_idx, subtask_tests, global_test_id)?);
-        Ok(())
-    }
-
-    /// Writes the finished tests of one subtask to disk and returns the
-    /// (input, output) paths they went to.
-    fn write_subtask_tests(&self, subtask_idx: usize, tests: Vec<(String, String)>, global_test_id: &mut i32) -> Result<Vec<(PathBuf, PathBuf)>> {
-        let mut subtask_files = Vec::new();
-
-        for (test_id_in_subtask, (input, output)) in tests.into_iter().enumerate() {
-            let input_path = self.get_input_file_path(*global_test_id, subtask_idx as i32, test_id_in_subtask as i32);
-            let output_path = self.get_output_file_path(*global_test_id, subtask_idx as i32, test_id_in_subtask as i32);
-
-            // The names come from user supplied closures, and two tests that map
-            // to the same name would silently overwrite each other here and then
-            // both end up in the archive under that one name. The test directory
-            // starts out empty, so anything already there is from this run.
-            for path in [&input_path, &output_path] {
-                if path.exists() {
-                    return Err(Error::TestAlreadyExists { path: path_str(path) });
-                }
-            }
-
-            fs::write(&input_path, &input).map_err(|err| Error::IOError { err, file: path_str(&input_path) })?;
-            fs::write(&output_path, output).map_err(|err| Error::IOError { err, file: path_str(&output_path) })?;
-
-            subtask_files.push((input_path, output_path));
-            *global_test_id += 1;
-        }
-
-        Ok(subtask_files)
+        Ok(subtask_tests)
     }
 
     /// Checks if a candidate test input effectively distinguishes between the correct solution
@@ -238,8 +253,8 @@ impl<T: ToOutput> Task<T> {
         };
 
         // Correct (Main) Solution Result
-        let mut correct_output = match &results[0] {
-            RunResult::Ok(_, output) => output.trim().to_owned() + "\n",
+        let correct_output = match &results[0] {
+            RunResult::Ok(_, output) => self.normalise_output(output),
             RunResult::TimedOut => {
                 write_bad_test()?;
                 return Err(Error::SolutionTimedOut {
@@ -262,10 +277,6 @@ impl<T: ToOutput> Task<T> {
                 test_path: "generation phase".to_owned(),
                 gen_id: gen_idx + 1,
             });
-        }
-
-        if self.trim_whitespace {
-            correct_output = trim_whitespace(&correct_output);
         }
 
         // Ensure all other "good" solutions pass and match main output

@@ -7,6 +7,7 @@ mod gcc_tests;
 mod generic_tests;
 mod graph_tests;
 mod partial_solution_tests;
+mod seed_mode_tests;
 mod solution_tests;
 mod stack_limit_tests;
 mod subtask_tests;

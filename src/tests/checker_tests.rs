@@ -7,10 +7,10 @@
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod checker_tests {
+    use crate::Mode;
     use crate::tests::generic_tests::generic_tests::Test;
     use crate::{Error, Subtask, Task};
     use log::LevelFilter;
-    use rand::RngExt;
     use tempfile::TempDir;
 
     // ─── helpers ────────────────────────────────────────────────────────────────
@@ -64,7 +64,7 @@ mod checker_tests {
         task.task = task
             .task
             .with_solution_source(main_solution)
-            .with_subtask(Subtask::new(0, "only subtask").with_test(3, String::new))
+            .with_subtask(Subtask::new(0, "only subtask").with_test(3, |_rng| String::new()))
             // This solution passes the only subtask (extra whitespace is fine).
             .with_partial_solution("good", good_partial, &[0]);
 
@@ -92,7 +92,7 @@ mod checker_tests {
         task.task = task
             .task
             .with_solution_source(main_solution)
-            .with_subtask(Subtask::new(0, "only subtask").with_test(3, String::new))
+            .with_subtask(Subtask::new(0, "only subtask").with_test(3, |_rng| String::new()))
             .with_partial_solution("bad", bad_solution, &[]); // fails all subtasks
 
         task.test(); // must succeed (bad solution is rejected as expected)
@@ -144,7 +144,7 @@ mod checker_tests {
             .with_debug_level(LevelFilter::Off)
             .with_checker(always_accept)
             .with_solution_source(main_solution)
-            .with_subtask(Subtask::new(0, "only subtask").with_test(2, String::new))
+            .with_subtask(Subtask::new(0, "only subtask").with_test(2, |_rng| String::new()))
             // The bad solution is supposed to fail the subtask, but our checker
             // never rejects it – so no robust test can be found.
             .with_partial_solution("bad", bad_solution, &[])
@@ -152,7 +152,7 @@ mod checker_tests {
             .with_max_tries(10);
 
         assert!(matches!(
-            task.run(),
+            task.run_mode(Mode::Files),
             Err(Error::PartialSolutionPassesExtraSubtask {
                 subtask_number: 1,
                 partial_number: 1,
@@ -186,10 +186,10 @@ mod checker_tests {
             .with_debug_level(LevelFilter::Off)
             .with_checker(always_accept)
             .with_solution_source(main_solution)
-            .with_subtask(Subtask::new(0, "only subtask").with_test(2, String::new))
+            .with_subtask(Subtask::new(0, "only subtask").with_test(2, |_rng| String::new()))
             .with_partial_solution("good", good_partial, &[0]); // declared to pass subtask 0
 
-        task.run().unwrap();
+        task.run_mode(Mode::Files).unwrap();
     }
 
     // ─── always_reject checker ───────────────────────────────────────────────
@@ -211,10 +211,10 @@ mod checker_tests {
             .with_debug_level(LevelFilter::Off)
             .with_checker(always_reject)
             .with_solution_source(main_solution)
-            .with_subtask(Subtask::new(0, "only subtask").with_test(2, String::new));
+            .with_subtask(Subtask::new(0, "only subtask").with_test(2, |_rng| String::new()));
 
         // The checker rejects every answer so the main solution is considered failing.
-        let result = task.run();
+        let result = task.run_mode(Mode::Files);
         assert!(matches!(result, Err(Error::SolutionFailed { .. })), "Expected SolutionFailed, got: {result:?}");
     }
 
@@ -247,11 +247,11 @@ mod checker_tests {
             .with_debug_level(LevelFilter::Off)
             .with_checker(main_only_checker)
             .with_solution_source(main_solution)
-            .with_subtask(Subtask::new(0, "only subtask").with_test(2, String::new))
+            .with_subtask(Subtask::new(0, "only subtask").with_test(2, |_rng| String::new()))
             .with_partial_solution("good", good_partial, &[0]); // declared to pass subtask 0
 
         // The checker rejects "partial" so the good partial is considered failing.
-        let result = task.run();
+        let result = task.run_mode(Mode::Files);
         assert!(
             matches!(result, Err(Error::PartialSolutionFailsSubtask { .. })),
             "Expected PartialSolutionFailsSubtask, got: {result:?}"
@@ -288,13 +288,13 @@ mod checker_tests {
             .with_checker(exact_checker)
             .with_solution_source(main_solution)
             // Use with_test so we have a concrete test case.
-            .with_subtask(Subtask::new(0, "only subtask").with_test(2, String::new))
+            .with_subtask(Subtask::new(0, "only subtask").with_test(2, |_rng| String::new()))
             .with_partial_solution("bad", bad_solution, &[]) // expected to fail
             .with_min_failures(1);
 
         // With exact_checker the bad solution is always wrong → robust tests
         // can be found → task succeeds.
-        task.run().unwrap();
+        task.run_mode(Mode::Files).unwrap();
     }
 
     // ─── real use-case: "any valid answer" problem ──────────────────────────
@@ -336,15 +336,12 @@ mod checker_tests {
             .with_subtask(
                 Subtask::new(0, "only subtask")
                     // Generate inputs: single integer 1..=100.
-                    .with_test(0, || {
-                        let mut rng = rand::rng();
-                        format!("{}", rng.random_range(1_i32..=100))
-                    }),
+                    .with_test(0, |rng| format!("{}", rng.random_range(1_i32..=100))),
             )
             .with_partial_solution("good", good_partial, &[0]) // passes subtask 0
             .with_partial_solution("bad", bad_solution, &[]) // fails all subtasks
             .with_min_failures(3);
 
-        task.run().unwrap();
+        task.run_mode(Mode::Files).unwrap();
     }
 }

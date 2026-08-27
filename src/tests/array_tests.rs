@@ -1,6 +1,7 @@
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod array_tests {
+    use crate::Mode;
     use crate::tests::generic_tests::generic_tests::Test;
     use crate::{Subtask, array_generator};
 
@@ -52,13 +53,23 @@ mod array_tests {
         task.task = task.task.with_subtask(subtask2);
         task.task = task.task.with_subtask(subtask3);
 
-        task.task.run().unwrap();
+        task.task.run_mode(Mode::Files).unwrap();
     }
 }
 
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod array_unit_tests {
+    use crate::rng::Rng;
+    use std::sync::atomic::{AtomicU64, Ordering};
+
+    /// A generator for the array tests, using a fresh seed on every call so a
+    /// loop still exercises many different arrays.
+    fn rng() -> Rng {
+        static NEXT_SEED: AtomicU64 = AtomicU64::new(0);
+        Rng::from_seed(NEXT_SEED.fetch_add(1, Ordering::Relaxed))
+    }
+
     use crate::{array_generator, array_to_string};
 
     #[test]
@@ -119,7 +130,7 @@ mod array_unit_tests {
     fn test_array_generator_min_equals_max_length() {
         let generator = array_generator(5, 5, 1, 100);
         for _ in 0..20 {
-            let output = generator();
+            let output = generator(&mut rng());
             let mut lines = output.lines();
             let count: usize = lines.next().unwrap().trim().parse().unwrap();
             assert_eq!(count, 5, "expected length 5");
@@ -133,7 +144,7 @@ mod array_unit_tests {
         let max_x = 20;
         let generator = array_generator(1, 50, min_x, max_x);
         for _ in 0..50 {
-            let output = generator();
+            let output = generator(&mut rng());
             let mut lines = output.lines();
             let _count_line = lines.next();
             if let Some(elem_line) = lines.next() {

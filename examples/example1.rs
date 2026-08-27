@@ -1,4 +1,3 @@
-use rand::prelude::*;
 use std::path::PathBuf;
 
 const SOLUTION: &str = r#"
@@ -50,18 +49,22 @@ fn main() -> ezcp::Result<()> {
     // add an edge case where n is maximal
     // add 3 edge cases where all values are maximal
     // add an edge case where all values and n are maximal
-    let mut rng = rand::rng();
-    let x = rng.random_range(0..=500_000_000) * 2;
+    // Note that the repeated value is drawn inside the generator, from the seeded
+    // `rng` it is handed. Drawing it out here, when the task is being described,
+    // would bake one value into the binary and make the test impossible to
+    // reproduce from its seed.
     let subtask2 = ezcp::Subtask::new(20, "all values are the same")
-        .with_test(5, || {
-            let mut rng = rand::rng();
+        .with_test(5, |rng| {
             let n = rng.random_range(1..=200_000);
             let x = rng.random_range(0..=500_000_000) * 2;
             ezcp::array_to_string(&vec![x; n as usize], true)
         })
-        .with_test(1, move || ezcp::array_to_string(&vec![x; 200_000], true))
+        .with_test(1, |rng| {
+            let x = rng.random_range(0..=500_000_000) * 2;
+            ezcp::array_to_string(&vec![x; 200_000], true)
+        })
         .with_test(3, ezcp::array_generator(1, 200_000, 1_000_000_000, 1_000_000_000))
-        .with_test(1, || ezcp::array_to_string(&vec![1_000_000_000; 200_000], true));
+        .with_test(1, |_rng| ezcp::array_to_string(&vec![1_000_000_000; 200_000], true));
 
     // No additional constraints
     // add some random tests

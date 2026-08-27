@@ -23,8 +23,8 @@
 //! # fn main() -> ezcp::Result<()> {
 //! ezcp::Task::new("Sum", &PathBuf::from("sum"))
 //!     .with_solution_source(SOLUTION)
-//!     .with_subtask(ezcp::Subtask::new(100, "a, b <= 1000").with_test(10, || {
-//!         format!("{} {}\n", rand::random_range(0..=1000), rand::random_range(0..=1000))
+//!     .with_subtask(ezcp::Subtask::new(100, "a, b <= 1000").with_test(10, |rng| {
+//!         format!("{} {}\n", rng.random_range(0..=1000), rng.random_range(0..=1000))
 //!     }))
 //!     .run()
 //! # }
@@ -35,6 +35,48 @@
 //! a struct that mirrors the input format. [`Graph`] and [`array_generator`] cover
 //! the two shapes that come up most often.
 //!
+//! # Generators must take their randomness from the `Rng` they are given
+//!
+//! Every generator is handed a seeded [`Rng`], and everything it produces has to
+//! come from that one generator. This is what makes a test reproducible: a test is
+//! identified by nothing more than the generator that made it and the seed it was
+//! run with, so the same pair always gives back the same bytes — on another
+//! machine, in another year, in another build.
+//!
+//! A generator that reaches for a different source of randomness, or that captures
+//! a value drawn while the task was being described, still compiles and still
+//! produces tests. It just produces tests that cannot be rebuilt. Nothing in the
+//! type system can prevent that, so [seed mode](Mode::Seeds) goes looking for it
+//! instead: every finished test is rebuilt from its seed
+//! [`DEFAULT_REPRODUCIBILITY_CHECKS`] times over and compared against what was
+//! generated, and a generator that does not agree with itself fails the run rather
+//! than leaving behind a manifest that lies. See
+//! [`Task::with_reproducibility_checks`].
+//!
+//! # Three ways to run a task
+//!
+//! [`Task::run`] takes the mode from the command line, so one compiled task binary
+//! covers all three. [`Task::run_mode`] chooses in code instead.
+//!
+//! * **Files** (no arguments, [`Mode::Files`]) — the usual thing: generate the
+//!   tests, write them out, archive them. A [seed manifest](Manifest) is written
+//!   too, so tests can be served on demand later without generating them again.
+//! * **Seeds** (`--seeds`, [`Mode::Seeds`]) — generate and verify exactly as
+//!   above, but keep only the manifest. Every test is still produced, run against
+//!   the official solution and used to hunt for counterexamples; none of them
+//!   reach the disk. A task can then have far more tests than there is room to
+//!   store, because a test costs a seed rather than a file. Each finished test is
+//!   also rebuilt from its seed several times over, to prove the seed is worth
+//!   recording.
+//! * **Serve** (`--serve`, [`Mode::Serve`]) — read requests on stdin and answer
+//!   them with the tests the manifest names, one JSON object per line. A served
+//!   test is byte for byte the file a normal run would have written, whitespace
+//!   included.
+//!
+//! This is what lets an online judge hold a whole task's test data as a few
+//! kilobytes of seeds and rebuild any individual test, deterministically, at the
+//! moment it needs it.
+//!
 //! Running a task needs a C++ compiler on `PATH`; see the README for what to
 //! install on each platform.
 
@@ -43,9 +85,13 @@ mod create_tests;
 mod error;
 mod generators;
 mod logger_format;
+mod manifest;
+mod mode;
 mod partial_solution;
 mod progress;
+mod rng;
 mod runner;
+mod serve;
 mod solution;
 mod subtask;
 mod task;
@@ -56,7 +102,10 @@ mod to_output;
 
 pub use error::{Error, Result};
 pub use generators::{Graph, array_generator, array_generator_custom, array_to_string};
+pub use manifest::{Manifest, ManifestSubtask, ManifestTest, stable_hash};
+pub use mode::{CliOptions, Mode, SeedChoice};
+pub use rng::{Rng, SampleUniform};
 pub use solution::Solution;
 pub use subtask::Subtask;
-pub use task::Task;
+pub use task::{DEFAULT_REPRODUCIBILITY_CHECKS, DEFAULT_SEED, Task};
 pub use to_output::ToOutput;

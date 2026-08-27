@@ -3,7 +3,12 @@ use crate::subtask::Subtask;
 use crate::{Error, Result};
 
 use crate::archiver::archive_files;
+use crate::create_tests::GeneratedTest;
 use crate::logger_format::logger_format;
+use crate::manifest::{Manifest, ManifestSubtask, ManifestTest, stable_hash};
+use crate::mode::{CliOptions, Mode, SeedChoice, USAGE};
+use crate::progress::ScopedProgressBar;
+use crate::rng::Rng;
 use crate::runner::cpp_runner::CppRunner;
 use crate::to_output::ToOutput;
 use console::style;
@@ -16,6 +21,25 @@ use std::fs::OpenOptions;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::Once;
+
+/// The master seed a task uses when none is given.
+///
+/// It is a constant rather than something drawn from the clock so that running a
+/// task twice produces the same test data twice. Pass `--seed random` (or
+/// [`Task::with_random_seed`]) to explore new tests instead; the seed that was
+/// used is always recorded in the manifest.
+pub const DEFAULT_SEED: u64 = 0x455A_4350_5345_4544;
+
+/// How many times seed mode rebuilds each finished test to prove it is
+/// reproducible.
+///
+/// Seed mode keeps nothing but the recipe for a test, so a generator that is not
+/// reproducible costs the whole run: there is no file to fall back on, and the
+/// mistake would only surface much later, when a judge asked for a test and got
+/// something else. Ten rebuilds is cheap next to generating and judging the tests
+/// in the first place, and it catches a generator that is only occasionally
+/// unfaithful as well as one that never repeats itself.
+pub const DEFAULT_REPRODUCIBILITY_CHECKS: usize = 10;
 
 pub static LOGGER_INIT: Once = Once::new();
 
@@ -43,6 +67,13 @@ pub struct Task<T: ToOutput> {
     pub(crate) time_limit: i32,
     /// Path to the final ZIP archive containing all tests
     pub(crate) tests_archive_path: PathBuf,
+    /// Path of the seed manifest, which records how every test was made
+    pub(crate) manifest_path: PathBuf,
+    /// Where the master seed for test generation comes from
+    pub(crate) seed: SeedChoice,
+    /// How many times each finished test is rebuilt to check it comes out the
+    /// same. `None` leaves it to the mode: see [`Task::reproducibility_checks`].
+    pub(crate) reproducibility_checks: Option<usize>,
     /// Closure to determine input file names: `(test_id, subtask_id, id_in_subtask) -> String`
     pub(crate) get_input_file_name: Box<dyn Fn(i32, i32, i32) -> String>,
     /// Closure to determine output file names: `(test_id, subtask_id, id_in_subtask) -> String`
@@ -98,6 +129,36 @@ fn remove_dir_all_with_retry(path: &Path) -> Result<()> {
     Ok(())
 }
 
+/// Describes how two supposedly identical tests differ, briefly enough to sit in
+/// an error message.
+///
+/// The point of failure is what matters when a generator turns out to be
+/// unfaithful, so this shows where the two first part ways rather than dumping
+/// two tests that may be megabytes each.
+fn describe_difference(first: &str, second: &str) -> String {
+    /// How much of each version to quote around the first difference.
+    const EXCERPT_WIDTH: usize = 24;
+
+    fn excerpt(text: &str, offset: usize) -> String {
+        let bytes = text.as_bytes();
+        let end = offset.saturating_add(EXCERPT_WIDTH).min(bytes.len());
+        // Lossy, because the cut can land in the middle of a multi-byte
+        // character and this is only ever shown to a person.
+        String::from_utf8_lossy(&bytes[offset.min(bytes.len())..end]).into_owned()
+    }
+
+    first.bytes().zip(second.bytes()).position(|(a, b)| a != b).map_or_else(
+        || format!("one is {} bytes long and the other {}", first.len(), second.len()),
+        |offset| {
+            format!(
+                "they first differ at byte {offset}, where the original has {:?} and the rebuilt one has {:?}",
+                excerpt(first, offset),
+                excerpt(second, offset)
+            )
+        },
+    )
+}
+
 fn diff_checker(_test_input: &str, official_output: &str, program_output: &str) -> bool {
     fn parse_whitespace(s: &str) -> Vec<&str> {
         let mut res = s.split_whitespace().collect::<Vec<_>>();
@@ -120,6 +181,9 @@ impl<T: ToOutput> Task<T> {
             problem_path: path.to_owned(),
             tests_path: path.join("tests"),
             tests_archive_path: path.join("tests.zip"),
+            manifest_path: path.join("seeds.json"),
+            seed: SeedChoice::Default,
+            reproducibility_checks: None,
             get_input_file_name: Box::new(|test_id, subtask_id, _test_id_in_subtask| format!("test.{:02}.{:03}.in", subtask_id + 1, test_id + 1)),
             get_output_file_name: Box::new(|test_id, subtask_id, _test_id_in_subtask| format!("test.{:02}.{:03}.out", subtask_id + 1, test_id + 1)),
             build_folder_path,
@@ -170,16 +234,6 @@ impl<T: ToOutput> Task<T> {
     pub fn with_checker(mut self, checker: fn(&str, &str, &str) -> bool) -> Self {
         self.checker = checker;
         self
-    }
-
-    /// Internal helper to get input file path.
-    pub(crate) fn get_input_file_path(&self, test_id: i32, subtask_id: i32, test_id_in_subtask: i32) -> PathBuf {
-        self.tests_path.join((self.get_input_file_name)(test_id, subtask_id, test_id_in_subtask))
-    }
-
-    /// Internal helper to get output file path.
-    pub(crate) fn get_output_file_path(&self, test_id: i32, subtask_id: i32, test_id_in_subtask: i32) -> PathBuf {
-        self.tests_path.join((self.get_output_file_name)(test_id, subtask_id, test_id_in_subtask))
     }
 
     /// Adds a subtask to the task.
@@ -276,6 +330,66 @@ impl<T: ToOutput> Task<T> {
         self
     }
 
+    /// Sets the path of the seed manifest.
+    ///
+    /// The manifest is what [seed mode](Mode::Seeds) writes instead of test
+    /// files, and what [`--serve`](Mode::Serve) reads to know which tests exist.
+    #[must_use]
+    pub fn with_manifest_path(mut self, path: PathBuf) -> Self {
+        self.manifest_path = path;
+        self
+    }
+
+    /// Sets the master seed for test generation.
+    ///
+    /// Two runs with the same seed generate the same tests, so this is how a set
+    /// of test data is pinned down. A `--seed` on the command line overrides it.
+    #[must_use]
+    pub const fn with_seed(mut self, seed: u64) -> Self {
+        self.seed = SeedChoice::Fixed(seed);
+        self
+    }
+
+    /// Draws a fresh master seed on every run.
+    ///
+    /// Useful while a task is being written, when the point is to keep looking
+    /// for tests that break a partial solution rather than to reproduce an
+    /// earlier run. The seed that was drawn is written to the manifest, so a run
+    /// worth keeping can be repeated with [`Task::with_seed`].
+    #[must_use]
+    pub const fn with_random_seed(mut self) -> Self {
+        self.seed = SeedChoice::Random;
+        self
+    }
+
+    /// Sets how many times each finished test is rebuilt from its seed to check
+    /// that it comes out the same.
+    ///
+    /// [Seed mode](Mode::Seeds) does this on its own, [`DEFAULT_REPRODUCIBILITY_CHECKS`]
+    /// times; file mode does not, because it has the tests themselves. Setting a
+    /// count applies it to both, and zero turns the check off.
+    ///
+    /// Only the inputs are rebuilt. The official solution is not run again: its
+    /// output is a function of its input, so an input that comes back identical
+    /// brings the same output with it.
+    #[must_use]
+    pub const fn with_reproducibility_checks(mut self, times: usize) -> Self {
+        self.reproducibility_checks = Some(times);
+        self
+    }
+
+    /// How many rebuilds this run should do, given the mode it is running in.
+    const fn reproducibility_checks(&self, mode: Mode) -> usize {
+        match self.reproducibility_checks {
+            Some(times) => times,
+            None if matches!(mode, Mode::Seeds) => DEFAULT_REPRODUCIBILITY_CHECKS,
+            // File mode keeps the tests, so a generator that cannot rebuild them
+            // costs nothing until somebody serves them - and the server checks
+            // every test against the hash in the manifest anyway.
+            None => 0,
+        }
+    }
+
     /// Sets the log level for output.
     #[must_use]
     pub const fn with_debug_level(mut self, level: LevelFilter) -> Self {
@@ -283,8 +397,45 @@ impl<T: ToOutput> Task<T> {
         self
     }
 
-    /// Executes the task: compiles solutions, generates robust tests, and verifies outcomes.
+    /// Runs the task, taking the mode from the command line.
+    ///
+    /// With no arguments this compiles the solutions, generates the tests, writes
+    /// them out and archives them, as it always has. `--seeds` keeps only the
+    /// manifest and `--serve` answers requests for tests on stdin; `--help`
+    /// describes them. See [`Mode`] for what each one does.
+    ///
+    /// A task binary is what an online judge invokes, so an argument that is not
+    /// recognised is an error rather than something to ignore. Call
+    /// [`Task::run_mode`] instead to choose the mode in code and leave the
+    /// command line alone.
     pub fn run(self) -> Result<()> {
+        let options = match CliOptions::from_env() {
+            Ok(options) => options,
+            Err(err) => {
+                // The logger is not up yet, and this is a usage error rather than
+                // a failure of the task, so it goes straight to the terminal.
+                eprintln!("{err}\n\n{USAGE}");
+                return Err(err);
+            }
+        };
+
+        if options.help {
+            println!("{USAGE}");
+            return Ok(());
+        }
+
+        let seed = options.seed.unwrap_or(self.seed);
+        self.run_with(options.mode, seed)
+    }
+
+    /// Runs the task in a given mode, ignoring the command line.
+    pub fn run_mode(self, mode: Mode) -> Result<()> {
+        let seed = self.seed;
+        self.run_with(mode, seed)
+    }
+
+    /// Sets up logging and dispatches to whichever mode was asked for.
+    fn run_with(self, mode: Mode, seed: SeedChoice) -> Result<()> {
         LOGGER_INIT.call_once(|| {
             let mut builder = env_logger::builder();
             builder.filter(None, self.debug_level);
@@ -296,8 +447,14 @@ impl<T: ToOutput> Task<T> {
             debug!("Logger initialized with level: {}", self.debug_level);
         });
 
+        // Serving is a long-running process answering requests, not a build, so
+        // none of the timing or the "Success!" banner belongs to it.
+        if mode == Mode::Serve {
+            return self.serve().inspect_err(|err| error!("{}", style(err).red().bright()));
+        }
+
         let start_time = std::time::Instant::now();
-        let res = self.create_tests_inner();
+        let res = self.create_tests_inner(mode, seed.resolve(DEFAULT_SEED));
         if let Err(err) = res {
             error!("{}", style(&err).red().bright());
             Err(err)
@@ -322,8 +479,11 @@ impl<T: ToOutput> Task<T> {
         self.logger.println(&border_text).ok();
     }
 
-    /// This function builds solution and then calls `generate_tests`.
-    fn create_tests_inner(&self) -> Result<()> {
+    /// Compiles the solutions, generates every test and verifies the outcome.
+    ///
+    /// The two generating modes share all of this: the tests are produced and
+    /// checked identically, and the mode only decides what is kept afterwards.
+    fn create_tests_inner(&self, mode: Mode, seed: u64) -> Result<()> {
         self.logger.println("").ok();
         let text = format!("Creating tests for task \"{}\"", self.name);
         self.print_title(&text);
@@ -358,13 +518,15 @@ impl<T: ToOutput> Task<T> {
         cpp_runner.clean_build_folder()?;
 
         // Prepare test directory
-        if self.tests_path.exists() {
-            remove_dir_all_with_retry(&self.tests_path)?;
+        if mode == Mode::Files {
+            if self.tests_path.exists() {
+                remove_dir_all_with_retry(&self.tests_path)?;
+            }
+            fs::create_dir_all(&self.tests_path).map_err(|err| Error::IOError {
+                err,
+                file: path_str(&self.tests_path),
+            })?;
         }
-        fs::create_dir_all(&self.tests_path).map_err(|err| Error::IOError {
-            err,
-            file: path_str(&self.tests_path),
-        })?;
 
         // clear log file
         fs::File::create(self.get_results_file()).map_err(|e| Error::IOError {
@@ -372,23 +534,37 @@ impl<T: ToOutput> Task<T> {
             file: path_str(&self.get_results_file()),
         })?;
 
+        info!("Master seed: {}", style(format!("{seed:#018x}")).bold());
+        // One generator drives the whole run, so the seed alone decides every test
+        // that gets generated.
+        let mut rng = Rng::from_seed(seed);
+
         let num_subtasks = self.subtasks.len();
-        let mut global_test_id = 0;
-        let mut all_test_files = Vec::new();
+        let mut all_tests = Vec::new();
 
         for (subtask_idx, subtask) in self.subtasks.iter().enumerate() {
             self.print_progress((subtask_idx + 1) as i32, num_subtasks as i32, &format!("Subtask {}: {}", subtask_idx + 1, subtask.name));
-            self.create_tests_for_subtask(subtask_idx, subtask, &mut global_test_id, &mut all_test_files, &solution_handles, solution_handle, &mut cpp_runner)?;
+            all_tests.push(self.create_tests_for_subtask(subtask_idx, subtask, &mut rng, &solution_handles, solution_handle, &mut cpp_runner)?);
+        }
+
+        // Before anything is kept or judged: prove that the tests just generated
+        // can be built again from the seeds that are about to be recorded.
+        self.check_tests_are_reproducible(self.reproducibility_checks(mode), &all_tests)?;
+
+        let manifest = self.build_manifest(seed, &all_tests)?;
+
+        if mode == Mode::Files {
+            self.write_tests(&manifest, &all_tests)?;
         }
 
         self.log_result("Running official solution:")?;
-        let passed_subtasks = self.run_partial_solution(&all_test_files, &mut cpp_runner, solution_handle, self.solution_source.split('\n').count())?;
+        let passed_subtasks = self.run_partial_solution(&all_tests, &mut cpp_runner, solution_handle, self.solution_source.split('\n').count())?;
         // Every test was checked against the official solution as it was
         // generated, so this only fires when a run is not reproducible - a
         // solution sitting right on its time limit is the usual reason, and a
         // silent "Success!" would hide it.
         for (subtask_idx, subtask) in self.subtasks.iter().enumerate() {
-            if !passed_subtasks.contains(&subtask_idx) && !all_test_files[subtask_idx].is_empty() {
+            if !passed_subtasks.contains(&subtask_idx) && !all_tests[subtask_idx].is_empty() {
                 warn!(
                     "The official solution did not pass subtask {} ({}) when it was run on the finished tests.",
                     subtask_idx + 1,
@@ -399,20 +575,148 @@ impl<T: ToOutput> Task<T> {
 
         for (i, partial) in solution_handles.iter().enumerate() {
             self.log_result(&format!("Running partial solution {}: {}", i + 1, self.solutions[i].name))?;
-            let passed_subtasks = self.run_partial_solution(&all_test_files, &mut cpp_runner, *partial, self.solutions[i].source.split('\n').count())?;
+            let passed_subtasks = self.run_partial_solution(&all_tests, &mut cpp_runner, *partial, self.solutions[i].source.split('\n').count())?;
             self.check_partial_solution_outcome(i, &passed_subtasks)?;
         }
 
-        self.archive_tests(&all_test_files)?;
+        // Written last, so a manifest on disk always describes a set of tests that
+        // was verified all the way through.
+        manifest.write(&self.manifest_path)?;
 
-        let tests_size = fs_extra::dir::get_size(&self.tests_path).unwrap_or(0) as f32 / 1_000_000.0;
-        self.log_result(&format!("Tests size: {}", style(format!("{tests_size:.2}MB")).bold()))?;
+        if mode == Mode::Files {
+            self.archive_tests(&manifest)?;
+
+            let tests_size = fs_extra::dir::get_size(&self.tests_path).unwrap_or(0) as f32 / 1_000_000.0;
+            self.log_result(&format!("Tests size: {}", style(format!("{tests_size:.2}MB")).bold()))?;
+        } else {
+            let manifest_size = fs::metadata(&self.manifest_path).map_or(0, |metadata| metadata.len()) as f32 / 1_000.0;
+            self.log_result(&format!(
+                "{} tests kept as seeds in {} ({})",
+                manifest.num_tests(),
+                path_str(&self.manifest_path),
+                style(format!("{manifest_size:.1}kB")).bold()
+            ))?;
+        }
 
         // Log test counts per subtask
-        for (i, tests) in all_test_files.iter().enumerate() {
+        for (i, tests) in all_tests.iter().enumerate() {
             self.log_result(&format!("Subtask {}: {} tests", i + 1, tests.len()))?;
         }
 
+        Ok(())
+    }
+
+    /// Rebuilds every finished test from its seed `times` over and checks that
+    /// it comes out identical each time.
+    ///
+    /// A seed is only worth recording if it really does reproduce the test. The
+    /// framework cannot stop a generator from reaching for randomness it was not
+    /// given - a `rand::rng()` call, the clock, a value captured when the task was
+    /// described, the iteration order of a `HashMap` - so instead it tries the
+    /// thing that would go wrong and refuses to write a manifest that lies.
+    ///
+    /// Only the finished tests are rebuilt, not the candidates that were thrown
+    /// away along the way, and only their inputs: the official solution's output
+    /// follows from its input.
+    fn check_tests_are_reproducible(&self, times: usize, all_tests: &[Vec<GeneratedTest>]) -> Result<()> {
+        let total_tests: usize = all_tests.iter().map(Vec::len).sum();
+        if times == 0 || total_tests == 0 {
+            return Ok(());
+        }
+
+        info!("Checking that all {total_tests} tests can be rebuilt from their seeds ({times} times each)");
+        let progress_bar = ScopedProgressBar::new(&self.logger, (total_tests * times) as u64);
+
+        for (subtask_idx, subtask_tests) in all_tests.iter().enumerate() {
+            for test in subtask_tests {
+                for attempt in 1..=times {
+                    let rebuilt = self.generate_input(subtask_idx, test.generator, test.seed);
+                    progress_bar.inc(1);
+
+                    if rebuilt != *test.input {
+                        return Err(Error::GeneratorNotReproducible {
+                            subtask_number: subtask_idx + 1,
+                            gen_id: test.generator + 1,
+                            seed: format!("{:#018x}", test.seed),
+                            attempt,
+                            attempts: times,
+                            details: describe_difference(&test.input, &rebuilt),
+                        });
+                    }
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Records what every generated test is made of.
+    ///
+    /// The file names come from the task's own naming closures even in seed mode,
+    /// where nothing is written: a judge that later materialises the tests should
+    /// get the same names a normal run would have produced.
+    fn build_manifest(&self, seed: u64, all_tests: &[Vec<GeneratedTest>]) -> Result<Manifest> {
+        let mut subtasks = Vec::new();
+        let mut global_test_id = 0_i32;
+        // The names come from user supplied closures, and two tests that map to
+        // the same name would overwrite each other on disk and collide in the
+        // archive. Catching it here means seed mode, which writes no files at all,
+        // rejects the same task a normal run would.
+        let mut used_names: HashSet<String> = HashSet::new();
+
+        for (subtask_idx, subtask_tests) in all_tests.iter().enumerate() {
+            let mut tests = Vec::new();
+            for (test_id_in_subtask, test) in subtask_tests.iter().enumerate() {
+                let input_file = (self.get_input_file_name)(global_test_id, subtask_idx as i32, test_id_in_subtask as i32);
+                let output_file = (self.get_output_file_name)(global_test_id, subtask_idx as i32, test_id_in_subtask as i32);
+
+                for name in [&input_file, &output_file] {
+                    if !used_names.insert(name.clone()) {
+                        return Err(Error::TestAlreadyExists { path: name.clone() });
+                    }
+                }
+
+                tests.push(ManifestTest {
+                    index_in_subtask: test_id_in_subtask,
+                    global_index: global_test_id as usize,
+                    generator: test.generator,
+                    seed: test.seed,
+                    input_file,
+                    output_file,
+                    input_hash: stable_hash(&test.input),
+                    output_hash: stable_hash(&test.output),
+                });
+                global_test_id += 1;
+            }
+
+            subtasks.push(ManifestSubtask {
+                index: subtask_idx,
+                points: self.subtasks[subtask_idx].points,
+                name: self.subtasks[subtask_idx].name.clone(),
+                tests,
+            });
+        }
+
+        Ok(Manifest {
+            task: self.name.clone(),
+            seed,
+            trim_whitespace: self.trim_whitespace,
+            time_limit: self.time_limit,
+            subtasks,
+        })
+    }
+
+    /// Writes every generated test to the file names the manifest gave it.
+    fn write_tests(&self, manifest: &Manifest, all_tests: &[Vec<GeneratedTest>]) -> Result<()> {
+        for (subtask, subtask_tests) in manifest.subtasks.iter().zip(all_tests) {
+            for (entry, test) in subtask.tests.iter().zip(subtask_tests) {
+                let input_path = self.tests_path.join(&entry.input_file);
+                let output_path = self.tests_path.join(&entry.output_file);
+
+                fs::write(&input_path, test.input.as_bytes()).map_err(|err| Error::IOError { err, file: path_str(&input_path) })?;
+                fs::write(&output_path, test.output.as_bytes()).map_err(|err| Error::IOError { err, file: path_str(&output_path) })?;
+            }
+        }
         Ok(())
     }
 
@@ -465,12 +769,12 @@ impl<T: ToOutput> Task<T> {
     }
 
     /// Archive all tests into a zip file
-    fn archive_tests(&self, test_files: &[Vec<(PathBuf, PathBuf)>]) -> Result<()> {
+    fn archive_tests(&self, manifest: &Manifest) -> Result<()> {
         let mut test_files_vec = Vec::new();
-        for subtask in test_files {
-            for (input_file, output_file) in subtask {
-                test_files_vec.push(input_file.clone());
-                test_files_vec.push(output_file.clone());
+        for subtask in &manifest.subtasks {
+            for test in &subtask.tests {
+                test_files_vec.push(self.tests_path.join(&test.input_file));
+                test_files_vec.push(self.tests_path.join(&test.output_file));
             }
         }
 

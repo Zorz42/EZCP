@@ -1,12 +1,25 @@
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod graph_tests {
+    use crate::ToOutput;
     use crate::generators::Graph;
+    use crate::rng::Rng;
+    use std::sync::atomic::{AtomicU64, Ordering};
+
+    /// A generator for tests that care about a graph's shape rather than about
+    /// which particular graph they get.
+    ///
+    /// Each call uses the next seed, so a loop building many graphs still builds
+    /// many different ones, and a failure can be repeated by fixing the counter.
+    fn rng() -> Rng {
+        static NEXT_SEED: AtomicU64 = AtomicU64::new(0);
+        Rng::from_seed(NEXT_SEED.fetch_add(1, Ordering::Relaxed))
+    }
 
     #[test]
     fn test_empty() {
         for i in 1..100 {
-            let graph = Graph::new_empty(i);
+            let graph = Graph::new_empty(&mut rng(), i);
             assert_eq!(graph.get_num_nodes(), i);
             assert_eq!(graph.get_num_edges(), 0);
             for u in 0..i {
@@ -20,7 +33,7 @@ mod graph_tests {
     #[test]
     fn test_full() {
         for i in 1..100 {
-            let graph = Graph::new_full(i);
+            let graph = Graph::new_full(&mut rng(), i);
             assert_eq!(graph.get_num_nodes(), i);
             assert_eq!(graph.get_num_edges(), i * (i - 1) / 2);
             for u in 0..i {
@@ -33,7 +46,7 @@ mod graph_tests {
 
     #[test]
     fn test_add_edge() {
-        let mut graph = Graph::new_empty(5);
+        let mut graph = Graph::new_empty(&mut rng(), 5);
         assert_eq!(graph.get_num_edges(), 0);
         graph.add_edge(0, 1);
         assert_eq!(graph.get_num_edges(), 1);
@@ -76,13 +89,13 @@ mod graph_tests {
         for n in 2..80 {
             let max_edges = n * (n - 1) / 2;
             for m in [max_edges, max_edges - 1, max_edges * 3 / 4] {
-                let graph = Graph::new_random(n, m);
+                let graph = Graph::new_random(&mut rng(), n, m);
                 assert_eq!(graph.get_num_nodes(), n);
                 assert_eq!(graph.get_num_edges(), m, "for {n} nodes and {m} edges");
             }
         }
 
-        assert!(Graph::new_random(200, 200 * 199 / 2).is_full());
+        assert!(Graph::new_random(&mut rng(), 200, 200 * 199 / 2).is_full());
     }
 
     /// The same for a connected graph, which starts from a spanning tree and then
@@ -91,7 +104,7 @@ mod graph_tests {
     fn test_random_connected_dense() {
         for n in 2..80 {
             let max_edges = n * (n - 1) / 2;
-            let graph = Graph::new_random_connected(n, max_edges);
+            let graph = Graph::new_random_connected(&mut rng(), n, max_edges);
             assert_eq!(graph.get_num_edges(), max_edges);
             assert!(graph.is_connected());
             assert!(graph.is_full());
@@ -101,7 +114,7 @@ mod graph_tests {
     #[test]
     fn test_random() {
         for i in 5..100 {
-            let graph = Graph::new_random(i, 2 * i);
+            let graph = Graph::new_random(&mut rng(), i, 2 * i);
             assert_eq!(graph.get_num_nodes(), i);
             assert_eq!(graph.get_num_edges(), 2 * i);
             let mut counted_edges = 0;
@@ -117,7 +130,7 @@ mod graph_tests {
         }
 
         for i in 3..100 {
-            let graph = Graph::new_random(i, i);
+            let graph = Graph::new_random(&mut rng(), i, i);
             assert_eq!(graph.get_num_nodes(), i);
             assert_eq!(graph.get_num_edges(), i);
             let mut counted_edges = 0;
@@ -136,7 +149,7 @@ mod graph_tests {
     #[test]
     fn test_random_tree() {
         for i in 1..100 {
-            let graph = Graph::new_random_tree(i);
+            let graph = Graph::new_random_tree(&mut rng(), i);
             assert_eq!(graph.get_num_nodes(), i);
             assert_eq!(graph.get_num_edges(), i - 1);
             assert!(graph.is_tree());
@@ -145,14 +158,14 @@ mod graph_tests {
 
     #[test]
     fn test_random_connected() {
-        let graph = Graph::new_random_connected(10, 20);
+        let graph = Graph::new_random_connected(&mut rng(), 10, 20);
         assert_eq!(graph.get_num_nodes(), 10);
         assert_eq!(graph.get_num_edges(), 20);
     }
 
     #[test]
     fn test_is_tree() {
-        let mut graph = Graph::new_empty(10);
+        let mut graph = Graph::new_empty(&mut rng(), 10);
         assert!(!graph.is_tree());
         graph.add_edge(0, 1);
         assert!(!graph.is_tree());
@@ -175,7 +188,7 @@ mod graph_tests {
         graph.add_edge(9, 0);
         assert!(!graph.is_tree());
 
-        let mut graph = Graph::new_empty(5);
+        let mut graph = Graph::new_empty(&mut rng(), 5);
         assert!(!graph.is_tree());
         graph.add_edge(0, 1);
         assert!(!graph.is_tree());
@@ -189,36 +202,36 @@ mod graph_tests {
         assert!(!graph.is_tree());
 
         for i in 3..100 {
-            let graph = Graph::new_full(i);
+            let graph = Graph::new_full(&mut rng(), i);
             assert!(!graph.is_tree());
         }
 
         for i in 3..100 {
-            let graph = Graph::new_random(i, i);
+            let graph = Graph::new_random(&mut rng(), i, i);
             assert!(!graph.is_tree());
         }
 
         for i in 2..100 {
-            let graph = Graph::new_random(i, i - 2);
+            let graph = Graph::new_random(&mut rng(), i, i - 2);
             assert!(!graph.is_tree());
         }
 
         for i in 1..100 {
-            let graph = Graph::new_random_connected(i, i - 1);
+            let graph = Graph::new_random_connected(&mut rng(), i, i - 1);
             assert!(graph.is_tree());
         }
 
         for i in 2..100 {
-            let graph = Graph::new_random_connected(i, i - 2);
+            let graph = Graph::new_random_connected(&mut rng(), i, i - 2);
             assert!(graph.is_tree());
         }
 
         for i in 1..100 {
-            let graph = Graph::new_random_tree(i);
+            let graph = Graph::new_random_tree(&mut rng(), i);
             assert!(graph.is_tree());
         }
 
-        let mut graph = Graph::new_empty(4);
+        let mut graph = Graph::new_empty(&mut rng(), 4);
         graph.add_edge(0, 1);
         graph.add_edge(1, 2);
         graph.add_edge(2, 0);
@@ -228,28 +241,28 @@ mod graph_tests {
     #[test]
     fn test_random_bipartite() {
         for i in 10..100 {
-            let graph = Graph::new_random_bipartite(i, 2 * i);
+            let graph = Graph::new_random_bipartite(&mut rng(), i, 2 * i);
             assert_eq!(graph.get_num_nodes(), i);
             assert_eq!(graph.get_num_edges(), 2 * i);
             assert!(graph.is_bipartite());
         }
 
         for i in 20..100 {
-            let graph = Graph::new_random_bipartite(i, 3 * i);
+            let graph = Graph::new_random_bipartite(&mut rng(), i, 3 * i);
             assert_eq!(graph.get_num_nodes(), i);
             assert_eq!(graph.get_num_edges(), 3 * i);
             assert!(graph.is_bipartite());
         }
 
         for i in 10..100 {
-            let graph = Graph::new_random_bipartite(i, i);
+            let graph = Graph::new_random_bipartite(&mut rng(), i, i);
             assert_eq!(graph.get_num_nodes(), i);
             assert_eq!(graph.get_num_edges(), i);
             assert!(graph.is_bipartite());
         }
 
         for i in 10..100 {
-            let graph = Graph::new_random_bipartite(i, i / 2);
+            let graph = Graph::new_random_bipartite(&mut rng(), i, i / 2);
             assert_eq!(graph.get_num_nodes(), i);
             assert_eq!(graph.get_num_edges(), i / 2);
             assert!(graph.is_bipartite());
@@ -258,7 +271,7 @@ mod graph_tests {
 
     #[test]
     fn test_is_bipartite() {
-        let mut graph = Graph::new_empty(10);
+        let mut graph = Graph::new_empty(&mut rng(), 10);
         assert!(graph.is_bipartite());
         graph.add_edge(0, 1);
         assert!(graph.is_bipartite());
@@ -283,7 +296,7 @@ mod graph_tests {
         graph.add_edge(0, 2);
         assert!(!graph.is_bipartite());
 
-        let mut graph = Graph::new_empty(5);
+        let mut graph = Graph::new_empty(&mut rng(), 5);
         assert!(graph.is_bipartite());
         graph.add_edge(0, 1);
         assert!(graph.is_bipartite());
@@ -299,7 +312,7 @@ mod graph_tests {
 
     #[test]
     fn test_get_connected_components() {
-        let mut graph = Graph::new_empty(10);
+        let mut graph = Graph::new_empty(&mut rng(), 10);
         assert_eq!(
             graph.get_connected_components(),
             vec![vec![0], vec![1], vec![2], vec![3], vec![4], vec![5], vec![6], vec![7], vec![8], vec![9]]
@@ -336,20 +349,20 @@ mod graph_tests {
 
     #[test]
     fn test_is_connected_single_node() {
-        let graph = Graph::new_empty(1);
+        let graph = Graph::new_empty(&mut rng(), 1);
         assert!(graph.is_connected());
     }
 
     #[test]
     fn test_is_connected_disconnected_two_nodes() {
-        let graph = Graph::new_empty(2);
+        let graph = Graph::new_empty(&mut rng(), 2);
         // Two isolated nodes: not connected
         assert!(!graph.is_connected());
     }
 
     #[test]
     fn test_is_connected_chain() {
-        let mut graph = Graph::new_empty(5);
+        let mut graph = Graph::new_empty(&mut rng(), 5);
         graph.add_edge(0, 1);
         graph.add_edge(1, 2);
         graph.add_edge(2, 3);
@@ -359,7 +372,7 @@ mod graph_tests {
 
     #[test]
     fn test_is_full_one_node() {
-        let graph = Graph::new_full(1);
+        let graph = Graph::new_full(&mut rng(), 1);
         // A single node has 0 edges; n*(n-1)/2 = 0, so is_full should be true
         assert_eq!(graph.get_num_edges(), 0);
         assert!(graph.is_full());
@@ -367,20 +380,20 @@ mod graph_tests {
 
     #[test]
     fn test_is_full_two_nodes() {
-        let graph = Graph::new_full(2);
+        let graph = Graph::new_full(&mut rng(), 2);
         assert_eq!(graph.get_num_edges(), 1);
         assert!(graph.is_full());
     }
 
     #[test]
     fn test_is_not_full_when_missing_edge() {
-        let graph = Graph::new_full(5);
+        let graph = Graph::new_full(&mut rng(), 5);
         // Manually verify; then check a graph missing an edge is not full
         assert!(graph.is_full());
-        let partial = Graph::new_empty(5);
+        let partial = Graph::new_empty(&mut rng(), 5);
         assert!(!partial.is_full());
         // Adding one edge to a 5-node graph: only 1 of 10 edges
-        let mut partial2 = Graph::new_empty(5);
+        let mut partial2 = Graph::new_empty(&mut rng(), 5);
         partial2.add_edge(0, 1);
         assert!(!partial2.is_full());
         drop(graph); // suppress unused warning
@@ -389,7 +402,7 @@ mod graph_tests {
     #[test]
     fn test_is_bipartite_disconnected_graph_with_triangle() {
         // Component 1: triangle (not bipartite); Component 2: isolated node
-        let mut graph = Graph::new_empty(4);
+        let mut graph = Graph::new_empty(&mut rng(), 4);
         graph.add_edge(0, 1);
         graph.add_edge(1, 2);
         graph.add_edge(2, 0); // odd cycle
@@ -399,14 +412,14 @@ mod graph_tests {
 
     #[test]
     fn test_is_bipartite_single_edge() {
-        let mut graph = Graph::new_empty(2);
+        let mut graph = Graph::new_empty(&mut rng(), 2);
         graph.add_edge(0, 1);
         assert!(graph.is_bipartite());
     }
 
     #[test]
     fn test_get_connected_components_single_node() {
-        let graph = Graph::new_empty(1);
+        let graph = Graph::new_empty(&mut rng(), 1);
         let comps = graph.get_connected_components();
         assert_eq!(comps.len(), 1);
         assert_eq!(comps[0], vec![0]);
@@ -414,7 +427,7 @@ mod graph_tests {
 
     #[test]
     fn test_get_connected_components_two_isolated_nodes() {
-        let graph = Graph::new_empty(2);
+        let graph = Graph::new_empty(&mut rng(), 2);
         let comps = graph.get_connected_components();
         assert_eq!(comps.len(), 2);
         // Each component has exactly one node
@@ -425,7 +438,7 @@ mod graph_tests {
     #[test]
     fn test_random_connected_is_connected() {
         for n in 2..20 {
-            let graph = Graph::new_random_connected(n, n - 1);
+            let graph = Graph::new_random_connected(&mut rng(), n, n - 1);
             assert!(graph.is_connected(), "random connected graph with {n} nodes should be connected");
         }
     }
@@ -452,7 +465,7 @@ mod graph_tests {
     #[test]
     fn test_to_output_empty_graph() {
         use crate::ToOutput;
-        let graph = Graph::new_empty(5);
+        let graph = Graph::new_empty(&mut rng(), 5);
         let output = graph.to_output();
         assert_eq!(output, "5 0\n");
     }
@@ -460,7 +473,7 @@ mod graph_tests {
     #[test]
     fn test_to_output_single_node() {
         use crate::ToOutput;
-        let graph = Graph::new_empty(1);
+        let graph = Graph::new_empty(&mut rng(), 1);
         let output = graph.to_output();
         assert_eq!(output, "1 0\n");
     }
@@ -468,7 +481,7 @@ mod graph_tests {
     #[test]
     fn test_to_output_simple_edges() {
         use crate::ToOutput;
-        let mut graph = Graph::new_empty(4);
+        let mut graph = Graph::new_empty(&mut rng(), 4);
         graph.add_edge(0, 1);
         graph.add_edge(1, 2);
         graph.add_edge(2, 3);
@@ -485,7 +498,7 @@ mod graph_tests {
     #[test]
     fn test_to_output_full_graph() {
         use crate::ToOutput;
-        let graph = Graph::new_full(4);
+        let graph = Graph::new_full(&mut rng(), 4);
         let output = graph.to_output();
         let lines: Vec<&str> = output.lines().collect();
 
@@ -500,7 +513,7 @@ mod graph_tests {
     fn test_to_output_tree_format() {
         use crate::ToOutput;
         // Tree format: header is just "n" (no edge count)
-        let mut graph = Graph::new_empty(4);
+        let mut graph = Graph::new_empty(&mut rng(), 4);
         graph.add_edge(0, 1);
         graph.add_edge(1, 2);
         graph.add_edge(2, 3);
@@ -519,7 +532,7 @@ mod graph_tests {
     fn test_to_output_random_tree() {
         use crate::ToOutput;
         for n in 1..50 {
-            let graph = Graph::new_random_tree(n);
+            let graph = Graph::new_random_tree(&mut rng(), n);
             let output = graph.to_output();
             let lines: Vec<&str> = output.lines().collect();
 
@@ -534,7 +547,7 @@ mod graph_tests {
         use crate::ToOutput;
         for n in 5..30 {
             let m = 2 * n;
-            let graph = Graph::new_random(n, m);
+            let graph = Graph::new_random(&mut rng(), n, m);
             let output = graph.to_output();
             let lines: Vec<&str> = output.lines().collect();
 
@@ -555,7 +568,7 @@ mod graph_tests {
     #[test]
     fn test_to_output_edges_are_1_indexed() {
         use crate::ToOutput;
-        let mut graph = Graph::new_empty(3);
+        let mut graph = Graph::new_empty(&mut rng(), 3);
         graph.add_edge(0, 1);
         let output = graph.to_output();
         let lines: Vec<&str> = output.lines().collect();
@@ -575,49 +588,49 @@ mod graph_tests {
     #[test]
     #[should_panic(expected = "at most 3 are possible")]
     fn test_random_rejects_too_many_edges() {
-        let _ = Graph::new_random(3, 10);
+        let _ = Graph::new_random(&mut rng(), 3, 10);
     }
 
     #[test]
     #[should_panic(expected = "at most 0 are possible")]
     fn test_random_rejects_edge_on_single_node() {
-        let _ = Graph::new_random(1, 1);
+        let _ = Graph::new_random(&mut rng(), 1, 1);
     }
 
     #[test]
     #[should_panic(expected = "at most 6 are possible")]
     fn test_random_connected_rejects_too_many_edges() {
-        let _ = Graph::new_random_connected(4, 100);
+        let _ = Graph::new_random_connected(&mut rng(), 4, 100);
     }
 
     #[test]
     #[should_panic(expected = "at most 4 are possible")]
     fn test_random_bipartite_rejects_too_many_edges() {
-        let _ = Graph::new_random_bipartite(4, 100);
+        let _ = Graph::new_random_bipartite(&mut rng(), 4, 100);
     }
 
     #[test]
     #[should_panic(expected = "at least two nodes")]
     fn test_random_bipartite_rejects_single_node() {
-        let _ = Graph::new_random_bipartite(1, 0);
+        let _ = Graph::new_random_bipartite(&mut rng(), 1, 0);
     }
 
     #[test]
     #[should_panic(expected = "at least one node")]
     fn test_random_deep_tree_rejects_zero_nodes() {
-        let _ = Graph::new_random_deep_tree(0);
+        let _ = Graph::new_random_deep_tree(&mut rng(), 0);
     }
 
     #[test]
     #[should_panic(expected = "at least one node")]
     fn test_random_tree_rejects_zero_nodes() {
-        let _ = Graph::new_random_tree(0);
+        let _ = Graph::new_random_tree(&mut rng(), 0);
     }
 
     #[test]
     #[should_panic(expected = "cannot have -1 nodes")]
     fn test_new_empty_rejects_negative_nodes() {
-        let _ = Graph::new_empty(-1);
+        let _ = Graph::new_empty(&mut rng(), -1);
     }
 
     /// The densest feasible parameters are the ones closest to looping forever, so
@@ -625,16 +638,16 @@ mod graph_tests {
     #[test]
     fn test_maximum_density_graphs_terminate() {
         for n in 2..12 {
-            let complete = Graph::new_random(n, n * (n - 1) / 2);
+            let complete = Graph::new_random(&mut rng(), n, n * (n - 1) / 2);
             assert_eq!(complete.get_num_edges(), n * (n - 1) / 2);
             assert!(complete.is_full());
 
             let max_bipartite = (n / 2) * ((n + 1) / 2);
-            let bipartite = Graph::new_random_bipartite(n, max_bipartite);
+            let bipartite = Graph::new_random_bipartite(&mut rng(), n, max_bipartite);
             assert_eq!(bipartite.get_num_edges(), max_bipartite);
             assert!(bipartite.is_bipartite());
 
-            let connected = Graph::new_random_connected(n, n * (n - 1) / 2);
+            let connected = Graph::new_random_connected(&mut rng(), n, n * (n - 1) / 2);
             assert_eq!(connected.get_num_edges(), n * (n - 1) / 2);
             assert!(connected.is_connected());
         }
@@ -648,7 +661,7 @@ mod graph_tests {
         let n = 400;
         let m = (n / 2) * ((n + 1) / 2);
 
-        let graph = Graph::new_random_bipartite(n, m);
+        let graph = Graph::new_random_bipartite(&mut rng(), n, m);
 
         assert_eq!(graph.get_num_edges(), m);
         assert!(graph.is_bipartite());
@@ -659,7 +672,62 @@ mod graph_tests {
     /// programming task can reasonably use.
     #[test]
     fn test_is_full_does_not_overflow_for_large_node_counts() {
-        let graph = Graph::new_empty(100_000);
+        let graph = Graph::new_empty(&mut rng(), 100_000);
         assert!(!graph.is_full());
+    }
+
+    /// A graph built from a given seed has to write itself out the same way every
+    /// time, in the same process and in any other.
+    ///
+    /// Holding the edges in a `HashSet` alone would pass every structural test
+    /// above and still fail this one: a hash set is iterated in an order that is
+    /// randomised per process, so the edge list would come out shuffled
+    /// differently on every run and the seed would guarantee nothing.
+    #[test]
+    fn a_graph_is_written_out_the_same_way_for_the_same_seed() {
+        let rendered = |seed: u64, build: fn(&mut Rng, i32) -> Graph| build(&mut Rng::from_seed(seed), 60).to_output();
+
+        for build in [
+            Graph::new_random_tree as fn(&mut Rng, i32) -> Graph,
+            Graph::new_random_path,
+            Graph::new_random_deep_tree,
+            Graph::new_full,
+        ] {
+            assert_eq!(rendered(11, build), rendered(11, build), "the same seed produced two different graphs");
+            assert_ne!(rendered(11, build), rendered(12, build), "two seeds produced the same graph");
+        }
+    }
+
+    /// The same, for the constructors that take an edge count.
+    #[test]
+    fn a_random_graph_is_written_out_the_same_way_for_the_same_seed() {
+        let rendered = |seed: u64| Graph::new_random(&mut Rng::from_seed(seed), 50, 200).to_output();
+        assert_eq!(rendered(3), rendered(3));
+        assert_ne!(rendered(3), rendered(4));
+
+        let bipartite = |seed: u64| Graph::new_random_bipartite(&mut Rng::from_seed(seed), 40, 300).to_output();
+        assert_eq!(bipartite(3), bipartite(3));
+        assert_ne!(bipartite(3), bipartite(4));
+
+        let connected = |seed: u64| Graph::new_random_connected(&mut Rng::from_seed(seed), 40, 100).to_output();
+        assert_eq!(connected(3), connected(3));
+        assert_ne!(connected(3), connected(4));
+    }
+
+    /// A graph put together by hand, without any of the random constructors, has
+    /// to be just as reproducible.
+    #[test]
+    fn a_hand_built_graph_is_written_out_the_same_way_for_the_same_seed() {
+        let rendered = |seed: u64| {
+            let mut graph = Graph::new_empty(&mut Rng::from_seed(seed), 30);
+            for u in 1..30 {
+                graph.add_edge(u, u / 2);
+            }
+            graph.to_output()
+        };
+
+        assert_eq!(rendered(7), rendered(7));
+        // Only the order the edges are written in can differ here, and it has to.
+        assert_ne!(rendered(7), rendered(8));
     }
 }

@@ -1,4 +1,3 @@
-use rand::prelude::*;
 use std::path::PathBuf;
 
 const SOLUTION: &str = "
@@ -37,11 +36,12 @@ fn main() -> ezcp::Result<()> {
     let task = ezcp::Task::new("Coins", &PathBuf::from("task2")).with_solution_source(SOLUTION);
 
     // Constraint: n = 1
-    let subtask1 = ezcp::Subtask::new(10, "n = 1").with_test(5, ezcp::array_generator(1, 1, 1, 1000)).with_test(1, || "1\n 1\n".to_owned());
+    let subtask1 = ezcp::Subtask::new(10, "n = 1")
+        .with_test(5, ezcp::array_generator(1, 1, 1, 1000))
+        .with_test(1, |_rng| "1\n 1\n".to_owned());
 
     // Constraint: elements in the array are powers of 2 and n <= 30
-    let subtask2 = ezcp::Subtask::new(20, "elements in the array are powers of 2 and n <= 30").with_test(5, || {
-        let mut rng = rand::rng();
+    let subtask2 = ezcp::Subtask::new(20, "elements in the array are powers of 2 and n <= 30").with_test(5, |rng| {
         let n = rng.random_range(1..=30);
         let mut array = Vec::new();
         for i in 0..n {

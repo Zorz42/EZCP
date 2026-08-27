@@ -1,5 +1,4 @@
-use rand::RngExt;
-use rand::prelude::ThreadRng;
+use crate::rng::Rng;
 use std::fmt::Write;
 
 /// This function converts an array of integers to a string.
@@ -31,13 +30,16 @@ pub fn array_to_string(array: &[i32], include_count: bool) -> String {
 ///
 /// The array will have a length between `min_n` and `max_n` (inclusive).
 /// The generator function will be called to generate each element in the array.
-pub fn array_generator_custom<F: Fn(&mut ThreadRng) -> i32>(min_n: i32, max_n: i32, generator: F) -> impl Fn() -> String {
-    move || {
-        let mut rng = rand::rng();
+///
+/// The returned generator draws everything from the [`Rng`] it is handed, so the
+/// same seed always gives the same array. Reaching for another source of
+/// randomness inside `generator` breaks that.
+pub fn array_generator_custom<F: Fn(&mut Rng) -> i32>(min_n: i32, max_n: i32, generator: F) -> impl Fn(&mut Rng) -> String {
+    move |rng| {
         let n = rng.random_range(min_n..=max_n);
         let mut array = Vec::new();
         for _ in 0..n {
-            array.push(generator(&mut rng));
+            array.push(generator(rng));
         }
         array_to_string(&array, true)
     }
@@ -47,6 +49,6 @@ pub fn array_generator_custom<F: Fn(&mut ThreadRng) -> i32>(min_n: i32, max_n: i
 ///
 /// The array will have a length between `min_n` and `max_n` (inclusive).
 /// The values in the array will be between `min_x` and `max_x` (inclusive).
-pub fn array_generator(min_n: i32, max_n: i32, min_x: i32, max_x: i32) -> impl Fn() -> String {
+pub fn array_generator(min_n: i32, max_n: i32, min_x: i32, max_x: i32) -> impl Fn(&mut Rng) -> String {
     array_generator_custom(min_n, max_n, move |rng| rng.random_range(min_x..=max_x))
 }

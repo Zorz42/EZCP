@@ -1,6 +1,7 @@
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod partial_solution_tests {
+    use crate::Mode;
     use crate::array_generator;
     use crate::tests::generic_tests::generic_tests::Test;
     use crate::{Error, Subtask};
@@ -280,15 +281,15 @@ mod partial_solution_tests {
         task.task = task
             .task
             .with_solution_source(solution_contents)
-            .with_subtask(Subtask::new(0, "first").with_test(2, || "1\n".to_owned()))
-            .with_subtask(Subtask::new(0, "second").with_test(2, || "2\n".to_owned()))
+            .with_subtask(Subtask::new(0, "first").with_test(2, |_rng| "1\n".to_owned()))
+            .with_subtask(Subtask::new(0, "second").with_test(2, |_rng| "2\n".to_owned()))
             // Declared to pass only the first subtask, but it passes both.
             .with_partial_solution("indistinguishable", partial_solution_contents, &[0])
             .with_min_failures(1)
             .with_max_tries(3);
 
         assert!(matches!(
-            task.task.run(),
+            task.task.run_mode(Mode::Files),
             Err(Error::PartialSolutionPassesExtraSubtask {
                 subtask_number: 2,
                 partial_number: 1,
@@ -309,11 +310,11 @@ mod partial_solution_tests {
         task.task = task
             .task
             .with_solution_source(solution_contents)
-            .with_subtask(Subtask::new(0, "only subtask").with_test(1, || "1\n".to_owned()))
+            .with_subtask(Subtask::new(0, "only subtask").with_test(1, |_rng| "1\n".to_owned()))
             .with_partial_solution("partial", solution_contents, &[1]);
 
         assert!(matches!(
-            task.task.run(),
+            task.task.run_mode(Mode::Files),
             Err(Error::InvalidSubtaskIndex {
                 subtask_number: 1,
                 num_subtasks: 1,

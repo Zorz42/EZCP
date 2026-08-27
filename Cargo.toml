@@ -1,6 +1,6 @@
 [package]
 name = "ezcp"
-version = "0.4.0"
+version = "0.5.0"
 edition = "2024"
 description = "A simple tool to automatically generate test cases for competitive programming problems."
 # Let chains and the `zip` dependency both need 1.88; declaring it turns an
@@ -22,7 +22,9 @@ workspace = true
 # Both a version and a path: the path is used in the workspace, the version is
 # what a published crate depends on (packaging fails without it).
 ezcp_macros = { version = "0.1.0", path = "ezcp_macros" }
-rand = { version = "0.10", default-features = false, features = ["thread_rng"] }
+# JSON is the interchange format for the seed manifest and the on-demand
+# protocol, both of which are read by other programs.
+serde_json = { version = "1.0", default-features = false, features = ["std"] }
 fs_extra = { version = "1.3", default-features = false }
 zip = { version = "8.4", default-features = false, features = ["deflate"] }
 thiserror = { version = "2.0", default-features = false }

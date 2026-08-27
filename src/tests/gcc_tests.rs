@@ -70,7 +70,7 @@ pub mod gcc_tests {
 
         let tempdir = tempfile::TempDir::new().unwrap();
 
-        let key = rand::random::<u64>();
+        let key = crate::rng::Rng::from_entropy().next_u64();
 
         let source_code = r#"
         #include <iostream>

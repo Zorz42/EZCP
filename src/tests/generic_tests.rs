@@ -1,6 +1,7 @@
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 pub mod generic_tests {
+    use crate::Mode;
     use crate::to_output::ToOutput;
     use crate::{Error, Subtask, Task};
     use log::LevelFilter;
@@ -19,7 +20,7 @@ pub mod generic_tests {
         }
 
         pub fn test(self) {
-            self.task.run().unwrap();
+            self.task.run_mode(Mode::Files).unwrap();
             // Clean up the temporary directory
             drop(self.task_path);
         }
@@ -83,14 +84,14 @@ pub mod generic_tests {
         task.task = task.task.with_solution_source(solution_contents);
 
         let subtask1 = Subtask::new(0, "")
-            .with_test(1, || "1\n".to_owned())
-            .with_test(1, || "2\n".to_owned())
-            .with_test(1, || "3\n".to_owned());
+            .with_test(1, |_rng| "1\n".to_owned())
+            .with_test(1, |_rng| "2\n".to_owned())
+            .with_test(1, |_rng| "3\n".to_owned());
         let subtask2 = Subtask::new(0, "")
-            .with_test(1, || "1\n".to_owned())
-            .with_test(1, || "2\n".to_owned())
-            .with_test(1, || "3\n".to_owned());
-        let subtask3 = Subtask::new(0, "").with_test(1, || "1\n".to_owned()).with_test(1, || "2\n".to_owned());
+            .with_test(1, |_rng| "1\n".to_owned())
+            .with_test(1, |_rng| "2\n".to_owned())
+            .with_test(1, |_rng| "3\n".to_owned());
+        let subtask3 = Subtask::new(0, "").with_test(1, |_rng| "1\n".to_owned()).with_test(1, |_rng| "2\n".to_owned());
 
         // create subtasks
         task.task = task.task.with_subtask(subtask1).with_subtask(subtask2).with_subtask(subtask3);
@@ -102,7 +103,7 @@ pub mod generic_tests {
     fn test_fails_without_solution() {
         let task = Test::<String>::new();
 
-        assert!(matches!(task.task.run(), Err(Error::MissingSolution)));
+        assert!(matches!(task.task.run_mode(Mode::Files), Err(Error::MissingSolution)));
     }
 
     #[test]
@@ -129,12 +130,12 @@ pub mod generic_tests {
 
         task.task = task.task.with_solution_source(solution_contents);
 
-        let subtask1 = Subtask::new(0, "").with_test(1, || "1\n".to_owned());
+        let subtask1 = Subtask::new(0, "").with_test(1, |_rng| "1\n".to_owned());
 
         // create subtasks
         task.task = task.task.with_subtask(subtask1);
 
-        assert!(matches!(task.task.run(), Err(Error::SolutionTimedOut { .. })));
+        assert!(matches!(task.task.run_mode(Mode::Files), Err(Error::SolutionTimedOut { .. })));
     }
 
     #[test]
@@ -151,12 +152,12 @@ pub mod generic_tests {
 
         task.task = task.task.with_solution_source(solution_contents);
 
-        let subtask1 = Subtask::new(0, "").with_test(1, || "1\n".to_owned());
+        let subtask1 = Subtask::new(0, "").with_test(1, |_rng| "1\n".to_owned());
 
         // create subtasks
         task.task = task.task.with_subtask(subtask1);
 
-        assert!(matches!(task.task.run(), Err(Error::CompilerError { .. })));
+        assert!(matches!(task.task.run_mode(Mode::Files), Err(Error::CompilerError { .. })));
     }
 
     #[test]
@@ -182,14 +183,14 @@ pub mod generic_tests {
         task.task = task.task.with_solution_source(solution_contents);
 
         let subtask1 = Subtask::new(0, "")
-            .with_test(1, || "1\n".to_owned())
-            .with_test(1, || "2\n".to_owned())
-            .with_test(1, || "3\n".to_owned());
+            .with_test(1, |_rng| "1\n".to_owned())
+            .with_test(1, |_rng| "2\n".to_owned())
+            .with_test(1, |_rng| "3\n".to_owned());
         let subtask2 = Subtask::new(0, "")
-            .with_test(1, || "1\n".to_owned())
-            .with_test(1, || "2\n".to_owned())
-            .with_test(1, || "3\n".to_owned());
-        let subtask3 = Subtask::new(0, "").with_test(1, || "1\n".to_owned()).with_test(1, || "2\n".to_owned());
+            .with_test(1, |_rng| "1\n".to_owned())
+            .with_test(1, |_rng| "2\n".to_owned())
+            .with_test(1, |_rng| "3\n".to_owned());
+        let subtask3 = Subtask::new(0, "").with_test(1, |_rng| "1\n".to_owned()).with_test(1, |_rng| "2\n".to_owned());
 
         // create subtasks
         task.task = task.task.with_subtask(subtask1).with_subtask(subtask2).with_subtask(subtask3);
@@ -221,14 +222,14 @@ pub mod generic_tests {
         task.task = task.task.with_solution_source(solution_contents);
 
         let subtask1 = Subtask::new(0, "")
-            .with_test(1, || "1\n".to_owned())
-            .with_test(1, || "2\n".to_owned())
-            .with_test(1, || "3\n".to_owned());
+            .with_test(1, |_rng| "1\n".to_owned())
+            .with_test(1, |_rng| "2\n".to_owned())
+            .with_test(1, |_rng| "3\n".to_owned());
         let subtask2 = Subtask::new(0, "")
-            .with_test(1, || "1\n".to_owned())
-            .with_test(1, || "2\n".to_owned())
-            .with_test(1, || "3\n".to_owned());
-        let subtask3 = Subtask::new(0, "").with_test(1, || "1\n".to_owned()).with_test(1, || "2\n".to_owned());
+            .with_test(1, |_rng| "1\n".to_owned())
+            .with_test(1, |_rng| "2\n".to_owned())
+            .with_test(1, |_rng| "3\n".to_owned());
+        let subtask3 = Subtask::new(0, "").with_test(1, |_rng| "1\n".to_owned()).with_test(1, |_rng| "2\n".to_owned());
 
         // create subtasks
         task.task = task.task.with_subtask(subtask1).with_subtask(subtask2).with_subtask(subtask3);
@@ -260,14 +261,14 @@ pub mod generic_tests {
         task.task = task.task.with_solution_source(solution_contents);
 
         let subtask1 = Subtask::new(0, "")
-            .with_test(1, || "1\n".to_owned())
-            .with_test(1, || "2\n".to_owned())
-            .with_test(1, || "3\n".to_owned());
+            .with_test(1, |_rng| "1\n".to_owned())
+            .with_test(1, |_rng| "2\n".to_owned())
+            .with_test(1, |_rng| "3\n".to_owned());
         let subtask2 = Subtask::new(0, "")
-            .with_test(1, || "1\n".to_owned())
-            .with_test(1, || "2\n".to_owned())
-            .with_test(1, || "3\n".to_owned());
-        let subtask3 = Subtask::new(0, "").with_test(1, || "1\n".to_owned()).with_test(1, || "2\n".to_owned());
+            .with_test(1, |_rng| "1\n".to_owned())
+            .with_test(1, |_rng| "2\n".to_owned())
+            .with_test(1, |_rng| "3\n".to_owned());
+        let subtask3 = Subtask::new(0, "").with_test(1, |_rng| "1\n".to_owned()).with_test(1, |_rng| "2\n".to_owned());
 
         // create subtasks
         task.task = task.task.with_subtask(subtask1).with_subtask(subtask2).with_subtask(subtask3);
@@ -283,7 +284,7 @@ pub mod generic_tests {
         // (the implementation warns but does not return an error).
         let mut task = Test::<String>::new();
         task.task = task.task.with_solution_source("int main() { return 0; }");
-        task.task.run().unwrap();
+        task.task.run_mode(Mode::Files).unwrap();
     }
 
     /// Every edit to a solution compiles to a binary of its own, so a build
@@ -308,8 +309,8 @@ pub mod generic_tests {
         let run_with = |solution: &str| {
             Task::new("stale artifacts", &task_path)
                 .with_solution_source(solution)
-                .with_subtask(Subtask::new(0, "").with_test(1, || "1\n".to_owned()))
-                .run()
+                .with_subtask(Subtask::new(0, "").with_test(1, |_rng| "1\n".to_owned()))
+                .run_mode(Mode::Files)
                 .unwrap();
         };
 
@@ -336,18 +337,18 @@ pub mod generic_tests {
             .with_solution_source("int main() { return 0; }")
             .with_get_input_file_name(|_test_id, _subtask_id, _test_id_in_subtask| "test.in".to_owned())
             .with_get_output_file_name(|_test_id, _subtask_id, _test_id_in_subtask| "test.out".to_owned())
-            .with_subtask(Subtask::new(0, "").with_test(1, || "1\n".to_owned()).with_test(1, || "2\n".to_owned()));
+            .with_subtask(Subtask::new(0, "").with_test(1, |_rng| "1\n".to_owned()).with_test(1, |_rng| "2\n".to_owned()));
 
-        assert!(matches!(task.task.run(), Err(Error::TestAlreadyExists { .. })));
+        assert!(matches!(task.task.run_mode(Mode::Files), Err(Error::TestAlreadyExists { .. })));
     }
 
     #[test]
     fn test_task_large_time_limit_does_not_panic() {
         let mut task = Test::new();
         task.task = task.task.with_time_limit(1_000_000).with_solution_source("int main() { return 0; }");
-        let subtask = Subtask::new(0, "").with_test(1, || "\n".to_owned());
+        let subtask = Subtask::new(0, "").with_test(1, |_rng| "\n".to_owned());
         task.task = task.task.with_subtask(subtask);
         // Should complete without panicking; may succeed or error but must not panic
-        let _ = task.task.run();
+        let _ = task.task.run_mode(Mode::Files);
     }
 }

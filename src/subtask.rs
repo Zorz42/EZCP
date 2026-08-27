@@ -1,7 +1,7 @@
+use crate::rng::Rng;
 use crate::test::TestGenerator;
 
 use crate::to_output::ToOutput;
-use rand::RngExt;
 
 /// Represents a problem subtask with specific constraints.
 ///
@@ -50,13 +50,18 @@ impl<T: ToOutput> Subtask<T> {
     /// Adds a random test generator to the subtask.
     ///
     /// * `count` - Initial number of tests to generate from this generator.
-    /// * `function` - A closure that returns a generated input string.
+    /// * `function` - A closure that turns a seeded [`Rng`] into a generated input.
+    ///
+    /// The closure has to take **all** of its randomness from the [`Rng`] it is
+    /// given. A generator that reaches for another source produces a test that
+    /// cannot be rebuilt from its seed, which quietly breaks
+    /// [seed mode](crate::Mode::Seeds) and the on-demand server.
     ///
     /// # Panics
     /// Panics if `count` is negative, which would otherwise wrap around into an
     /// effectively endless number of tests to generate.
     #[must_use]
-    pub fn with_test<F: Fn() -> T + 'static>(mut self, count: i32, function: F) -> Self {
+    pub fn with_test<F: Fn(&mut Rng) -> T + 'static>(mut self, count: i32, function: F) -> Self {
         assert!(count >= 0, "a generator cannot produce {count} tests");
         self.generators.push(TestGenerator::new(function));
         self.initial_counts.push(count as usize);
@@ -87,22 +92,23 @@ impl<T: ToOutput> Subtask<T> {
         self
     }
 
-    pub(crate) fn generate_test(&self, gen_idx: usize) -> T {
-        let res = self.generators[gen_idx].generate();
+    /// Generates the test that generator `gen_idx` produces from `seed`.
+    ///
+    /// # Panics
+    /// Panics if `gen_idx` does not name a generator of this subtask.
+    pub(crate) fn generate_test(&self, gen_idx: usize, seed: u64) -> T {
+        let res = self.generators[gen_idx].generate(seed);
         (self.checker)(&res);
         res
     }
 
-    /// Randomly selects one of the registered generators and produces a test input.
+    /// Picks one of the registered generators at random.
     ///
     /// Returns `None` if no generators are registered.
-    pub(crate) fn generate_random_test(&self) -> Option<(T, usize)> {
+    pub(crate) fn pick_generator(&self, rng: &mut Rng) -> Option<usize> {
         if self.generators.is_empty() {
             return None;
         }
-
-        let mut rng = rand::rng();
-        let idx = rng.random_range(0..self.generators.len());
-        Some((self.generate_test(idx), idx))
+        Some(rng.random_range(0..self.generators.len()))
     }
 }

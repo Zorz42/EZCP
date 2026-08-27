@@ -53,6 +53,29 @@ pub enum Error {
     #[error("Missing solution")]
     MissingSolution,
 
+    #[error("Invalid arguments: {details}")]
+    InvalidArguments { details: String },
+
+    #[error("Invalid seed manifest: {details}")]
+    InvalidManifest { details: String },
+
+    #[error("The seed manifest does not match this task: {details}")]
+    ManifestMismatch { details: String },
+
+    #[error(
+        "Generator {gen_id} of subtask {subtask_number} is not reproducible: running it again with seed {seed} produced a different test on attempt \
+         {attempt} of {attempts} ({details}). A generator has to take all of its randomness from the Rng it is given - anything else (rand::rng(), \
+         the clock, a value captured while the task was being described, iterating a HashMap) makes a test that cannot be rebuilt from its seed."
+    )]
+    GeneratorNotReproducible {
+        subtask_number: usize,
+        gen_id: usize,
+        seed: String,
+        attempt: usize,
+        attempts: usize,
+        details: String,
+    },
+
     #[error("Partial solution {partial_number} ({partial_name}) is declared to pass subtask index {subtask_number}, but the task only has {num_subtasks} subtasks (subtask indices are 0-based).")]
     InvalidSubtaskIndex {
         partial_number: usize,

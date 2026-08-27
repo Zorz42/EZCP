@@ -1,8 +1,8 @@
 #[cfg(test)]
 mod frankenstein_tests {
+    use crate::Mode;
     use crate::tests::test_shared::initialize_logger;
     use crate::{Subtask, Task};
-    use rand::RngExt;
     use tempfile::TempDir;
 
     #[test]
@@ -50,10 +50,7 @@ mod frankenstein_tests {
         }
         ";
 
-        let subtask = Subtask::new(0, "").with_test(0, || {
-            let mut rng = rand::rng();
-            format!("{}", rng.random_range(0..50))
-        });
+        let subtask = Subtask::new(0, "").with_test(0, |rng| format!("{}", rng.random_range(0..50)));
 
         let task = Task::new(task_name, &task_path)
             .with_solution_source(source_main)
@@ -67,7 +64,7 @@ mod frankenstein_tests {
         // Run task
         // It should succeed, finding tests in range (10, 20).
 
-        let res = task.run();
+        let res = task.run_mode(Mode::Files);
         res.unwrap();
 
         // Verify generated tests are in range (10, 20)

@@ -1,14 +1,27 @@
 use crate::ToOutput;
-use rand::RngExt;
-use rand::prelude::SliceRandom;
+use crate::rng::Rng;
 use std::collections::HashSet;
 use std::fmt::Write;
 
 /// This struct represents a combinatorial undirected graph.
 /// It is used to generate the input for test cases and to check the output of solutions.
+///
+/// Building a graph needs the generator's [`Rng`], even for the shapes that hold
+/// no randomness: writing a graph out shuffles its edges, and the shuffle has to
+/// come from the same seeded stream as everything else, so the seed is drawn up
+/// front and kept.
 pub struct Graph {
     nodes: Vec<Vec<usize>>,
-    edges: HashSet<(usize, usize)>,
+    /// Edges in insertion order.
+    ///
+    /// A `HashSet` alone would be enough to model the graph, but iterating one
+    /// yields a different order in every process, which would make a graph built
+    /// from a fixed seed write itself out differently on every run.
+    edges: Vec<(usize, usize)>,
+    /// The same edges, for membership tests that stay O(1).
+    edge_set: HashSet<(usize, usize)>,
+    /// Seeds the edge shuffle in [`ToOutput::to_output`].
+    output_seed: u64,
     /// if the graph should be tree, is only used when generating output:
     /// it checks if the graph is a tree and does not add edge count to the output,
     /// since it is equal to n-1
@@ -35,11 +48,13 @@ impl Graph {
     /// # Panics
     /// Panics if `n` is negative.
     #[must_use]
-    pub fn new_empty(n: i32) -> Self {
+    pub fn new_empty(rng: &mut Rng, n: i32) -> Self {
         assert!(n >= 0, "a graph cannot have {n} nodes");
         Self {
             nodes: vec![Vec::new(); n as usize],
-            edges: HashSet::new(),
+            edges: Vec::new(),
+            edge_set: HashSet::new(),
+            output_seed: rng.next_seed(),
             is_tree: false,
         }
     }
@@ -49,8 +64,8 @@ impl Graph {
     /// # Panics
     /// Panics if `n` is negative.
     #[must_use]
-    pub fn new_full(n: i32) -> Self {
-        let mut result = Self::new_empty(n);
+    pub fn new_full(rng: &mut Rng, n: i32) -> Self {
+        let mut result = Self::new_empty(rng, n);
         for u in 0..n {
             for v in 0..u {
                 result.add_edge(u as usize, v as usize);
@@ -66,15 +81,15 @@ impl Graph {
     /// Panics if `m` edges do not fit in a simple graph on `n` nodes, which would
     /// otherwise leave the generator looking for an edge that cannot exist.
     #[must_use]
-    pub fn new_random(n: i32, m: i32) -> Self {
-        let mut result = Self::new_empty(n);
+    pub fn new_random(rng: &mut Rng, n: i32, m: i32) -> Self {
+        let mut result = Self::new_empty(rng, n);
         assert!(m >= 0, "a graph cannot have {m} edges");
         assert!(
             i64::from(m) <= max_simple_edges(n),
             "cannot fit {m} edges in a graph with {n} nodes (at most {} are possible)",
             max_simple_edges(n)
         );
-        result.add_random_edges(m);
+        result.add_random_edges(rng, m);
         result
     }
 
@@ -85,8 +100,7 @@ impl Graph {
     /// last few edges would take unboundedly many attempts to find. Past that
     /// point the candidates are enumerated and shuffled instead, which costs a
     /// number of pairs comparable to `m` itself.
-    fn add_random_edges(&mut self, m: i32) {
-        let mut rng = rand::rng();
+    fn add_random_edges(&mut self, rng: &mut Rng, m: i32) {
         let n = self.get_num_nodes();
 
         // Half of the possible edges is where guessing still succeeds every other
@@ -109,7 +123,7 @@ impl Graph {
                 }
             }
         }
-        self.add_edges_from(candidates, m);
+        self.add_edges_from(rng, candidates, m);
     }
 
     /// Adds edges drawn from `candidates`, in random order, until the graph holds
@@ -117,9 +131,8 @@ impl Graph {
     ///
     /// This is what the generators fall back to once so many of the possible
     /// edges are taken that guessing pairs mostly finds repeats.
-    fn add_edges_from(&mut self, mut candidates: Vec<(usize, usize)>, m: i32) {
-        let mut rng = rand::rng();
-        candidates.shuffle(&mut rng);
+    fn add_edges_from(&mut self, rng: &mut Rng, mut candidates: Vec<(usize, usize)>, m: i32) {
+        rng.shuffle(&mut candidates);
 
         for (u, v) in candidates {
             if self.get_num_edges() >= m {
@@ -134,13 +147,12 @@ impl Graph {
     /// # Panics
     /// Panics if `n` is not positive; a tree needs at least one node.
     #[must_use]
-    pub fn new_random_path(n: i32) -> Self {
+    pub fn new_random_path(rng: &mut Rng, n: i32) -> Self {
         assert!(n >= 1, "a tree needs at least one node, got {n}");
-        let mut result = Self::new_empty(n);
+        let mut result = Self::new_empty(rng, n);
         result.is_tree = true;
-        let mut rng = rand::rng();
         let mut nodes = (0..n).collect::<Vec<_>>();
-        nodes.shuffle(&mut rng);
+        rng.shuffle(&mut nodes);
         for i in 1..n {
             let u = nodes[(i - 1) as usize];
             let v = nodes[i as usize];
@@ -155,13 +167,12 @@ impl Graph {
     /// # Panics
     /// Panics if `n` is not positive; a tree needs at least one node.
     #[must_use]
-    pub fn new_random_tree(n: i32) -> Self {
+    pub fn new_random_tree(rng: &mut Rng, n: i32) -> Self {
         assert!(n >= 1, "a tree needs at least one node, got {n}");
-        let mut result = Self::new_empty(n);
+        let mut result = Self::new_empty(rng, n);
         result.is_tree = true;
-        let mut rng = rand::rng();
         let mut nodes = (0..n).collect::<Vec<_>>();
-        nodes.shuffle(&mut rng);
+        rng.shuffle(&mut nodes);
         for i in 1..n {
             let u = nodes[i as usize];
             let v = nodes[rng.random_range(0..i) as usize];
@@ -175,13 +186,12 @@ impl Graph {
     /// # Panics
     /// Panics if `n` is not positive; a tree needs at least one node.
     #[must_use]
-    pub fn new_random_deep_tree(n: i32) -> Self {
+    pub fn new_random_deep_tree(rng: &mut Rng, n: i32) -> Self {
         assert!(n >= 1, "a tree needs at least one node, got {n}");
-        let mut result = Self::new_empty(n);
+        let mut result = Self::new_empty(rng, n);
         result.is_tree = true;
-        let mut rng = rand::rng();
         let mut nodes = (0..n).collect::<Vec<_>>();
-        nodes.shuffle(&mut rng);
+        rng.shuffle(&mut nodes);
         let mut last_on_chain = nodes[0];
         for i in 1..n {
             let u = nodes[i as usize];
@@ -205,15 +215,15 @@ impl Graph {
     /// Panics if `n` is not positive, or if `m` edges do not fit in a simple graph
     /// on `n` nodes.
     #[must_use]
-    pub fn new_random_connected(n: i32, m: i32) -> Self {
+    pub fn new_random_connected(rng: &mut Rng, n: i32, m: i32) -> Self {
         assert!(
             i64::from(m) <= max_simple_edges(n),
             "cannot fit {m} edges in a graph with {n} nodes (at most {} are possible)",
             max_simple_edges(n)
         );
-        let mut result = Self::new_random_tree(n);
+        let mut result = Self::new_random_tree(rng, n);
         result.is_tree = false;
-        result.add_random_edges(m);
+        result.add_random_edges(rng, m);
         result
     }
 
@@ -224,7 +234,7 @@ impl Graph {
     /// Panics if `n` is less than two, or if `m` edges do not fit in any bipartition
     /// of `n` nodes.
     #[must_use]
-    pub fn new_random_bipartite(n: i32, m: i32) -> Self {
+    pub fn new_random_bipartite(rng: &mut Rng, n: i32, m: i32) -> Self {
         assert!(n >= 2, "a bipartite graph needs at least two nodes, got {n}");
         assert!(m >= 0, "a graph cannot have {m} edges");
         assert!(
@@ -233,10 +243,9 @@ impl Graph {
             max_bipartite_edges(n)
         );
 
-        let mut result = Self::new_empty(n);
-        let mut rng = rand::rng();
+        let mut result = Self::new_empty(rng, n);
         let mut nodes = (0..n).collect::<Vec<_>>();
-        nodes.shuffle(&mut rng);
+        rng.shuffle(&mut nodes);
 
         // `size1 * (n - size1)` is concave in `size1`, so the splits that are big
         // enough for `m` edges form one interval, symmetric around n / 2. Pick from
@@ -265,7 +274,7 @@ impl Graph {
                 candidates.push((u as usize, v as usize));
             }
         }
-        result.add_edges_from(candidates, m);
+        result.add_edges_from(rng, candidates, m);
         result
     }
 
@@ -274,12 +283,12 @@ impl Graph {
     /// Also for every pair of nodes `u`, `v`, the following holds: `has_edge(u, v) == has_edge(v, u)`
     #[must_use]
     pub fn has_edge(&self, u: usize, v: usize) -> bool {
-        self.edges.contains(&(usize::max(u, v), usize::min(u, v)))
+        self.edge_set.contains(&(usize::max(u, v), usize::min(u, v)))
     }
 
     /// This function returns the count of edges between nodes u and v.
     #[must_use]
-    pub fn get_num_edges(&self) -> i32 {
+    pub const fn get_num_edges(&self) -> i32 {
         self.edges.len() as i32
     }
 
@@ -292,13 +301,18 @@ impl Graph {
     /// This function adds an edge between nodes u and v.
     pub fn add_edge(&mut self, u: usize, v: usize) {
         if !self.has_edge(u, v) && u != v {
-            self.edges.insert((usize::max(u, v), usize::min(u, v)));
+            let edge = (usize::max(u, v), usize::min(u, v));
+            self.edge_set.insert(edge);
+            self.edges.push(edge);
             self.nodes[u].push(v);
             self.nodes[v].push(u);
         }
     }
 
     /// This function returns an iterator over the edges in the graph.
+    ///
+    /// The edges come back in the order they were added, which is what keeps a
+    /// graph built from a given seed identical from run to run.
     pub fn edges_iter(&self) -> impl Iterator<Item = &(usize, usize)> {
         self.edges.iter()
     }
@@ -390,6 +404,9 @@ impl ToOutput for Graph {
     /// The nodes are 1-indexed.
     /// The edges will be randomly shuffled and pair may be swapped.
     ///
+    /// The shuffle runs off the seed the graph was built with, so writing the same
+    /// graph out twice gives the same text.
+    ///
     /// # Panics
     /// Panics if the graph was built as a tree but is not one, which would make
     /// the omitted edge count wrong.
@@ -404,8 +421,8 @@ impl ToOutput for Graph {
             writeln!(result, "{} {}", self.get_num_nodes(), self.get_num_edges()).ok();
         }
         let mut edges = self.edges_iter().collect::<Vec<_>>();
-        let mut rng = rand::rng();
-        edges.shuffle(&mut rng);
+        let mut rng = Rng::from_seed(self.output_seed);
+        rng.shuffle(&mut edges);
         for (u, v) in edges {
             if rng.random_bool(0.5) {
                 writeln!(result, "{} {}", u + 1, v + 1).ok();
