@@ -1,10 +1,10 @@
 use crate::Error::SolutionFailed;
 use crate::Result;
-use crate::manifest::stable_hash;
 use crate::progress::ScopedProgressBar;
 use crate::rng::Rng;
 use crate::runner::cpp_runner::{CppRunner, ProgramHandle};
 use crate::runner::exec_runner::RunResult;
+use crate::stub::stable_hash;
 use crate::task::path_str;
 use crate::{Error, Subtask, Task, ToOutput};
 use log::{error, info, warn};
@@ -54,8 +54,8 @@ const MAX_REPEATED_TESTS: usize = 100;
 /// A finished test, together with the recipe that produced it.
 ///
 /// The recipe is what makes the test disposable: `generator` and `seed` are
-/// enough to build `input` again from nothing, which is what the seed manifest
-/// records and what the on-demand server replays.
+/// enough to build `input` again from nothing, which is what a stub records and
+/// what the on-demand server replays.
 pub struct GeneratedTest {
     /// Which of the subtask's generators produced this test.
     pub generator: usize,

@@ -62,7 +62,7 @@ impl Rng {
     ///
     /// This is the one place in EZCP where randomness is not reproducible, and it
     /// exists only for `--seed random`. The seed it picked is always reported and
-    /// written to the manifest, so the run can be repeated afterwards.
+    /// written to `results.txt`, so the run can be repeated afterwards.
     #[must_use]
     pub fn from_entropy() -> Self {
         Self::from_seed(random_seed())

@@ -6,8 +6,8 @@ use crate::to_output::ToOutput;
 ///
 /// The function is handed a seeded [`Rng`] and must take all of its randomness
 /// from it. That is what lets a test be identified by nothing more than the
-/// generator it came from and the seed it was given, which is what the seed
-/// manifest and the on-demand server are built on.
+/// generator it came from and the seed it was given, which is what the test
+/// stubs and the on-demand server are built on.
 pub struct TestGenerator<T: ToOutput> {
     function: Box<dyn Fn(&mut Rng) -> T>,
 }

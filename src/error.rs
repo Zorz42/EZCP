@@ -138,20 +138,22 @@ pub enum Error {
         details: String,
     },
 
-    /// A seed manifest could not be read, or was structurally invalid.
-    #[error("Invalid seed manifest: {details}")]
-    InvalidManifest {
-        /// What was wrong with the manifest.
+    /// A [test stub](crate::Stub) could not be read, or did not name a test this
+    /// task has.
+    #[error("Invalid test stub: {details}")]
+    InvalidStub {
+        /// What was wrong with the stub.
         details: String,
     },
 
-    /// A seed manifest was read successfully but describes a different task.
+    /// A stub was read successfully, but rebuilding it produced something other
+    /// than what it was written for.
     ///
-    /// Serving from it would hand out the wrong test data, so it is refused
-    /// rather than used.
-    #[error("The seed manifest does not match this task: {details}")]
-    ManifestMismatch {
-        /// How the manifest and the task disagree.
+    /// Serving it would hand out test data that was never verified, so it is
+    /// refused rather than used.
+    #[error("This test is not the one the stub was written for: {details}")]
+    StubMismatch {
+        /// How the rebuilt test and the stub disagree.
         details: String,
     },
 
@@ -159,7 +161,7 @@ pub enum Error {
     /// same seed.
     ///
     /// The seed is then worthless — nothing can rebuild the test from it — so the
-    /// run fails rather than recording a manifest that lies. See the crate-level
+    /// run fails rather than writing a stub that lies. See the crate-level
     /// documentation on where a generator's randomness has to come from.
     #[error(
         "Generator {gen_id} of subtask {subtask_number} is not reproducible: running it again with seed {seed} produced a different test on attempt \

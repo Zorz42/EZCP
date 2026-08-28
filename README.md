@@ -37,8 +37,8 @@ fn main() -> ezcp::Result<()> {
 }
 ```
 
-Running it writes `sum/tests/`, `sum/tests.zip`, `sum/results.txt` and
-`sum/seeds.json`. See `examples/` for complete tasks.
+Running it writes `sum/tests/`, `sum/tests.zip` and `sum/results.txt`. See
+`examples/` for complete tasks.
 
 **A generator must take all of its randomness from the `rng` it is given.** A
 test is identified by its generator plus its seed, so that pair has to always
@@ -50,44 +50,43 @@ The task binary takes the mode from its arguments (`--help` lists them):
 
 | Arguments | What it does |
 | --- | --- |
-| *(none)* | Generate the tests, write them to files, archive them, write `seeds.json`. |
-| `--seeds` | Same pipeline, but keep only `seeds.json` — no test files, no archive. |
-| `--serve` | Answer requests on stdin with test data rebuilt from `seeds.json`. |
+| *(none)* | Generate the tests, write them to files, archive them. |
+| `--seeds` | The same, except each test file holds the seed that rebuilds the test instead of the test data. |
+| `--serve` | Read such a file on stdin and write out the test data it stands for. |
 | `--seed <value>` | Master seed: a number, `0x`-prefixed hex, or `random`. Ignored by `--serve`. |
 
 ### `--seeds`
 
-Every test is still generated and verified; only the manifest is kept, so a task
-can have far more tests than there is room to store (22 MB of files vs. a 20 kB
-manifest on `examples/example2`). Each kept test is then rebuilt from its seed
-ten times and compared, so a generator that is not faithful to its `Rng` fails
-the run instead of leaving a manifest that lies.
+Every test is still generated, run against the official solution and used to hunt
+for cases that break the partial solutions — only the data is left out. Each file
+holds one line naming the generator and seed that produce it, plus a hash of what
+they produced, so the test set of `examples/example2` is 12 kB instead of 22 MB. The file names, the layout and `tests.zip` are exactly what a normal
+run produces.
+
+Before writing anything, each kept test is rebuilt from its seed ten times and
+compared, so a generator that is not faithful to its `Rng` fails the run instead
+of leaving behind a seed that does not reproduce its test.
 `Task::with_reproducibility_checks(n)` changes the count; `0` turns it off.
 
 ### `--serve`
 
-Reads one JSON request per line and answers each with the **raw bytes** of one
-half of a test — byte for byte the file a normal run would have written, with no
-framing, escaping or added newline:
+Pipe a file written by `--seeds` in, and the test data it stands for comes out —
+byte for byte the file a normal run would have written, with nothing added:
 
 ```console
-$ echo '{"command":"test","subtask":0,"test":0,"part":"input"}' | ./task --serve > test.in
-$ echo '{"command":"test","subtask":0,"test":0,"part":"output"}' | ./task --serve
-1
+$ ./task --serve < tests/test.01.001.in > test.in
+$ ./task --serve < tests/test.01.001.out > test.out
 ```
 
-| Request | Meaning |
-| --- | --- |
-| `{"command":"test","subtask":0,"test":3,"part":"input"}` | Half of the test the manifest lists there. `"part"` is `"input"` or `"output"` and is required. |
-| `{"command":"seed","subtask":0,"generator":1,"seed":"a1b2...","part":"output"}` | Half of a test built from a generator and seed directly, listed or not. Seeds are hex **strings**, since a JSON number loses the low bits. |
-| `{"command":"info"}` | The task and its subtasks, as one JSON line — the only answer that is not raw. |
-| `{"command":"quit"}` | Stop serving. |
+Several can be fed in at once, one per line, and the answers come back in order.
+Rebuilding an input never runs the official solution, so it costs nothing but the
+generator; rebuilding an output does.
 
-Asking for the input is the cheap request; the solution only runs for `"output"`.
-A request that cannot be answered writes nothing to stdout, reports the error on
-stderr and ends the session, since raw bytes leave no way to signal a failure in
-the stream. A manifest from another task, or a generator that no longer produces
-the test recorded for a seed, is refused rather than served.
+Nothing frames the data on the way out, which leaves no way to report a failure
+in the stream. A file that cannot be rebuilt therefore produces no output at all:
+the error goes to stderr and the run ends non-zero. That covers a generator that
+has changed since the seeds were written — the hash catches it, and refusing is
+better than handing out a test that was never verified.
 
 ## Notes
 

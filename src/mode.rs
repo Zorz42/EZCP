@@ -8,25 +8,23 @@ use crate::{Error, Result};
 pub enum Mode {
     /// Generate the tests and write them out as files, then pack them into a zip.
     ///
-    /// This is what a task does when it is run without arguments. A seed manifest
-    /// is written alongside the files, so the same tests can be served on demand
-    /// later without generating them again.
+    /// This is what a task does when it is run without arguments.
     #[default]
     Files,
-    /// Generate and verify exactly as [`Mode::Files`] does, but keep only the seed
-    /// manifest.
+    /// Generate and verify exactly as [`Mode::Files`] does, but write each test
+    /// file as the [stub](crate::Stub) that rebuilds it instead of as the test.
     ///
     /// Every test is still generated, run against the official solution and used
-    /// to hunt for counterexamples; none of them are written to disk. This is how
-    /// a task can have far more tests than there is room to store.
+    /// to hunt for counterexamples; none of the data is written to disk. This is
+    /// how a task can have far more tests than there is room to store. The file
+    /// names, the layout and the archive are the same as file mode's.
     Seeds,
-    /// Serve tests over stdin and stdout, rebuilding them from the manifest on
-    /// demand.
+    /// Turn stubs back into tests, on stdin and stdout.
     ///
-    /// Nothing is generated up front: the task's solution is compiled, the
-    /// manifest is read, and each request is answered with the raw bytes of one
-    /// test's input or of the official solution's output for it, exactly as the
-    /// corresponding file would have held them.
+    /// Nothing is generated up front. Every line of stdin is a stub, as written
+    /// by [`Mode::Seeds`], and the answer is the raw bytes it stands for: pipe a
+    /// stub file in and the test file a normal run would have written comes back
+    /// out.
     Serve,
 }
 
@@ -73,17 +71,17 @@ Usage: <task> [options]
 
 Modes:
   (no mode given)   Generate the tests, write them to files and pack them into a
-                    zip archive. A seed manifest is written as well.
+                    zip archive.
   --seeds           Generate and verify the tests exactly as above, but write
-                    only the seed manifest, no test files and no archive.
-  --serve           Read requests on stdin, one JSON object per line, and answer
-                    each with the raw bytes of one test's input or output, as
-                    named by the seed manifest.
+                    each test file as the seed that rebuilds it rather than as
+                    the test data itself.
+  --serve           Read those seeds on stdin, one per line, and write out the
+                    test data each of them stands for.
 
 Options:
   --seed <value>    Master seed for test generation: a decimal number, a 0x-prefixed
                     hexadecimal number, or `random` for an unpredictable one.
-                    Ignored by --serve, which takes each test's seed from the manifest.
+                    Ignored by --serve, which takes each test's seed from the stub.
   -h, --help        Print this text.";
 
 /// Parses a seed given on the command line.

@@ -50,7 +50,7 @@
 //! instead: every finished test is rebuilt from its seed
 //! [`DEFAULT_REPRODUCIBILITY_CHECKS`] times over and compared against what was
 //! generated, and a generator that does not agree with itself fails the run rather
-//! than leaving behind a manifest that lies. See
+//! than leaving behind stubs that lie. See
 //! [`Task::with_reproducibility_checks`].
 //!
 //! # Three ways to run a task
@@ -59,23 +59,21 @@
 //! covers all three. [`Task::run_mode`] chooses in code instead.
 //!
 //! * **Files** (no arguments, [`Mode::Files`]) — the usual thing: generate the
-//!   tests, write them out, archive them. A [seed manifest](Manifest) is written
-//!   too, so tests can be served on demand later without generating them again.
+//!   tests, write them out, archive them.
 //! * **Seeds** (`--seeds`, [`Mode::Seeds`]) — generate and verify exactly as
-//!   above, but keep only the manifest. Every test is still produced, run against
-//!   the official solution and used to hunt for counterexamples; none of them
-//!   reach the disk. A task can then have far more tests than there is room to
-//!   store, because a test costs a seed rather than a file. Each finished test is
-//!   also rebuilt from its seed several times over, to prove the seed is worth
-//!   recording.
-//! * **Serve** (`--serve`, [`Mode::Serve`]) — read requests on stdin, one JSON
-//!   object per line, and answer each with the raw bytes of one half of the test
-//!   it names: its input, or the official solution's output for it. A served
-//!   half is byte for byte the file a normal run would have written, whitespace
-//!   included, with no framing around it.
+//!   above, and write the same test set, except that each file holds the
+//!   [stub](Stub) that rebuilds the test rather than the test itself. Every test
+//!   is still produced, run against the official solution and used to hunt for
+//!   counterexamples; none of the data reaches the disk. A task can then have far
+//!   more tests than there is room to store. Each finished test is also rebuilt
+//!   from its seed several times over, to prove the seed is worth writing down.
+//! * **Serve** (`--serve`, [`Mode::Serve`]) — read stubs on stdin and answer each
+//!   with the raw bytes it stands for. Piping a stub file in gives back the file
+//!   a normal run would have written, byte for byte, whitespace included, with no
+//!   framing around it.
 //!
 //! This is what lets an online judge hold a whole task's test data as a few
-//! kilobytes of seeds and rebuild any individual test, deterministically, at the
+//! kilobytes of stubs and rebuild any individual test, deterministically, at the
 //! moment it needs it.
 //!
 //! Running a task needs a C++ compiler on `PATH`; see the README for what to
@@ -87,7 +85,6 @@ mod create_tests;
 mod error;
 mod generators;
 mod logger_format;
-mod manifest;
 mod mode;
 mod partial_solution;
 mod progress;
@@ -95,6 +92,7 @@ mod rng;
 mod runner;
 mod serve;
 mod solution;
+mod stub;
 mod subtask;
 mod task;
 mod test;
@@ -104,10 +102,10 @@ mod to_output;
 
 pub use error::{Error, Result};
 pub use generators::{Graph, array_generator, array_generator_custom, array_to_string};
-pub use manifest::{Manifest, ManifestSubtask, ManifestTest, stable_hash};
 pub use mode::{CliOptions, Mode, SeedChoice};
 pub use rng::{Rng, SampleUniform};
 pub use solution::Solution;
+pub use stub::{Part, Stub, stable_hash};
 pub use subtask::Subtask;
 pub use task::{DEFAULT_REPRODUCIBILITY_CHECKS, DEFAULT_SEED, Task};
 pub use to_output::ToOutput;
