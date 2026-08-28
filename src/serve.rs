@@ -2,23 +2,32 @@
 //!
 //! Nothing is generated up front. The task's official solution is compiled, the
 //! [seed manifest](crate::manifest) is read, and then each request on stdin is
-//! answered by rebuilding exactly the test it names and, if asked for, running
-//! the solution on it to get the expected output.
+//! answered by rebuilding exactly the test it names and writing back the raw
+//! bytes of one half of it: either the input, or what the official solution
+//! prints for that input.
 //!
-//! The protocol is JSON Lines: one JSON object per line in, one per line out.
-//! JSON is what makes the whitespace of a test survive the trip — every space,
-//! tab and newline is carried inside a JSON string and comes back byte for byte,
-//! with no line-based framing to mangle it. A served test is identical to the
-//! file a normal run would have written.
+//! Requests are JSON, one object per line. Answers are not: a response is the
+//! bytes of the file a normal run would have written and nothing else — no
+//! framing, no escaping, no newline of its own — so a judge can send the answer
+//! straight into a file or into a solution's stdin.
 //!
 //! ```text
-//! > {"command":"test","subtask":0,"test":3}
-//! < {"ok":true,"subtask":0,"test":3,"generator":1,"seed":"...","input":"5\n2 4 6 8 10\n","output":"20\n"}
+//! > {"command":"test","subtask":0,"test":3,"part":"input"}
+//! < 5
+//! < 2 4 6 8 10
 //! ```
 //!
-//! Requests are answered in the order they arrive, and a request that cannot be
-//! answered produces an error object rather than ending the session: a judge
-//! asking for a test that does not exist should not have to restart the server.
+//! Which half to send is what `"part"` says, and it has to say: a response
+//! carries one of them, so there is no way to ask for both at once. Asking for
+//! the input is also the cheap request, because the solution is never run.
+//!
+//! A payload carries no framing, which leaves nothing to tell a failed request
+//! apart from a test whose content happens to be empty. A request that cannot be
+//! answered therefore writes nothing to stdout and ends the session with an
+//! error on stderr: everything already written stays valid, and the exit status
+//! says the rest is not coming. `info` is the one exception to raw output — it
+//! asks about the manifest rather than for a test, and is answered with a single
+//! JSON line.
 
 #[cfg(test)]
 use crate::create_tests::GeneratedTest;
@@ -37,34 +46,37 @@ use std::sync::Arc;
 enum Request {
     /// Describe the task and the tests the manifest holds.
     Info,
-    /// Serve a test the manifest lists.
-    Test { subtask: usize, test: usize, parts: Parts },
-    /// Serve a test built from a generator and a seed given in the request, which
-    /// need not appear in the manifest at all.
-    Seed { subtask: usize, generator: usize, seed: u64, parts: Parts },
+    /// Serve half of a test the manifest lists.
+    Test { subtask: usize, test: usize, part: Part },
+    /// Serve half of a test built from a generator and a seed given in the
+    /// request, which need not appear in the manifest at all.
+    Seed { subtask: usize, generator: usize, seed: u64, part: Part },
     /// Stop serving.
     Quit,
 }
 
-/// Which halves of a test the caller wants back.
-///
-/// Asking for the input alone skips running the solution, which is the expensive
-/// half of answering a request.
-#[derive(Clone, Copy)]
-struct Parts {
-    input: bool,
-    output: bool,
+/// Which half of a test the caller asked for.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Part {
+    /// The test's input, byte for byte the `.in` file. The solution is not run.
+    Input,
+    /// What the official solution prints for that input, byte for byte the
+    /// `.out` file.
+    Output,
 }
 
-impl Default for Parts {
-    fn default() -> Self {
-        Self { input: true, output: true }
+/// Reads the field that decides what a response carries.
+fn part_field(request: &Value) -> Result<Part> {
+    match request.get("part").and_then(Value::as_str) {
+        Some("input") => Ok(Part::Input),
+        Some("output") => Ok(Part::Output),
+        Some(other) => Err(Error::InvalidArguments {
+            details: format!("\"part\" is \"{other}\"; it has to be \"input\" or \"output\""),
+        }),
+        None => Err(Error::InvalidArguments {
+            details: "\"part\" is missing; a response carries either \"input\" or \"output\", so the request has to say which".to_owned(),
+        }),
     }
-}
-
-/// Reads an optional boolean field, defaulting to what [`Parts`] does.
-fn wanted(request: &Value, key: &str, default: bool) -> bool {
-    request.get(key).and_then(Value::as_bool).unwrap_or(default)
 }
 
 /// Reads a required index field.
@@ -111,24 +123,19 @@ impl Request {
             .and_then(Value::as_str)
             .unwrap_or_else(|| if request.get("seed").is_some() { "seed" } else { "test" });
 
-        let parts = Parts {
-            input: wanted(&request, "input", true),
-            output: wanted(&request, "output", true),
-        };
-
         match command {
             "info" => Ok(Self::Info),
             "quit" | "exit" => Ok(Self::Quit),
             "test" => Ok(Self::Test {
                 subtask: index(&request, "subtask")?,
                 test: index(&request, "test")?,
-                parts,
+                part: part_field(&request)?,
             }),
             "seed" => Ok(Self::Seed {
                 subtask: index(&request, "subtask")?,
                 generator: index(&request, "generator")?,
                 seed: seed_field(&request)?,
-                parts,
+                part: part_field(&request)?,
             }),
             other => Err(Error::InvalidArguments {
                 details: format!("unknown command \"{other}\"; expected \"test\", \"seed\", \"info\" or \"quit\""),
@@ -137,9 +144,9 @@ impl Request {
     }
 }
 
-/// Renders an error as the protocol's failure object.
-fn error_response(message: &str) -> Value {
-    json!({ "ok": false, "error": message })
+/// Wraps a write error, stdout being the only thing this module writes to.
+fn stdout_error(err: std::io::Error) -> Error {
+    Error::IOError { err, file: "stdout".to_owned() }
 }
 
 impl<T: ToOutput> Task<T> {
@@ -175,25 +182,25 @@ impl<T: ToOutput> Task<T> {
             }
 
             debug!("Request: {line}");
-            let response = match Request::parse(&line) {
-                Ok(Request::Quit) => return Ok(()),
-                Ok(Request::Info) => Self::info_response(&manifest),
-                Ok(Request::Test { subtask, test, parts }) => {
-                    // Errors here are about this one request, so they are reported
-                    // in the response and the server keeps going.
-                    self.serve_manifest_test(&manifest, subtask, test, parts, &mut cpp_runner, solution_handle)
-                        .unwrap_or_else(|err| error_response(&err.to_string()))
+            // A request that cannot be answered stops the session: with nothing
+            // framing a payload, a caller reading stdout has no way to be told
+            // that what follows is not the test it asked for.
+            match Request::parse(&line)? {
+                Request::Quit => return Ok(()),
+                Request::Info => writeln!(output, "{}", Self::info_response(&manifest)).map_err(stdout_error)?,
+                Request::Test { subtask, test, part } => {
+                    let payload = self.serve_manifest_test(&manifest, subtask, test, part, &mut cpp_runner, solution_handle)?;
+                    output.write_all(payload.as_bytes()).map_err(stdout_error)?;
                 }
-                Ok(Request::Seed { subtask, generator, seed, parts }) => self
-                    .serve_generated_test(subtask, generator, seed, parts, None, &mut cpp_runner, solution_handle)
-                    .map_or_else(|err| error_response(&err.to_string()), |(response, _built)| response),
-                Err(err) => error_response(&err.to_string()),
-            };
+                Request::Seed { subtask, generator, seed, part } => {
+                    let payload = self.serve_generated_test(subtask, generator, seed, part, None, &mut cpp_runner, solution_handle)?;
+                    output.write_all(payload.as_bytes()).map_err(stdout_error)?;
+                }
+            }
 
-            writeln!(output, "{response}").map_err(|err| Error::IOError { err, file: "stdout".to_owned() })?;
             // A judge is waiting on this answer before it sends the next request,
             // so nothing may sit in the buffer.
-            output.flush().map_err(|err| Error::IOError { err, file: "stdout".to_owned() })?;
+            output.flush().map_err(stdout_error)?;
         }
 
         Ok(())
@@ -229,6 +236,9 @@ impl<T: ToOutput> Task<T> {
     }
 
     /// Describes the task and its tests.
+    ///
+    /// The one request whose answer is metadata rather than a test, and so the
+    /// one that is still JSON.
     fn info_response(manifest: &Manifest) -> Value {
         json!({
             "ok": true,
@@ -247,34 +257,15 @@ impl<T: ToOutput> Task<T> {
     }
 
     /// Answers a request for a test the manifest lists.
-    fn serve_manifest_test(&self, manifest: &Manifest, subtask: usize, test: usize, parts: Parts, cpp_runner: &mut CppRunner, solution_handle: ProgramHandle) -> Result<Value> {
+    fn serve_manifest_test(&self, manifest: &Manifest, subtask: usize, test: usize, part: Part, cpp_runner: &mut CppRunner, solution_handle: ProgramHandle) -> Result<String> {
         let entry = manifest.find_test(subtask, test).ok_or_else(|| Error::InvalidArguments {
             details: format!("there is no test {test} in subtask {subtask}; the manifest has {} subtasks", manifest.subtasks.len()),
         })?;
 
-        let (mut response, built) = self.serve_generated_test(subtask, entry.generator, entry.seed, parts, Some(entry), cpp_runner, solution_handle)?;
-
-        if let Some(object) = response.as_object_mut() {
-            object.insert("test".to_owned(), json!(test));
-            object.insert("input_file".to_owned(), json!(entry.input_file));
-            object.insert("output_file".to_owned(), json!(entry.output_file));
-
-            // The official output is only one of possibly many correct answers, so
-            // a different one is not necessarily wrong - a task with a custom
-            // checker may legitimately produce another. It is still worth saying,
-            // because the usual cause is a solution that changed.
-            if let Some(output) = &built.output
-                && stable_hash(output) != entry.output_hash
-            {
-                warn!("The official solution produced a different output than it did when subtask {subtask} test {test} was recorded.");
-                object.insert("output_changed".to_owned(), json!(true));
-            }
-        }
-
-        Ok(response)
+        self.serve_generated_test(subtask, entry.generator, entry.seed, part, Some(entry), cpp_runner, solution_handle)
     }
 
-    /// Rebuilds one test and packages it as a response.
+    /// Rebuilds one test and returns the half that was asked for.
     ///
     /// `recorded` is the manifest entry when there is one; its input hash is what
     /// proves the generator still produces the test the manifest promised.
@@ -283,11 +274,11 @@ impl<T: ToOutput> Task<T> {
         subtask: usize,
         generator: usize,
         seed: u64,
-        parts: Parts,
+        part: Part,
         recorded: Option<&ManifestTest>,
         cpp_runner: &mut CppRunner,
         solution_handle: ProgramHandle,
-    ) -> Result<(Value, BuiltTest)> {
+    ) -> Result<String> {
         if subtask >= self.subtasks.len() {
             return Err(Error::InvalidArguments {
                 details: format!("there is no subtask {subtask}; this task has {}", self.subtasks.len()),
@@ -320,29 +311,23 @@ impl<T: ToOutput> Task<T> {
             });
         }
 
-        let output = if parts.output {
-            Some(self.run_official_solution(&input, cpp_runner, solution_handle)?)
-        } else {
-            None
-        };
-
-        let mut response = json!({
-            "ok": true,
-            "subtask": subtask,
-            "generator": generator,
-            "seed": format!("{seed:016x}"),
-        });
-
-        if let Some(object) = response.as_object_mut() {
-            if parts.input {
-                object.insert("input".to_owned(), json!(input));
-            }
-            if let Some(output) = &output {
-                object.insert("output".to_owned(), json!(output));
-            }
+        if part == Part::Input {
+            return Ok(input);
         }
 
-        Ok((response, BuiltTest { output }))
+        let output = self.run_official_solution(&input, cpp_runner, solution_handle)?;
+
+        // The official output is only one of possibly many correct answers, so a
+        // different one is not necessarily wrong - a task with a custom checker
+        // may legitimately produce another. It is still worth saying, because the
+        // usual cause is a solution that changed.
+        if let Some(recorded) = recorded
+            && stable_hash(&output) != recorded.output_hash
+        {
+            warn!("The official solution produced a different output for generator {generator} of subtask {subtask} on seed {seed:#018x} than it did when the manifest was written.");
+        }
+
+        Ok(output)
     }
 
     /// Runs the official solution on an input and returns its output, normalised
@@ -379,9 +364,4 @@ impl<T: ToOutput> Task<T> {
             output: Arc::from(output),
         })
     }
-}
-
-/// The parts of a rebuilt test the response does not carry back on its own.
-struct BuiltTest {
-    output: Option<String>,
 }

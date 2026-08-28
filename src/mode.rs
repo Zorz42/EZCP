@@ -24,8 +24,9 @@ pub enum Mode {
     /// demand.
     ///
     /// Nothing is generated up front: the task's solution is compiled, the
-    /// manifest is read, and each request is answered with the exact bytes the
-    /// corresponding test file would have held.
+    /// manifest is read, and each request is answered with the raw bytes of one
+    /// test's input or of the official solution's output for it, exactly as the
+    /// corresponding file would have held them.
     Serve,
 }
 
@@ -75,8 +76,9 @@ Modes:
                     zip archive. A seed manifest is written as well.
   --seeds           Generate and verify the tests exactly as above, but write
                     only the seed manifest, no test files and no archive.
-  --serve           Read requests on stdin and answer them with the tests named
-                    by the seed manifest, one JSON object per line.
+  --serve           Read requests on stdin, one JSON object per line, and answer
+                    each with the raw bytes of one test's input or output, as
+                    named by the seed manifest.
 
 Options:
   --seed <value>    Master seed for test generation: a decimal number, a 0x-prefixed

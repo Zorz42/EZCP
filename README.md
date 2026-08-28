@@ -79,7 +79,7 @@ covers all of them. `--help` describes them.
 | --- | --- |
 | *(no arguments)* | Generate the tests, write them to files, archive them, and write the seed manifest. |
 | `--seeds` | Generate and verify exactly the same tests, but keep only the manifest. |
-| `--serve` | Answer requests on stdin with the tests the manifest names. |
+| `--serve` | Answer requests on stdin with the raw bytes of the tests the manifest names. |
 
 `--seeds` runs the identical pipeline: every test is generated, checked against
 the official solution, and used to hunt for counterexamples that break the
@@ -106,15 +106,20 @@ way, and only their inputs — the solution's output follows from its input.
 `Task::with_reproducibility_checks(n)` changes the count, applies the check to
 file mode as well, and turns it off with `0`.
 
-`--serve` reads one JSON object per line and answers with one per line. A served
-test is byte for byte the file a normal run would have written, whitespace
-included, so a judge can store seeds and materialise a test at the moment it
-needs it.
+`--serve` reads one JSON object per line and answers each with the raw bytes of
+one half of a test: either its input, or the output the official solution
+produces for that input. `"part"` says which, and every request has to say. What
+comes back is byte for byte the file a normal run would have written — no
+framing, no escaping, not even a newline of its own — so a judge can store seeds
+and send an answer straight into a file or into a solution's stdin.
 
 ```console
-$ echo '{"command":"test","subtask":0,"test":0}' | ./task --serve
-{"ok":true,"subtask":0,"test":0,"generator":0,"seed":"c4d89c3a3898d1aa",
- "input":"1\n990\n","output":"1\n","input_file":"test.01.001.in","output_file":"test.01.001.out"}
+$ echo '{"command":"test","subtask":0,"test":0,"part":"input"}' | ./task --serve > test.in
+$ cat test.in
+1
+990
+$ echo '{"command":"test","subtask":0,"test":0,"part":"output"}' | ./task --serve
+1
 ```
 
 Requests:
@@ -122,21 +127,25 @@ Requests:
 | Request | Meaning |
 | --- | --- |
 | `{"command":"info"}` | The task, its subtasks and how many tests each holds. |
-| `{"command":"test","subtask":0,"test":3}` | The test the manifest lists at that position. |
-| `{"command":"seed","subtask":0,"generator":1,"seed":"a1b2..."}` | A test built from a generator and seed directly, whether or not the manifest lists it. |
+| `{"command":"test","subtask":0,"test":3,"part":"input"}` | Half of the test the manifest lists at that position. |
+| `{"command":"seed","subtask":0,"generator":1,"seed":"a1b2...","part":"output"}` | Half of a test built from a generator and seed directly, whether or not the manifest lists it. |
 | `{"command":"quit"}` | Stop serving. |
 
-Add `"input":false` or `"output":false` to leave a half out; asking for the input
-alone skips running the solution. Seeds are hexadecimal **strings**, because a
+Asking for the input is the cheap request, because the solution is only run when
+the output is what was asked for. Seeds are hexadecimal **strings**, because a
 seed uses all 64 bits and a JSON number loses the low ones in any reader that
-parses numbers as doubles.
+parses numbers as doubles. `info` is the one answer that is not raw: it describes
+the manifest rather than carrying a test, so it comes back as a single JSON line.
 
-A request that cannot be answered comes back as `{"ok":false,"error":"..."}` and
-the server keeps running. Two things are refused outright, because serving them
-would mean handing out the wrong test data: a manifest written for a different
-task, and a generator that no longer produces the test recorded for a seed — the
-manifest stores a hash of every test for exactly that check, so a task whose
-generators changed is told to regenerate rather than quietly served.
+Since a payload carries no framing, there is nothing to tell a failed request
+apart from a test that happens to be empty. A request that cannot be answered
+therefore writes nothing to stdout: the error goes to stderr and the session
+ends, so whatever was already written stays valid and the exit status says the
+rest is not coming. Two failures matter most, because answering them would mean
+handing out the wrong test data: a manifest written for a different task, and a
+generator that no longer produces the test recorded for a seed — the manifest
+stores a hash of every test for exactly that check, so a task whose generators
+changed is told to regenerate rather than quietly served.
 
 ## Requirements
 

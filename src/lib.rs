@@ -68,10 +68,11 @@
 //!   store, because a test costs a seed rather than a file. Each finished test is
 //!   also rebuilt from its seed several times over, to prove the seed is worth
 //!   recording.
-//! * **Serve** (`--serve`, [`Mode::Serve`]) — read requests on stdin and answer
-//!   them with the tests the manifest names, one JSON object per line. A served
-//!   test is byte for byte the file a normal run would have written, whitespace
-//!   included.
+//! * **Serve** (`--serve`, [`Mode::Serve`]) — read requests on stdin, one JSON
+//!   object per line, and answer each with the raw bytes of one half of the test
+//!   it names: its input, or the official solution's output for it. A served
+//!   half is byte for byte the file a normal run would have written, whitespace
+//!   included, with no framing around it.
 //!
 //! This is what lets an online judge hold a whole task's test data as a few
 //! kilobytes of seeds and rebuild any individual test, deterministically, at the

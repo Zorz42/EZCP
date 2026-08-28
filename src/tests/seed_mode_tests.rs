@@ -47,17 +47,21 @@ mod seed_mode_tests {
             .with_subtask(Subtask::new(70, "n <= 1000000000").with_test(6, |rng| format!("{}\n", rng.random_range(2..=1_000_000_000))))
     }
 
-    /// Runs a request against a freshly built task, exactly as a judge invoking
-    /// `--serve` would, and returns one parsed response per request line.
-    fn serve(path: &Path, requests: &str) -> Vec<Value> {
-        let task = build_task(path);
+    /// Runs requests against a task and returns both what was written and how
+    /// the session ended: a refused request stops the server, and what it had
+    /// written before that still matters.
+    fn serve_raw(task: &Task<String>, requests: &str) -> (crate::Result<()>, String) {
         let mut output = Vec::new();
-        task.serve_io(&mut requests.as_bytes(), &mut output).expect("the server should start");
-        String::from_utf8(output)
-            .expect("responses are UTF-8")
-            .lines()
-            .map(|line| serde_json::from_str(line).expect("every response is a JSON object"))
-            .collect()
+        let result = task.serve_io(&mut requests.as_bytes(), &mut output);
+        (result, String::from_utf8(output).expect("what was served is UTF-8"))
+    }
+
+    /// Runs requests against a freshly built task, exactly as a judge invoking
+    /// `--serve` would, and returns the raw bytes it answered with.
+    fn serve(path: &Path, requests: &str) -> String {
+        let (result, written) = serve_raw(&build_task(path), requests);
+        result.expect("the server should answer");
+        written
     }
 
     fn read_manifest(path: &Path) -> Manifest {
@@ -96,35 +100,30 @@ mod seed_mode_tests {
         build_task(dir.path()).run_mode(Mode::Files).unwrap();
         let manifest = read_manifest(dir.path());
 
-        let requests = manifest
+        let entries = manifest
             .subtasks
             .iter()
-            .flat_map(|subtask| {
-                subtask
-                    .tests
-                    .iter()
-                    .map(move |test| format!(r#"{{"command":"test","subtask":{},"test":{}}}"#, subtask.index, test.index_in_subtask))
-            })
-            .collect::<Vec<_>>()
-            .join("\n");
+            .flat_map(|subtask| subtask.tests.iter().map(move |test| (subtask.index, test)))
+            .collect::<Vec<_>>();
 
-        let responses = serve(dir.path(), &requests);
-        assert_eq!(responses.len(), manifest.num_tests());
+        for part in ["input", "output"] {
+            let requests = entries
+                .iter()
+                .map(|(subtask, test)| format!(r#"{{"command":"test","subtask":{subtask},"test":{},"part":"{part}"}}"#, test.index_in_subtask))
+                .collect::<Vec<_>>()
+                .join("\n");
 
-        let mut responses = responses.into_iter();
-        for subtask in &manifest.subtasks {
-            for test in &subtask.tests {
-                let response = responses.next().unwrap();
-                assert_eq!(response["ok"], Value::Bool(true), "{response}");
+            // Nothing separates one answer from the next, so a whole session of
+            // them is the files themselves laid end to end.
+            let from_disk = entries
+                .iter()
+                .map(|(_subtask, test)| {
+                    let file = if part == "input" { &test.input_file } else { &test.output_file };
+                    std::fs::read_to_string(dir.path().join("tests").join(file)).unwrap()
+                })
+                .collect::<String>();
 
-                let from_disk_in = std::fs::read_to_string(dir.path().join("tests").join(&test.input_file)).unwrap();
-                let from_disk_out = std::fs::read_to_string(dir.path().join("tests").join(&test.output_file)).unwrap();
-
-                assert_eq!(response["input"].as_str().unwrap(), from_disk_in, "served input differs from {}", test.input_file);
-                assert_eq!(response["output"].as_str().unwrap(), from_disk_out, "served output differs from {}", test.output_file);
-                assert_eq!(response["input_file"].as_str().unwrap(), test.input_file);
-                assert!(response.get("output_changed").is_none(), "the solution's output should not have changed");
-            }
+            assert_eq!(serve(dir.path(), &requests), from_disk, "the served {part}s are not what was written to disk");
         }
     }
 
@@ -156,12 +155,12 @@ mod seed_mode_tests {
         let from_disk = std::fs::read_to_string(dir.path().join("tests").join(&test.input_file)).unwrap();
         assert_eq!(from_disk, awkward, "the file itself should hold the untouched input");
 
-        let task = build(dir.path());
-        let mut output = Vec::new();
-        task.serve_io(&mut std::io::Cursor::new(r#"{"subtask":0,"test":0}"#), &mut output).unwrap();
-        let response: Value = serde_json::from_str(String::from_utf8(output).unwrap().trim()).unwrap();
+        let (result, served) = serve_raw(&build(dir.path()), r#"{"subtask":0,"test":0,"part":"input"}"#);
+        result.unwrap();
 
-        assert_eq!(response["input"].as_str().unwrap(), awkward);
+        // Not even a newline of its own: what comes back is the file and nothing
+        // more, and this file does not end in one.
+        assert_eq!(served, awkward);
     }
 
     #[test]
@@ -240,8 +239,10 @@ mod seed_mode_tests {
         let dir = TempDir::new().unwrap();
         build_task(dir.path()).run_mode(Mode::Seeds).unwrap();
 
-        let responses = serve(dir.path(), r#"{"command":"info"}"#);
-        let info = &responses[0];
+        // The one answer that is still JSON, because it describes the manifest
+        // rather than carrying a test.
+        let response = serve(dir.path(), r#"{"command":"info"}"#);
+        let info: Value = serde_json::from_str(response.trim()).unwrap();
         assert_eq!(info["ok"], Value::Bool(true));
         assert_eq!(info["task"], "Doubler");
         assert_eq!(info["num_tests"], NUM_TESTS);
@@ -249,15 +250,22 @@ mod seed_mode_tests {
         assert_eq!(info["subtasks"][1]["points"], 70);
     }
 
+    /// A response carries one half of a test, so every request has to name the
+    /// half it wants.
     #[test]
-    fn the_input_can_be_asked_for_on_its_own() {
+    fn each_half_of_a_test_is_asked_for_separately() {
         let dir = TempDir::new().unwrap();
         build_task(dir.path()).run_mode(Mode::Seeds).unwrap();
 
-        let responses = serve(dir.path(), r#"{"subtask":0,"test":0,"output":false}"#);
-        assert_eq!(responses[0]["ok"], Value::Bool(true));
-        assert!(responses[0].get("input").is_some());
-        assert!(responses[0].get("output").is_none(), "no output was asked for");
+        // The first subtask's only test is n = 1, and the solution doubles it.
+        assert_eq!(serve(dir.path(), r#"{"subtask":0,"test":0,"part":"input"}"#), "1\n");
+        assert_eq!(serve(dir.path(), r#"{"subtask":0,"test":0,"part":"output"}"#).trim(), "2");
+
+        let (result, written) = serve_raw(&build_task(dir.path()), r#"{"subtask":0,"test":0}"#);
+        let err = result.unwrap_err();
+        assert!(matches!(err, Error::InvalidArguments { .. }), "got {err}");
+        assert!(err.to_string().contains("part"), "{err}");
+        assert!(written.is_empty(), "nothing should have been served");
     }
 
     #[test]
@@ -267,44 +275,36 @@ mod seed_mode_tests {
         let manifest = read_manifest(dir.path());
         let recorded = &manifest.subtasks[1].tests[0];
 
-        let request = format!(r#"{{"command":"seed","subtask":1,"generator":{},"seed":"{:016x}"}}"#, recorded.generator, recorded.seed);
-        let responses = serve(dir.path(), &request);
+        let request = format!(r#"{{"command":"seed","subtask":1,"generator":{},"seed":"{:016x}","part":"input"}}"#, recorded.generator, recorded.seed);
 
-        assert_eq!(responses[0]["ok"], Value::Bool(true), "{}", responses[0]);
-        assert_eq!(stable_hash(responses[0]["input"].as_str().unwrap()), recorded.input_hash);
+        assert_eq!(stable_hash(&serve(dir.path(), &request)), recorded.input_hash);
     }
 
-    /// One bad request must not take the server down with it: a judge that asks
-    /// for a test that does not exist should get an answer and keep going.
+    /// With nothing framing a payload, a request that cannot be answered has no
+    /// way to say so in the stream. It ends the session instead, having written
+    /// nothing, so a caller never mistakes an error for the test it asked for.
     #[test]
-    fn bad_requests_are_answered_and_the_server_keeps_running() {
+    fn a_request_that_cannot_be_answered_ends_the_session() {
         let dir = TempDir::new().unwrap();
         build_task(dir.path()).run_mode(Mode::Seeds).unwrap();
 
-        let responses = serve(
-            dir.path(),
-            concat!(
-                "not json at all\n",
-                r#"{"command":"nonsense"}"#,
-                "\n",
-                r#"{"command":"test","subtask":0}"#,
-                "\n",
-                r#"{"command":"test","subtask":0,"test":999}"#,
-                "\n",
-                r#"{"command":"test","subtask":99,"test":0}"#,
-                "\n",
-                "\n",
-                r#"{"command":"test","subtask":0,"test":0}"#,
-            ),
-        );
+        for bad in [
+            "not json at all",
+            r#"{"command":"nonsense"}"#,
+            r#"{"command":"test","subtask":0,"part":"input"}"#,
+            r#"{"command":"test","subtask":0,"test":0,"part":"both"}"#,
+            r#"{"command":"test","subtask":0,"test":999,"part":"input"}"#,
+            r#"{"command":"test","subtask":99,"test":0,"part":"input"}"#,
+        ] {
+            // A good request in front of it: what was already answered has to
+            // survive the failure that follows.
+            let requests = format!("{{\"subtask\":0,\"test\":0,\"part\":\"input\"}}\n{bad}");
+            let (result, written) = serve_raw(&build_task(dir.path()), &requests);
 
-        assert_eq!(responses.len(), 6, "the blank line should not be answered");
-        for response in &responses[..5] {
-            assert_eq!(response["ok"], Value::Bool(false), "{response}");
-            assert!(response["error"].as_str().is_some());
+            let err = result.unwrap_err();
+            assert!(matches!(err, Error::InvalidArguments { .. }), "{bad} gave {err}");
+            assert_eq!(written, "1\n", "{bad} should not have added anything to the stream");
         }
-        // Having refused five requests, it still answers a good one.
-        assert_eq!(responses[5]["ok"], Value::Bool(true), "{}", responses[5]);
     }
 
     #[test]
@@ -312,17 +312,20 @@ mod seed_mode_tests {
         let dir = TempDir::new().unwrap();
         build_task(dir.path()).run_mode(Mode::Seeds).unwrap();
 
-        let responses = serve(
+        let served = serve(
             dir.path(),
             concat!(
-                r#"{"command":"test","subtask":0,"test":0}"#,
+                "\n",
+                r#"{"command":"test","subtask":0,"test":0,"part":"input"}"#,
                 "\n",
                 r#"{"command":"quit"}"#,
                 "\n",
-                r#"{"command":"test","subtask":0,"test":1}"#
+                r#"{"command":"test","subtask":1,"test":0,"part":"input"}"#
             ),
         );
-        assert_eq!(responses.len(), 1, "nothing after quit should be answered");
+        // The blank line is skipped rather than answered, and the request after
+        // quit is not answered at all.
+        assert_eq!(served, "1\n", "nothing after quit should be answered");
     }
 
     /// Serving from a manifest that belongs to another task would hand out test
@@ -359,12 +362,12 @@ mod seed_mode_tests {
             .with_subtask(Subtask::new(30, "n = 1").with_test(1, |_rng| "1\n".to_owned()))
             .with_subtask(Subtask::new(70, "n <= 1000000000").with_test(6, |_rng| "777\n".to_owned()));
 
-        let mut output = Vec::new();
-        changed.serve_io(&mut std::io::Cursor::new(r#"{"subtask":1,"test":0}"#), &mut output).unwrap();
-        let response: Value = serde_json::from_str(String::from_utf8(output).unwrap().trim()).unwrap();
+        let (result, written) = serve_raw(&changed, r#"{"subtask":1,"test":0,"part":"input"}"#);
 
-        assert_eq!(response["ok"], Value::Bool(false), "{response}");
-        assert!(response["error"].as_str().unwrap().contains("no longer produces"), "{response}");
+        let err = result.unwrap_err();
+        assert!(matches!(err, Error::ManifestMismatch { .. }), "got {err}");
+        assert!(err.to_string().contains("no longer produces"), "{err}");
+        assert!(written.is_empty(), "a test that does not match the manifest must not reach the caller");
     }
 
     /// A subtask that gained or lost generators is the same kind of drift, and
