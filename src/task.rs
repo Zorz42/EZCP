@@ -566,10 +566,9 @@ impl<T: ToOutput> Task<T> {
             file: path_str(&self.get_results_file()),
         })?;
 
-        info!("Master seed: {}", style(format!("{seed:#018x}")).bold());
         // Kept in the report as well, because a `--seed random` run cannot be
         // repeated once its console output is gone.
-        self.log_result(&format!("Master seed: {seed:#018x}"))?;
+        self.log_result(&format!("Master seed: {}", style(format!("{seed:#018x}")).bold()))?;
         // One generator drives the whole run, so the seed alone decides every test
         // that gets generated.
         let mut rng = Rng::from_seed(seed);
