@@ -52,6 +52,29 @@ jobs:
       - name: Clippy (deny warnings)
         run: cargo clippy --workspace --all-targets --all-features -- -D warnings
 
+  msrv:
+    name: MSRV (1.88)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - run: rustup toolchain install 1.88 --profile minimal
+
+      - name: Rust Cache
+        uses: Swatinem/rust-cache@v2.7.3
+
+      # `rust-version` in Cargo.toml is a promise to users, and nothing else in
+      # this workflow tests it: every other job runs on stable.
+      #
+      # --locked so this checks the committed Cargo.lock. A dependency that
+      # raises its own MSRV should turn this job red rather than break someone
+      # who took the crate at its word.
+      #
+      # `check` is enough. There is no build script, and timer.cpp is compiled
+      # at run time, so nothing here needs a C++ compiler.
+      - name: Check on the minimum supported Rust version
+        run: cargo +1.88 check --workspace --all-targets --locked
+
   format:
     name: Formatting
     runs-on: ubuntu-latest
