@@ -6,11 +6,20 @@ description = "A simple tool to automatically generate test cases for competitiv
 # Let chains and the `zip` dependency both need 1.88; declaring it turns an
 # unsupported toolchain into a clear message instead of a syntax error.
 rust-version = "1.88"
-license-file = "LICENSE"
+license = "GPL-3.0-only"
 repository = "https://github.com/Zorz42/EZCP"
 keywords = ["cp", "test_data", "framework", "generator"]
 categories = ["development-tools"]
 readme = "README.md"
+# Development tooling that means nothing to someone depending on the crate.
+# src/tests stays in: distro packagers run `cargo test` on the published tarball,
+# and lib.rs declares `mod tests` under cfg(test).
+exclude = [
+    ".github/",
+    ".gitignore",
+    "AGENTS.md",
+    "rustfmt.toml",
+]
 
 [workspace]
 members = ["ezcp_macros"]
