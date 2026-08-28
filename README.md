@@ -20,18 +20,35 @@ ezcp = "0.5"
 ```
 
 ```rust
+use ezcp::{Result, Subtask, Task, ToOutput};
 use std::path::PathBuf;
 
-const SOLUTION: &str = r"
+const SOLUTION: &str = "
 #include <iostream>
-int main() { int a, b; std::cin >> a >> b; std::cout << a + b << std::endl; }
+int main() {
+    int n; std::cin >> n;
+    long long sum = 0;
+    for (int i = 0; i < n; i++) { int a; std::cin >> a; sum += a; }
+    std::cout << sum << std::endl;
+}
 ";
 
-fn main() -> ezcp::Result<()> {
-    ezcp::Task::new("Sum", &PathBuf::from("sum"))
+/// The input format: the count on one line, the values on the next.
+#[derive(ToOutput)]
+struct Input {
+    n: usize,
+    values: Vec<i32>,
+}
+
+fn main() -> Result<()> {
+    Task::new("Sum", &PathBuf::from("sum"))
         .with_solution_source(SOLUTION)
-        .with_subtask(ezcp::Subtask::new(100, "a, b <= 1000").with_test(10, |rng| {
-            format!("{} {}\n", rng.random_range(0..=1000), rng.random_range(0..=1000))
+        .with_subtask(Subtask::new(100, "n <= 1000").with_test(10, |rng| {
+            let n = rng.random_range(1..=1000);
+            Input {
+                n: n as usize,
+                values: (0..n).map(|_| rng.random_range(0..=1_000_000)).collect(),
+            }
         }))
         .run()
 }
@@ -39,6 +56,11 @@ fn main() -> ezcp::Result<()> {
 
 Running it writes `sum/tests/`, `sum/tests.zip` and `sum/results.txt`. See
 `examples/` for complete tasks.
+
+A generator returns anything that implements `ToOutput`, so a test is built as
+the data it is rather than as text. The derive writes a struct's fields in
+declaration order, one line each; a `Vec` goes on one line separated by spaces.
+`String` implements it too, if you would rather write the bytes yourself.
 
 **A generator must take all of its randomness from the `rng` it is given.** A
 test is identified by its generator plus its seed, so that pair has to always
@@ -90,7 +112,6 @@ better than handing out a test that was never verified.
 
 ## Notes
 
-- Prefer deriving `ToOutput` on a struct over formatting output strings by hand.
 - `Graph`'s constructors take the generator's `rng`, even the ones with no
   randomness of their own — writing a graph shuffles its edges.
 - Solutions get a 512 MB stack, and time limits are measured in CPU time.
