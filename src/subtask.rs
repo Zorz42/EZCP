@@ -75,17 +75,30 @@ impl<T: ToOutput> Subtask<T> {
         self
     }
 
+    /// Runs this subtask's generators `num_tests` times as a dry run, before any
+    /// real tests are made.
+    ///
+    /// Nothing is kept. The point is to give the generators a much heavier
+    /// sampling than a normal run would, to shake out the parameters that make
+    /// one hang or produce something malformed. Off by default, because it is
+    /// slow.
     #[must_use]
     pub const fn do_stress_test(mut self, num_tests: i32) -> Self {
         self.stress_tests = num_tests;
         self
     }
 
+    /// How many generators this subtask has.
     #[must_use]
     pub const fn get_num_generators(&self) -> usize {
         self.generators.len()
     }
 
+    /// Checks every test this subtask generates against its constraints.
+    ///
+    /// The checker is handed each generated test as it is made, and should panic
+    /// if it does not satisfy the subtask. It is a guard against a generator that
+    /// quietly drifts outside the bounds the statement promises.
     #[must_use]
     pub fn with_checker(mut self, checker: fn(&T)) -> Self {
         self.checker = checker;

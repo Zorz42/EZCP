@@ -79,6 +79,7 @@
 //!
 //! Running a task needs a C++ compiler on `PATH`; see the README for what to
 //! install on each platform.
+#![warn(missing_docs)]
 
 mod archiver;
 mod create_tests;

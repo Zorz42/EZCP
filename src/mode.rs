@@ -57,7 +57,10 @@ impl SeedChoice {
 /// What the command line asked a task binary to do.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
 pub struct CliOptions {
+    /// Which of the three modes to run in.
     pub mode: Mode,
+    /// The seed from `--seed`, or `None` if the argument was not given, in which
+    /// case whatever the task itself was configured with applies.
     pub seed: Option<SeedChoice>,
     /// Set by `--help`, which prints the usage text and does nothing else.
     pub help: bool,

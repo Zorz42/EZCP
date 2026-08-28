@@ -7,6 +7,8 @@ use std::collections::HashSet;
 /// to ensure that robust tests are found that correctly distinguish between
 /// different solution implementations.
 pub struct Solution {
+    /// A short name for the solution, used to identify it in errors and in the
+    /// per-subtask summary.
     pub name: String,
     /// The C++ source code for the solution.
     pub source: String,

@@ -70,15 +70,21 @@ pub struct ManifestTest {
 /// One subtask's worth of tests.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ManifestSubtask {
+    /// Position of this subtask within the task, counted from zero.
     pub index: usize,
+    /// What the subtask is worth if all of its tests pass.
     pub points: i32,
+    /// The subtask's name, as given to [`Subtask::new`](crate::Subtask::new).
     pub name: String,
+    /// The subtask's tests, in the order a normal run would write them.
     pub tests: Vec<ManifestTest>,
 }
 
 /// Everything needed to rebuild a task's tests from seeds.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Manifest {
+    /// The task's name. Serving refuses a manifest whose name does not match the
+    /// task asked to serve it, since that would mean handing out the wrong tests.
     pub task: String,
     /// The master seed the run was started from. Re-running the whole task with
     /// it reproduces this exact manifest.
@@ -86,7 +92,9 @@ pub struct Manifest {
     /// Whether generated tests had their whitespace normalised, which changes the
     /// bytes and therefore has to be recorded.
     pub trim_whitespace: bool,
+    /// The time limit the tests were produced under, in milliseconds.
     pub time_limit: i32,
+    /// The task's subtasks, in order.
     pub subtasks: Vec<ManifestSubtask>,
 }
 

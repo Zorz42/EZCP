@@ -1,4 +1,25 @@
+/// Turns a generated value into the bytes of a test input file.
+///
+/// A generator returns any type implementing this trait, so a test can be built
+/// as the data it actually is rather than as a `String` assembled by hand.
+/// Implementations are provided for the primitive types, `String`/`&str`,
+/// `Vec<T>` and tuples, and [`Graph`](crate::Graph) writes itself out in the
+/// usual "n m" followed by an edge list form.
+///
+/// The derive writes out a struct's fields in declaration order, which is the
+/// common case for an input format:
+///
+/// ```
+/// use ezcp::ToOutput;
+///
+/// #[derive(ToOutput)]
+/// struct Input {
+///     n: i32,
+///     values: Vec<i32>,
+/// }
+/// ```
 pub trait ToOutput {
+    /// Renders `self` as the contents of a test input file.
     fn to_output(self) -> String;
 }
 

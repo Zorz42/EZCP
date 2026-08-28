@@ -243,6 +243,11 @@ impl<T: ToOutput> Task<T> {
         self
     }
 
+    /// Trims trailing whitespace from each line of a solution's output, and
+    /// trailing blank lines from the end of it. On by default.
+    ///
+    /// This changes the bytes of the test data, so the setting is recorded in the
+    /// manifest and applies identically to a served test.
     #[must_use]
     pub const fn trim_whitespace(mut self, trim_whitespace: bool) -> Self {
         self.trim_whitespace = trim_whitespace;

@@ -390,6 +390,11 @@ impl Graph {
         true
     }
 
+    /// Returns the nodes adjacent to `node`.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `node` is not a node of this graph.
     #[must_use]
     pub fn get_neighbours(&self, node: usize) -> Vec<usize> {
         self.nodes[node].clone()
