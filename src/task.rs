@@ -114,6 +114,26 @@ struct TestFiles {
 ///
 /// A seed mode run produces a few kilobytes where a normal one produces
 /// megabytes, and the same line reports both.
+/// Adds up the size of every file below `path`.
+///
+/// A directory that cannot be read counts as nothing rather than as an error:
+/// this only ever feeds the size line in the summary, and a run that produced
+/// the tests should not fail over the report about them.
+fn dir_size(path: &Path) -> u64 {
+    let Ok(entries) = fs::read_dir(path) else {
+        return 0;
+    };
+
+    entries
+        .flatten()
+        .map(|entry| match entry.file_type() {
+            Ok(file_type) if file_type.is_dir() => dir_size(&entry.path()),
+            Ok(_) => entry.metadata().map_or(0, |metadata| metadata.len()),
+            Err(_) => 0,
+        })
+        .sum()
+}
+
 fn format_size(bytes: u64) -> String {
     let bytes = bytes as f32;
     if bytes < 1_000_000.0 {
@@ -595,7 +615,7 @@ impl<T: ToOutput> Task<T> {
         self.write_tests(mode, &names, &all_tests)?;
         self.archive_tests(&names)?;
 
-        let tests_size = fs_extra::dir::get_size(&self.tests_path).unwrap_or(0);
+        let tests_size = dir_size(&self.tests_path);
         self.log_result(&format!("Tests size: {}", style(format_size(tests_size)).bold()))?;
         if mode == Mode::Seeds {
             self.log_result("The test files are seeds: pipe one into the task with --serve to rebuild it")?;

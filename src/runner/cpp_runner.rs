@@ -233,7 +233,7 @@ impl CppRunner {
     pub fn run_tasks(&mut self, logger: Option<&MultiProgress>) -> Result<()> {
         let timer_path = self.programs[self.timer.id].clone();
 
-        let num_threads = num_cpus::get().min(MAX_CONCURRENT_SOLUTIONS);
+        let num_threads = std::thread::available_parallelism().map_or(1, std::num::NonZeroUsize::get).min(MAX_CONCURRENT_SOLUTIONS);
         let mut threads: Vec<(JoinHandle<Result<RunResult>>, usize)> = Vec::new();
 
         let mut next_task = 0;
