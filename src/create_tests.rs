@@ -51,6 +51,15 @@ pub fn trim_whitespace(input: &str) -> String {
 /// produced the requested count, and without a bound it would spin forever.
 const MAX_REPEATED_TESTS: usize = 100;
 
+/// What one candidate test did to the solutions it was run past.
+struct CandidateOutcome {
+    /// The official solution's output, normalised as it would be written out.
+    output: String,
+    /// Indices into `Task::solutions` of the solutions that were handed over as
+    /// "bad" and did fail this test.
+    failed: Vec<usize>,
+}
+
 /// A finished test, together with the recipe that produced it.
 ///
 /// The recipe is what makes the test disposable: `generator` and `seed` are
@@ -116,22 +125,32 @@ impl<T: ToOutput> Task<T> {
             if solution.passes_subtasks.contains(&subtask_idx) {
                 good_solution_handles.push((i, solution_handles[i]));
             } else {
-                bad_solution_handles.push(solution_handles[i]);
+                bad_solution_handles.push((i, solution_handles[i]));
             }
         }
 
         let mut tried_inputs = HashSet::new();
         let mut subtask_tests = Vec::new();
-        let mut robust_found_count = 0;
+        // How many of the tests kept so far each solution has failed, indexed the
+        // same way as `self.solutions`. Only the entries of solutions that are
+        // meant to fail this subtask are ever looked at.
+        let mut failures = vec![0_usize; self.solutions.len()];
 
         let total_initial: usize = subtask.initial_counts.iter().sum();
-        let target_robust = if bad_solution_handles.is_empty() {
+        let target_failures = if bad_solution_handles.is_empty() {
             0
         } else {
             subtask.min_failures_per_solution.unwrap_or(self.min_failures_per_solution)
         };
 
-        let found_count_progress_bar = ScopedProgressBar::new(&self.logger, (total_initial + target_robust) as u64);
+        // The solutions that still owe failures, which are the only ones worth
+        // running: one that has already failed often enough can no longer change
+        // what happens to a candidate, and a solution that is meant to fail is
+        // usually the slowest thing in the batch, because failing often means
+        // running into the time limit.
+        let still_owed = |failures: &[usize]| -> Vec<(usize, ProgramHandle)> { bad_solution_handles.iter().copied().filter(|&(sol_idx, _)| failures[sol_idx] < target_failures).collect() };
+
+        let found_count_progress_bar = ScopedProgressBar::new(&self.logger, (total_initial + target_failures) as u64);
         let tries_progress_bar = ScopedProgressBar::new(&self.logger, self.max_tries as u64);
 
         // Phase 1 (optional): Stress tests
@@ -144,12 +163,17 @@ impl<T: ToOutput> Task<T> {
 
                     stress_testing_progress_bar.inc(1);
 
-                    self.is_robust_test(&test_str, solution_handle, &good_solution_handles, &[], cpp_runner, subtask_idx, gen_idx)?;
+                    self.run_candidate(&test_str, solution_handle, &good_solution_handles, &[], cpp_runner, subtask_idx, gen_idx)?;
                 }
             }
         }
 
-        // Phase 2: Initial tests from each generator (only good solutions must pass)
+        // Phase 2: initial tests from each generator.
+        //
+        // The solutions that are meant to fail the subtask run here too, even
+        // though the test is kept whatever they do: these tests are part of the
+        // finished subtask, so one of them breaking a solution is a failure that
+        // counts, and phase 3 has that much less left to look for.
         for gen_idx in 0..subtask.get_num_generators() {
             let needed = subtask.initial_counts.get(gen_idx).copied().unwrap_or(0);
             let mut got = 0;
@@ -163,15 +187,15 @@ impl<T: ToOutput> Task<T> {
                     continue;
                 }
 
-                // Only good solutions are checked here (no bad_progs passed)
-                let Some(main_output) = self.is_robust_test(&candidate, solution_handle, &good_solution_handles, &[], cpp_runner, subtask_idx, gen_idx)? else {
-                    unreachable!("is_robust_test with no bad progs should always return Some or Err")
-                };
+                let outcome = self.run_candidate(&candidate, solution_handle, &good_solution_handles, &still_owed(&failures), cpp_runner, subtask_idx, gen_idx)?;
+                for sol_idx in outcome.failed {
+                    failures[sol_idx] += 1;
+                }
                 subtask_tests.push(GeneratedTest {
                     generator: gen_idx,
                     seed,
                     input: Arc::from(candidate),
-                    output: Arc::from(main_output),
+                    output: Arc::from(outcome.output),
                 });
                 found_count_progress_bar.inc(1);
                 got += 1;
@@ -184,9 +208,16 @@ impl<T: ToOutput> Task<T> {
             }
         }
 
-        // Phase 3: Robust tests (failing bad solutions)
+        // Phase 3: supplemental tests, until every solution that is meant to fail
+        // this subtask has failed at least `target_failures` of its tests.
+        //
+        // The goal is counted per solution rather than by tests that defeat all
+        // of them at once: with several bad solutions, the chance that one
+        // candidate happens to break every single one of them falls off a cliff,
+        // and requiring it turns a search that converges in a handful of tries
+        // into one that runs out of tries having found nothing.
         let mut supplemental_tries = 0;
-        while robust_found_count < target_robust && supplemental_tries < self.max_tries {
+        while !still_owed(&failures).is_empty() && supplemental_tries < self.max_tries {
             supplemental_tries += 1;
             tries_progress_bar.inc(1);
             let Some(gen_idx) = subtask.pick_generator(rng) else { break };
@@ -196,23 +227,35 @@ impl<T: ToOutput> Task<T> {
                 continue;
             }
 
-            if let Some(main_output) = self.is_robust_test(&candidate, solution_handle, &good_solution_handles, &bad_solution_handles, cpp_runner, subtask_idx, gen_idx)? {
-                subtask_tests.push(GeneratedTest {
-                    generator: gen_idx,
-                    seed,
-                    input: Arc::from(candidate),
-                    output: Arc::from(main_output),
-                });
-                robust_found_count += 1;
-                supplemental_tries = 0;
-                found_count_progress_bar.inc(1);
-                tries_progress_bar.reset();
+            let outcome = self.run_candidate(&candidate, solution_handle, &good_solution_handles, &still_owed(&failures), cpp_runner, subtask_idx, gen_idx)?;
+            // A candidate earns its place by breaking at least one solution that
+            // still owes failures. Keeping it for anything less would pad the
+            // subtask with tests that separate nothing.
+            if outcome.failed.is_empty() {
+                continue;
             }
+            for sol_idx in outcome.failed {
+                failures[sol_idx] += 1;
+            }
+            subtask_tests.push(GeneratedTest {
+                generator: gen_idx,
+                seed,
+                input: Arc::from(candidate),
+                output: Arc::from(outcome.output),
+            });
+            supplemental_tries = 0;
+            found_count_progress_bar.inc(1);
+            // How many extra tests it takes is not known in advance - one of them
+            // can break every solution at once, or only ever one - so the bar
+            // grows rather than sitting at full while the search continues.
+            let found = found_count_progress_bar.position();
+            if found > found_count_progress_bar.length().unwrap_or(0) {
+                found_count_progress_bar.set_length(found);
+            }
+            tries_progress_bar.reset();
         }
 
-        if robust_found_count < target_robust {
-            error!("Could not find enough robust tests for Subtask {} (found {}/{})", subtask_idx + 1, robust_found_count, target_robust);
-        }
+        self.report_failures(subtask_idx, subtask, &bad_solution_handles, &failures, target_failures, !subtask_tests.is_empty())?;
 
         // Shuffle all tests for this subtask, from the run's own generator so that
         // the order is part of what a seed reproduces.
@@ -221,27 +264,75 @@ impl<T: ToOutput> Task<T> {
         Ok(subtask_tests)
     }
 
-    /// Checks if a candidate test input effectively distinguishes between the correct solution
-    /// and a set of "bad" solutions.
+    /// Reports how the finished subtask did against the solutions that are meant
+    /// to fail it.
     ///
-    /// A test is considered robust if:
-    /// 1. All "good" solutions (including main) produce the same valid response.
-    /// 2. Every "bad" solution either TLEs, crashes, or produces a different output.
-    fn is_robust_test(
+    /// A solution that never failed a single test of the subtask will pass it
+    /// when the finished tests are judged, and that is already a failed run.
+    /// Saying so here, rather than after every remaining subtask has been
+    /// generated and every solution judged, is the difference between a report
+    /// in seconds and one in hours. Falling short of the target while still
+    /// failing something only weakens the test data, so that is a complaint
+    /// rather than an error.
+    fn report_failures(&self, subtask_idx: usize, subtask: &Subtask<T>, bad_progs: &[(usize, ProgramHandle)], failures: &[usize], target_failures: usize, has_tests: bool) -> Result<()> {
+        if target_failures == 0 || !has_tests {
+            return Ok(());
+        }
+
+        for &(sol_idx, _) in bad_progs {
+            if failures[sol_idx] == 0 {
+                return Err(Error::PartialSolutionPassesExtraSubtask {
+                    subtask_number: subtask_idx + 1,
+                    partial_number: sol_idx + 1,
+                    partial_name: self.solutions[sol_idx].name.clone(),
+                    subtask_name: subtask.name.clone(),
+                });
+            }
+        }
+
+        for &(sol_idx, _) in bad_progs {
+            if failures[sol_idx] < target_failures {
+                error!(
+                    "Subtask {} ({}) only has {} of the {} tests that partial solution {} ({}) is supposed to fail.",
+                    subtask_idx + 1,
+                    subtask.name,
+                    failures[sol_idx],
+                    target_failures,
+                    sol_idx + 1,
+                    self.solutions[sol_idx].name
+                );
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Runs one candidate test past the official solution, the solutions that are
+    /// meant to pass this subtask, and a set of solutions that are meant to fail
+    /// it.
+    ///
+    /// The official solution and the good ones have to agree: a test whose answer
+    /// is not well defined is an error rather than a test. What the bad solutions
+    /// do is only reported, because a test is worth keeping whether or not any
+    /// particular one of them happens to fall over on it - the caller decides
+    /// what the failures it reports are worth.
+    fn run_candidate(
         &self,
         input: &str,
         main_prog: ProgramHandle,
         good_progs: &[(usize, ProgramHandle)],
-        bad_progs: &[ProgramHandle],
+        bad_progs: &[(usize, ProgramHandle)],
         runner: &mut CppRunner,
         subtask_idx: usize,
         gen_idx: usize,
-    ) -> Result<Option<String>> {
+    ) -> Result<CandidateOutcome> {
         let mut all_progs = vec![main_prog];
         for &(_, handle) in good_progs {
             all_progs.push(handle);
         }
-        all_progs.extend_from_slice(bad_progs);
+        for &(_, handle) in bad_progs {
+            all_progs.push(handle);
+        }
 
         // Run all solutions in parallel
         let results = runner.check_programs(input, &all_progs, self.time_limit)?;
@@ -317,21 +408,17 @@ impl<T: ToOutput> Task<T> {
             }
         }
 
-        if bad_progs.is_empty() {
-            return Ok(Some(correct_output));
-        }
-
-        // Run Bad Solutions to ensure they fail
+        // Report which of the bad solutions this test breaks. A wrong answer, a
+        // timeout and a crash all count as failing it.
         let bad_results_start = 1 + good_progs.len();
-        for res in &results[bad_results_start..] {
-            match res {
-                RunResult::Ok(_, output) if (self.checker)(input, &correct_output, output) => {
-                    // A bad solution passed this test! This test is not robust enough.
-                    return Ok(None);
-                }
-                _ => {} // Bad solution failed as expected (TLE, Crash, or WA)
+        let mut failed = Vec::new();
+        for (&(sol_idx, _), result) in bad_progs.iter().zip(&results[bad_results_start..]) {
+            let passed = matches!(result, RunResult::Ok(_, output) if (self.checker)(input, &correct_output, output));
+            if !passed {
+                failed.push(sol_idx);
             }
         }
-        Ok(Some(correct_output))
+
+        Ok(CandidateOutcome { output: correct_output, failed })
     }
 }

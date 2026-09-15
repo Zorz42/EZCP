@@ -55,7 +55,8 @@ pub fn path_str(p: &Path) -> String {
 /// compiles every solution, generates the tests and verifies the outcomes.
 ///
 /// Test generation keeps going until each solution that is expected to fail on a
-/// subtask has failed on at least `min_failures_per_solution` tests.
+/// subtask has failed on at least `min_failures_per_solution` of that subtask's
+/// tests, or until `max_tries` candidates in a row have added nothing.
 pub struct Task<T: ToOutput> {
     /// Name of the task
     pub(crate) name: String,
@@ -86,7 +87,8 @@ pub struct Task<T: ToOutput> {
     pub(crate) solutions: Vec<Solution>,
     /// Target number of failures per "bad" solution per subtask
     pub(crate) min_failures_per_solution: usize,
-    /// Maximum number of consecutive failed attempts to find a robust test
+    /// Maximum number of candidates in a row that may add no failure before the
+    /// search for supplemental tests gives up
     pub(crate) max_tries: usize,
     /// Test checker, used for problems with multiple different possible outputs.
     /// By default it is a diff checker (up to whitespace).
@@ -307,14 +309,25 @@ impl<T: ToOutput> Task<T> {
         self
     }
 
-    /// Sets the minimum number of failures required per subtask for incorrect solutions.
+    /// Sets how many of a subtask's tests each solution that is meant to fail it
+    /// has to fail.
+    ///
+    /// The count is kept per solution, not per test: one test that breaks three
+    /// partial solutions at once counts for all three, and a test that breaks
+    /// only one is still worth keeping. Zero turns the requirement off.
     #[must_use]
     pub const fn with_min_failures(mut self, n: usize) -> Self {
         self.min_failures_per_solution = n;
         self
     }
 
-    /// Sets the maximum number of consecutive failed attempts to find a robust test.
+    /// Sets how many candidates in a row may add no new failure before test
+    /// generation stops looking for more.
+    ///
+    /// Every one of those candidates costs a run of every solution that still
+    /// owes failures, and a solution that is meant to fail usually fails by
+    /// running into the time limit, so a large number here is paid for in
+    /// minutes.
     #[must_use]
     pub const fn with_max_tries(mut self, n: usize) -> Self {
         self.max_tries = n;

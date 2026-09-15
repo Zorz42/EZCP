@@ -68,7 +68,11 @@ impl<T: ToOutput> Subtask<T> {
         self
     }
 
-    /// Override custom `min_failures_per_solution`
+    /// Overrides, for this subtask only, how many of its tests each solution that
+    /// is meant to fail it has to fail.
+    ///
+    /// See [`Task::with_min_failures`](crate::Task::with_min_failures) for what
+    /// the count means.
     #[must_use]
     pub const fn with_min_failures(mut self, min_failures: usize) -> Self {
         self.min_failures_per_solution = Some(min_failures);

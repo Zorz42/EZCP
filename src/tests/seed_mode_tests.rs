@@ -219,8 +219,11 @@ mod seed_mode_tests {
         );
     }
 
+    /// The partial solution is wrong on every test of the second subtask, so the
+    /// tests that were going to be generated anyway are already the two
+    /// counterexamples that are asked for: nothing extra has to be hunted down.
     #[test]
-    fn seed_mode_accepts_a_correctly_declared_partial_solution() {
+    fn a_partial_solution_the_initial_tests_already_break_costs_no_extra_tests() {
         let dir = TempDir::new().unwrap();
         build_task(dir.path())
             .with_partial_solution("always 2", PARTIAL, &[0])
@@ -228,9 +231,7 @@ mod seed_mode_tests {
             .run_mode(Mode::Seeds)
             .unwrap();
 
-        // The two extra tests are the counterexamples that were hunted down for
-        // the second subtask, which the partial solution is declared to fail.
-        assert_eq!(num_tests(dir.path()), NUM_TESTS + 2);
+        assert_eq!(num_tests(dir.path()), NUM_TESTS);
     }
 
     /// A stub written by hand carries no hash, so the server takes it on trust —
