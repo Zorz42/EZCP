@@ -17,14 +17,14 @@ const MAX_CONCURRENT_SOLUTIONS: usize = 4;
 /// Keeps scratch names unique between threads of one process.
 static SCRATCH_FILES: AtomicUsize = AtomicUsize::new(0);
 
-fn scratch_name(hash: u64) -> String {
-    format!("p{hash}-{}-{}.tmp", std::process::id(), SCRATCH_FILES.fetch_add(1, Ordering::Relaxed))
+fn scratch_source_name(hash: u64) -> String {
+    format!("p{hash}-{}-{}.cpp", std::process::id(), SCRATCH_FILES.fetch_add(1, Ordering::Relaxed))
 }
 
 /// Renames a finished file into place, so others see either none or all of it.
 ///
-/// On Windows the rename fails while `destination` is open. Names are hashes of
-/// the contents, so an existing `destination` is already the right file.
+/// On Windows the rename can fail while `destination` is open. Names are hashes
+/// of the contents, so an existing `destination` is already the right file.
 fn install(scratch: &Path, destination: &Path) -> Result<()> {
     std::fs::rename(scratch, destination).or_else(|err| {
         let _ = std::fs::remove_file(scratch);
@@ -95,22 +95,25 @@ impl CppRunner {
         self.necessary_files.insert(source_file.clone());
         self.necessary_files.insert(executable_file.clone());
 
-        // Written under scratch names and renamed into place, because several
-        // processes (e.g. servers started by a judge) may share the build folder.
+        // Several processes (e.g. servers started by a judge) may share the build
+        // folder, so each compiles a private copy and renames the finished files
+        // into place. Compiling the shared source breaks on Windows, where a rename
+        // over a file that is being read succeeds and the reader loses the file.
         // The source is always rewritten, to repair one truncated by an old version.
-        let scratch_source = self.build_folder.join(scratch_name(hash));
+        let scratch_source = self.build_folder.join(scratch_source_name(hash));
         std::fs::write(&scratch_source, source_code).map_err(Error::io(&scratch_source))?;
-        install(&scratch_source, &source_file)?;
-
-        if !executable_file.exists() {
+        let compiled = if executable_file.exists() {
+            Ok(())
+        } else {
             trace!("Compiling: {}", executable_file.display());
-            let scratch_executable = Gcc::executable_path(&self.build_folder.join(scratch_name(hash)))?;
-            if let Err(err) = self.gcc.compile(&source_file, &scratch_executable) {
-                let _ = std::fs::remove_file(&scratch_executable);
-                return Err(err);
-            }
-            install(&scratch_executable, &executable_file)?;
-        }
+            let scratch_executable = Gcc::executable_path(&scratch_source)?;
+            let compiled = self.gcc.compile(&scratch_source, &scratch_executable).and_then(|()| install(&scratch_executable, &executable_file));
+            // Only left behind by a failed compile.
+            let _ = std::fs::remove_file(&scratch_executable);
+            compiled
+        };
+        install(&scratch_source, &source_file)?;
+        compiled?;
 
         // Only now, so a failed compile leaves no handle to a missing program.
         let handle = ProgramHandle(self.programs.len());
