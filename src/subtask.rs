@@ -1,13 +1,11 @@
 use crate::rng::Rng;
-use crate::test::TestGenerator;
-
 use crate::to_output::ToOutput;
 
 /// A subtask: its points, name and generators.
 pub struct Subtask<T: ToOutput> {
     pub(crate) name: String,
     pub(crate) points: i32,
-    generators: Vec<TestGenerator<T>>,
+    generators: Vec<Box<dyn Fn(&mut Rng) -> T>>,
     /// How many tests each generator contributes up front.
     pub(crate) initial_counts: Vec<usize>,
     /// Overrides the task's `min_failures_per_solution`.
@@ -46,7 +44,7 @@ impl<T: ToOutput> Subtask<T> {
     #[must_use]
     pub fn with_test<F: Fn(&mut Rng) -> T + 'static>(mut self, count: i32, function: F) -> Self {
         assert!(count >= 0, "a generator cannot produce {count} tests");
-        self.generators.push(TestGenerator::new(function));
+        self.generators.push(Box::new(function));
         self.initial_counts.push(count as usize);
         self
     }
@@ -85,15 +83,12 @@ impl<T: ToOutput> Subtask<T> {
     /// # Panics
     /// Panics if `gen_idx` does not exist.
     pub(crate) fn generate_test(&self, gen_idx: usize, seed: u64) -> T {
-        let res = self.generators[gen_idx].generate(seed);
-        (self.checker)(&res);
-        res
+        let test = self.generators[gen_idx](&mut Rng::from_seed(seed));
+        (self.checker)(&test);
+        test
     }
 
     pub(crate) fn pick_generator(&self, rng: &mut Rng) -> Option<usize> {
-        if self.generators.is_empty() {
-            return None;
-        }
-        Some(rng.random_range(0..self.generators.len()))
+        (!self.generators.is_empty()).then(|| rng.random_range(0..self.generators.len()))
     }
 }

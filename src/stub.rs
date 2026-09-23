@@ -56,24 +56,24 @@ pub struct Stub {
     pub hash: Option<u64>,
 }
 
+const fn invalid(details: String) -> Error {
+    Error::InvalidStub { details }
+}
+
 fn index(object: &Value, key: &str) -> Result<usize> {
-    object.get(key).and_then(Value::as_u64).and_then(|value| usize::try_from(value).ok()).ok_or_else(|| Error::InvalidStub {
-        details: format!("\"{key}\" is missing or is not a non-negative integer"),
-    })
+    object
+        .get(key)
+        .and_then(Value::as_u64)
+        .and_then(|value| usize::try_from(value).ok())
+        .ok_or_else(|| invalid(format!("\"{key}\" is missing or is not a non-negative integer")))
 }
 
 /// Also accepts a plain number, for stubs written by hand.
 fn hex_u64(value: &Value, what: &str) -> Result<u64> {
     match value {
-        Value::String(text) => u64::from_str_radix(text.trim_start_matches("0x"), 16).map_err(|_ignored| Error::InvalidStub {
-            details: format!("{what} is not a 64-bit hexadecimal number: \"{text}\""),
-        }),
-        Value::Number(number) => number.as_u64().ok_or_else(|| Error::InvalidStub {
-            details: format!("{what} is not a non-negative integer"),
-        }),
-        _ => Err(Error::InvalidStub {
-            details: format!("{what} is neither a string nor a number"),
-        }),
+        Value::String(text) => u64::from_str_radix(text.trim_start_matches("0x"), 16).map_err(|_ignored| invalid(format!("{what} is not a 64-bit hexadecimal number: \"{text}\""))),
+        Value::Number(number) => number.as_u64().ok_or_else(|| invalid(format!("{what} is not a non-negative integer"))),
+        _ => Err(invalid(format!("{what} is neither a string nor a number"))),
     }
 }
 
@@ -93,36 +93,21 @@ impl Stub {
 
     /// Parses a line written by [`Stub::to_line`], or one written by hand.
     pub fn parse(line: &str) -> Result<Self> {
-        let value: Value = serde_json::from_str(line).map_err(|err| Error::InvalidStub {
-            details: format!("not a JSON object: {err}"),
-        })?;
-
+        let value: Value = serde_json::from_str(line).map_err(|err| invalid(format!("not a JSON object: {err}")))?;
         let part = match value.get("part").and_then(Value::as_str) {
             Some("input") => Part::Input,
             Some("output") => Part::Output,
-            Some(other) => {
-                return Err(Error::InvalidStub {
-                    details: format!("\"part\" is \"{other}\"; it has to be \"input\" or \"output\""),
-                });
-            }
-            None => {
-                return Err(Error::InvalidStub {
-                    details: "\"part\" is missing; a stub stands for either the \"input\" or the \"output\" of a test".to_owned(),
-                });
-            }
+            Some(other) => return Err(invalid(format!("\"part\" is \"{other}\"; it has to be \"input\" or \"output\""))),
+            None => return Err(invalid("\"part\" is missing; a stub stands for either the \"input\" or the \"output\" of a test".to_owned())),
         };
-
-        let hash = value.get("hash").map(|hash| hex_u64(hash, "\"hash\"")).transpose()?;
-        let seed = value.get("seed").ok_or_else(|| Error::InvalidStub {
-            details: "\"seed\" is missing".to_owned(),
-        })?;
+        let seed = value.get("seed").ok_or_else(|| invalid("\"seed\" is missing".to_owned()))?;
 
         Ok(Self {
             subtask: index(&value, "subtask")?,
             generator: index(&value, "generator")?,
             seed: hex_u64(seed, "\"seed\"")?,
             part,
-            hash,
+            hash: value.get("hash").map(|hash| hex_u64(hash, "\"hash\"")).transpose()?,
         })
     }
 }

@@ -7,105 +7,83 @@ use std::collections::{BTreeMap, HashSet};
 use std::fmt::{Display, Write as _};
 use std::sync::Arc;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
-enum TestResult {
-    Ok = 0,
-    TimedOut = 1,
-    Crashed = 2,
-    WrongAnswer = 3,
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+enum Verdict {
+    Ok,
+    TimedOut,
+    Crashed,
+    WrongAnswer,
 }
 
-impl Display for TestResult {
+impl Display for Verdict {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let val = match self {
-            Self::Ok => style("OK").green().bright().bold(),
-            Self::TimedOut => style("TLE").red().bright().bold(),
-            Self::Crashed => style("RTE").red().bright().bold(),
-            Self::WrongAnswer => style("WA").red().bright().bold(),
+        let text = match self {
+            Self::Ok => return write!(f, "{}", style("OK").green().bright().bold()),
+            Self::TimedOut => "TLE",
+            Self::Crashed => "RTE",
+            Self::WrongAnswer => "WA",
         };
-        write!(f, "{val}")
-    }
-}
-
-impl From<&RunResult> for TestResult {
-    fn from(result: &RunResult) -> Self {
-        match result {
-            RunResult::Ok(_, _) => Self::Ok,
-            RunResult::TimedOut => Self::TimedOut,
-            RunResult::Crashed => Self::Crashed,
-        }
+        write!(f, "{}", style(text).red().bright().bold())
     }
 }
 
 impl<T: ToOutput> Task<T> {
     /// Runs a solution on every test and returns the subtasks it passed.
-    pub(crate) fn run_partial_solution(&self, tests: &[Vec<GeneratedTest>], cpp_runner: &mut CppRunner, program_handle: ProgramHandle, lines_of_code: usize) -> Result<HashSet<usize>> {
+    pub(crate) fn run_partial_solution(&self, tests: &[Vec<GeneratedTest>], cpp_runner: &mut CppRunner, program: ProgramHandle, lines_of_code: usize) -> Result<HashSet<usize>> {
         cpp_runner.clear_tasks();
-        let mut test_handles = Vec::new();
-        let mut passed_subtasks = HashSet::new();
-
-        for subtask_tests in tests {
-            let mut test_handles_element = Vec::new();
-            for test in subtask_tests {
-                let handle = cpp_runner.add_task(program_handle, Arc::clone(&test.input), self.time_limit);
-
-                test_handles_element.push((handle, Arc::clone(&test.output)));
-            }
-            test_handles.push(test_handles_element);
-        }
-
+        let handles: Vec<Vec<_>> = tests
+            .iter()
+            .map(|subtask_tests| {
+                subtask_tests
+                    .iter()
+                    .map(|test| (cpp_runner.add_task(program, Arc::clone(&test.input), self.time_limit), &test.output))
+                    .collect()
+            })
+            .collect();
         cpp_runner.run_tasks(Some(&self.logger))?;
 
-        let mut got_points = 0;
-        let mut total_points = 0;
-
+        let mut passed_subtasks = HashSet::new();
         let mut results_text = String::new();
-        for (subtask_id, subtask_test_handles) in test_handles.iter().enumerate() {
+        for (subtask_idx, subtask_handles) in handles.into_iter().enumerate() {
+            // `None` once a test has failed: no time is reported then.
             let mut max_time = Some(0);
-            let mut results = BTreeMap::new();
-            for (handle, correct_output) in subtask_test_handles {
-                let input_data = cpp_runner.take_input(*handle);
-
-                let run_result = cpp_runner.get_result(*handle);
-                let mut test_result = TestResult::from(&run_result);
-
-                match run_result {
-                    RunResult::Ok(time, program_output) => {
-                        // `None` once a test has failed: no time is reported then.
+            let mut verdicts = BTreeMap::new();
+            for (handle, official_output) in subtask_handles {
+                let input = cpp_runner.take_input(handle);
+                let verdict = match cpp_runner.get_result(handle) {
+                    RunResult::Ok(time, output) => {
                         max_time = max_time.map(|slowest| slowest.max(time));
-
-                        if !(self.checker)(&input_data, correct_output, &program_output) {
-                            test_result = TestResult::WrongAnswer;
-                        }
+                        if (self.checker)(&input, official_output, &output) { Verdict::Ok } else { Verdict::WrongAnswer }
                     }
-                    RunResult::TimedOut | RunResult::Crashed => {
+                    RunResult::TimedOut => {
                         max_time = None;
+                        Verdict::TimedOut
                     }
-                }
-
-                results.entry(test_result).and_modify(|count| *count += 1).or_insert(1);
+                    RunResult::Crashed => {
+                        max_time = None;
+                        Verdict::Crashed
+                    }
+                };
+                *verdicts.entry(verdict).or_insert(0) += 1;
             }
 
-            write!(results_text, "\n- Subtask {}: ", subtask_id + 1).ok();
-            for (result, count) in &results {
-                write!(results_text, "{result} ({count}) ").ok();
+            write!(results_text, "\n- Subtask {}: ", subtask_idx + 1).ok();
+            for (verdict, count) in &verdicts {
+                write!(results_text, "{verdict} ({count}) ").ok();
             }
-
             if let Some(max_time) = max_time {
                 write!(results_text, "{max_time}ms").ok();
             }
-
-            if results.len() == 1 && results.contains_key(&TestResult::Ok) {
-                passed_subtasks.insert(subtask_id);
-                got_points += self.subtasks[subtask_id].points;
+            if verdicts.keys().eq([&Verdict::Ok]) {
+                passed_subtasks.insert(subtask_idx);
             }
-            total_points += self.subtasks[subtask_id].points;
         }
 
+        let got_points: i32 = passed_subtasks.iter().map(|&idx| self.subtasks[idx].points).sum();
+        let total_points: i32 = self.subtasks.iter().map(|subtask| subtask.points).sum();
         self.log_result(&format!("Points {got_points}/{total_points}"))?;
         self.log_result(&format!("Lines of code: {lines_of_code}"))?;
         self.log_result(&format!("Results: {results_text}"))?;
-
         Ok(passed_subtasks)
     }
 }

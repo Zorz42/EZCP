@@ -12,10 +12,8 @@ mod partial_solution_tests;
 mod rng_tests;
 mod seed_mode_tests;
 mod solution_tests;
-mod stack_limit_tests;
 mod stub_tests;
 mod subtask_tests;
-mod test_generator_tests;
 mod to_output_tests;
 mod trim_whitespace_tests;
 

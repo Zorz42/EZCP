@@ -45,7 +45,6 @@ mod solution;
 mod stub;
 mod subtask;
 mod task;
-mod test;
 #[cfg(test)]
 mod tests;
 mod to_output;

@@ -1,297 +1,114 @@
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 pub mod generic_tests {
-    use crate::Mode;
     use crate::to_output::ToOutput;
-    use crate::{Error, Subtask, Task};
+    use crate::{Error, Mode, Subtask, Task};
     use log::LevelFilter;
     use tempfile::TempDir;
 
-    pub struct Test<T: ToOutput> {
-        pub task: Task<T>,
-        task_path: TempDir,
+    /// A task in a fresh directory, which is deleted with the returned guard.
+    pub fn test_task<T: ToOutput>() -> (TempDir, Task<T>) {
+        let dir = TempDir::new().unwrap();
+        let task = Task::new("Test task", dir.path()).with_debug_level(LevelFilter::Trace);
+        (dir, task)
     }
 
-    impl<T: ToOutput> Test<T> {
-        pub fn new() -> Self {
-            let task_path = TempDir::new().unwrap();
-            let task = Task::new("Test task", task_path.path()).with_debug_level(LevelFilter::Trace);
-            Self { task, task_path }
-        }
+    const RETURN_ZERO: &str = "int main() { return 0; }";
+    const PRINT_ONE: &str = "#include <iostream>\nint main() { std::cout << \"1\\n\"; }";
 
-        pub fn test(self) {
-            self.task.run_mode(Mode::Files).unwrap();
-            drop(self.task_path);
-        }
-    }
-
-    #[test]
-    fn create_empty() {
-        let mut task = Test::<String>::new();
-
-        let solution_contents = "int main() { return 0; }";
-        task.task = task.task.with_solution_source(solution_contents);
-
-        task.test();
+    /// Three subtasks with eight tests between them.
+    fn with_three_subtasks(task: Task<String>) -> Task<String> {
+        let subtask = |count: usize| (1..=count).fold(Subtask::new(0, ""), |subtask, i| subtask.with_test(1, move |_rng| format!("{i}\n")));
+        task.with_solution_source(PRINT_ONE).with_subtask(subtask(3)).with_subtask(subtask(3)).with_subtask(subtask(2))
     }
 
     #[test]
-    fn create_with_subtasks() {
-        let mut task = Test::<String>::new();
+    fn a_task_without_subtasks_succeeds() {
+        let (_dir, task) = test_task::<String>();
+        task.with_solution_source(RETURN_ZERO).run_mode(Mode::Files).unwrap();
+    }
 
-        let solution_contents = r#"
-        #include <iostream>
-        using namespace std;
-        
-        int main() {
-            cout<<"1\n";
-            return 0; 
-        }
-        
-        "#;
-
-        task.task = task.task.with_solution_source(solution_contents);
-
-        let subtask1 = Subtask::new(0, "");
-        let subtask2 = Subtask::new(0, "");
-        let subtask3 = Subtask::new(0, "");
-
-        task.task = task.task.with_subtask(subtask1).with_subtask(subtask2).with_subtask(subtask3);
-
-        task.test();
+    #[test]
+    fn create_with_empty_subtasks() {
+        let (_dir, task) = test_task::<String>();
+        task.with_solution_source(PRINT_ONE)
+            .with_subtask(Subtask::new(0, ""))
+            .with_subtask(Subtask::new(0, ""))
+            .run_mode(Mode::Files)
+            .unwrap();
     }
 
     #[test]
     fn create_with_tests() {
-        let mut task = Test::new();
-
-        let solution_contents = r#"
-        #include <iostream>
-        using namespace std;
-        
-        int main() {
-            cout<<"1\n";
-            return 0; 
-        }
-        
-        "#;
-
-        task.task = task.task.with_solution_source(solution_contents);
-
-        let subtask1 = Subtask::new(0, "")
-            .with_test(1, |_rng| "1\n".to_owned())
-            .with_test(1, |_rng| "2\n".to_owned())
-            .with_test(1, |_rng| "3\n".to_owned());
-        let subtask2 = Subtask::new(0, "")
-            .with_test(1, |_rng| "1\n".to_owned())
-            .with_test(1, |_rng| "2\n".to_owned())
-            .with_test(1, |_rng| "3\n".to_owned());
-        let subtask3 = Subtask::new(0, "").with_test(1, |_rng| "1\n".to_owned()).with_test(1, |_rng| "2\n".to_owned());
-
-        task.task = task.task.with_subtask(subtask1).with_subtask(subtask2).with_subtask(subtask3);
-
-        task.test();
-    }
-
-    #[test]
-    fn test_fails_without_solution() {
-        let task = Test::<String>::new();
-
-        assert!(matches!(task.task.run_mode(Mode::Files), Err(Error::MissingSolution)));
-    }
-
-    #[test]
-    fn test_times_out() {
-        let mut task = Test::new();
-        task.task = task.task.with_time_limit(100);
-
-        let solution_contents = r#"
-        #include<iostream>
-        using namespace std;
-
-        int fib(int a){
-                if(a<=2)
-                        return 1;
-                return fib(a-1)+fib(a-2);
-        }
-
-        int main() {
-            cout<<fib(100)<<"\n";
-            return 0;
-        }
-        "#;
-
-        task.task = task.task.with_solution_source(solution_contents);
-
-        let subtask1 = Subtask::new(0, "").with_test(1, |_rng| "1\n".to_owned());
-
-        task.task = task.task.with_subtask(subtask1);
-
-        assert!(matches!(task.task.run_mode(Mode::Files), Err(Error::SolutionTimedOut { .. })));
-    }
-
-    #[test]
-    fn test_compile_error() {
-        let mut task = Test::new();
-
-        let solution_contents = "
-        int main() {
-            this is a compile error
-            return 0;
-        }
-        ";
-
-        task.task = task.task.with_solution_source(solution_contents);
-
-        let subtask1 = Subtask::new(0, "").with_test(1, |_rng| "1\n".to_owned());
-
-        task.task = task.task.with_subtask(subtask1);
-
-        assert!(matches!(task.task.run_mode(Mode::Files), Err(Error::CompilerError { .. })));
+        let (_dir, task) = test_task();
+        with_three_subtasks(task).run_mode(Mode::Files).unwrap();
     }
 
     #[test]
     fn create_with_custom_names() {
-        let mut task = Test::new();
-
-        task.task = task
-            .task
-            .with_get_input_file_name(|test_id: i32, subtask_id: i32, test_id_in_subtask: i32| format!("in_{subtask_id}_{test_id_in_subtask}_{test_id}.txt"))
-            .with_get_output_file_name(|test_id: i32, subtask_id: i32, test_id_in_subtask: i32| format!("out_{subtask_id}_{test_id_in_subtask}_{test_id}.txt"));
-
-        let solution_contents = r#"
-        #include <iostream>
-        using namespace std;
-        
-        int main() {
-            cout<<"1\n";
-            return 0; 
+        let schemes: [fn(i32, i32, i32) -> String; 3] = [
+            |test_id, subtask_id, id_in_subtask| format!("{subtask_id}_{id_in_subtask}_{test_id}"),
+            |_test_id, subtask_id, id_in_subtask| format!("{subtask_id}_{id_in_subtask}"),
+            |test_id, _subtask_id, _id_in_subtask| format!("{test_id}"),
+        ];
+        for name in schemes {
+            let (dir, task) = test_task();
+            with_three_subtasks(task)
+                .with_get_input_file_name(move |a, b, c| format!("in_{}.txt", name(a, b, c)))
+                .with_get_output_file_name(move |a, b, c| format!("out_{}.txt", name(a, b, c)))
+                .run_mode(Mode::Files)
+                .unwrap();
+            assert_eq!(std::fs::read_dir(dir.path().join("tests")).unwrap().count(), 16);
         }
-        "#;
-
-        task.task = task.task.with_solution_source(solution_contents);
-
-        let subtask1 = Subtask::new(0, "")
-            .with_test(1, |_rng| "1\n".to_owned())
-            .with_test(1, |_rng| "2\n".to_owned())
-            .with_test(1, |_rng| "3\n".to_owned());
-        let subtask2 = Subtask::new(0, "")
-            .with_test(1, |_rng| "1\n".to_owned())
-            .with_test(1, |_rng| "2\n".to_owned())
-            .with_test(1, |_rng| "3\n".to_owned());
-        let subtask3 = Subtask::new(0, "").with_test(1, |_rng| "1\n".to_owned()).with_test(1, |_rng| "2\n".to_owned());
-
-        task.task = task.task.with_subtask(subtask1).with_subtask(subtask2).with_subtask(subtask3);
-
-        task.test();
     }
 
     #[test]
-    fn create_with_custom_names2() {
-        let mut task = Test::new();
-
-        task.task = task
-            .task
-            .with_get_input_file_name(|_test_id: i32, subtask_id: i32, test_id_in_subtask: i32| format!("in_{subtask_id}_{test_id_in_subtask}.txt"))
-            .with_get_output_file_name(|_test_id: i32, subtask_id: i32, test_id_in_subtask: i32| format!("out_{subtask_id}_{test_id_in_subtask}.txt"));
-
-        let solution_contents = r#"
-        #include <iostream>
-        using namespace std;
-        
-        int main() {
-            cout<<"1\n";
-            return 0; 
-        }
-        
-        "#;
-
-        task.task = task.task.with_solution_source(solution_contents);
-
-        let subtask1 = Subtask::new(0, "")
-            .with_test(1, |_rng| "1\n".to_owned())
-            .with_test(1, |_rng| "2\n".to_owned())
-            .with_test(1, |_rng| "3\n".to_owned());
-        let subtask2 = Subtask::new(0, "")
-            .with_test(1, |_rng| "1\n".to_owned())
-            .with_test(1, |_rng| "2\n".to_owned())
-            .with_test(1, |_rng| "3\n".to_owned());
-        let subtask3 = Subtask::new(0, "").with_test(1, |_rng| "1\n".to_owned()).with_test(1, |_rng| "2\n".to_owned());
-
-        task.task = task.task.with_subtask(subtask1).with_subtask(subtask2).with_subtask(subtask3);
-
-        task.test();
+    fn test_fails_without_solution() {
+        let (_dir, task) = test_task::<String>();
+        assert!(matches!(task.run_mode(Mode::Files), Err(Error::MissingSolution)));
     }
 
     #[test]
-    fn create_with_custom_names3() {
-        let mut task = Test::new();
-
-        task.task = task
-            .task
-            .with_get_input_file_name(|test_id: i32, _subtask_id: i32, _test_id_in_subtask: i32| format!("in_{test_id}.txt"))
-            .with_get_output_file_name(|test_id: i32, _subtask_id: i32, _test_id_in_subtask: i32| format!("out_{test_id}.txt"));
-
-        let solution_contents = r#"
-        #include <iostream>
-        using namespace std;
-        
-        int main() {
-            cout<<"1\n";
-            return 0; 
-        }
-        
-        "#;
-
-        task.task = task.task.with_solution_source(solution_contents);
-
-        let subtask1 = Subtask::new(0, "")
-            .with_test(1, |_rng| "1\n".to_owned())
-            .with_test(1, |_rng| "2\n".to_owned())
-            .with_test(1, |_rng| "3\n".to_owned());
-        let subtask2 = Subtask::new(0, "")
-            .with_test(1, |_rng| "1\n".to_owned())
-            .with_test(1, |_rng| "2\n".to_owned())
-            .with_test(1, |_rng| "3\n".to_owned());
-        let subtask3 = Subtask::new(0, "").with_test(1, |_rng| "1\n".to_owned()).with_test(1, |_rng| "2\n".to_owned());
-
-        task.task = task.task.with_subtask(subtask1).with_subtask(subtask2).with_subtask(subtask3);
-
-        task.test();
+    fn test_times_out() {
+        let (_dir, task) = test_task();
+        let fibonacci = "#include <iostream>\nint fib(int a) { return a <= 2 ? 1 : fib(a - 1) + fib(a - 2); }\nint main() { std::cout << fib(100); }";
+        let task = task
+            .with_time_limit(100)
+            .with_solution_source(fibonacci)
+            .with_subtask(Subtask::new(0, "").with_test(1, |_rng| "1\n".to_owned()));
+        assert!(matches!(task.run_mode(Mode::Files), Err(Error::SolutionTimedOut { .. })));
     }
 
     #[test]
-    fn test_task_no_subtasks_succeeds() {
-        let mut task = Test::<String>::new();
-        task.task = task.task.with_solution_source("int main() { return 0; }");
-        task.task.run_mode(Mode::Files).unwrap();
+    fn test_compile_error() {
+        let (_dir, task) = test_task();
+        let task = task
+            .with_solution_source("int main() { this is a compile error }")
+            .with_subtask(Subtask::new(0, "").with_test(1, |_rng| "1\n".to_owned()));
+        assert!(matches!(task.run_mode(Mode::Files), Err(Error::CompilerError { .. })));
     }
 
     #[test]
     fn test_stale_build_artifacts_are_removed_on_the_next_run() {
         let tempdir = TempDir::new().unwrap();
-        let task_path = tempdir.path().join("stale_artifacts");
-
         let sources_in_build_folder = || {
-            let mut sources = std::fs::read_dir(task_path.join("build"))
+            let mut sources = std::fs::read_dir(tempdir.path().join("build"))
                 .unwrap()
-                .flatten()
-                .map(|entry| entry.path())
+                .map(|entry| entry.unwrap().path())
                 .filter(|path| path.extension().is_some_and(|extension| extension == "cpp"))
                 .collect::<Vec<_>>();
             sources.sort();
             sources
         };
-
         let run_with = |solution: &str| {
-            Task::new("stale artifacts", &task_path)
+            Task::new("stale artifacts", tempdir.path())
                 .with_solution_source(solution)
                 .with_subtask(Subtask::new(0, "").with_test(1, |_rng| "1\n".to_owned()))
                 .run_mode(Mode::Files)
                 .unwrap();
         };
 
-        run_with("int main() { return 0; }");
+        run_with(RETURN_ZERO);
         let after_first_run = sources_in_build_folder();
         assert_eq!(after_first_run.len(), 2, "expected the timer and one solution, got {after_first_run:?}");
 
@@ -303,24 +120,22 @@ pub mod generic_tests {
 
     #[test]
     fn test_colliding_test_file_names_are_reported() {
-        let mut task = Test::new();
-
-        task.task = task
-            .task
-            .with_solution_source("int main() { return 0; }")
-            .with_get_input_file_name(|_test_id, _subtask_id, _test_id_in_subtask| "test.in".to_owned())
-            .with_get_output_file_name(|_test_id, _subtask_id, _test_id_in_subtask| "test.out".to_owned())
+        let (_dir, task) = test_task();
+        let task = task
+            .with_solution_source(RETURN_ZERO)
+            .with_get_input_file_name(|_, _, _| "test.in".to_owned())
+            .with_get_output_file_name(|_, _, _| "test.out".to_owned())
             .with_subtask(Subtask::new(0, "").with_test(1, |_rng| "1\n".to_owned()).with_test(1, |_rng| "2\n".to_owned()));
-
-        assert!(matches!(task.task.run_mode(Mode::Files), Err(Error::TestAlreadyExists { .. })));
+        assert!(matches!(task.run_mode(Mode::Files), Err(Error::TestAlreadyExists { .. })));
     }
 
     #[test]
     fn test_task_large_time_limit_does_not_panic() {
-        let mut task = Test::new();
-        task.task = task.task.with_time_limit(1_000_000).with_solution_source("int main() { return 0; }");
-        let subtask = Subtask::new(0, "").with_test(1, |_rng| "\n".to_owned());
-        task.task = task.task.with_subtask(subtask);
-        let _ = task.task.run_mode(Mode::Files);
+        let (_dir, task) = test_task();
+        let _ = task
+            .with_time_limit(1_000_000)
+            .with_solution_source(RETURN_ZERO)
+            .with_subtask(Subtask::new(0, "").with_test(1, |_rng| "\n".to_owned()))
+            .run_mode(Mode::Files);
     }
 }

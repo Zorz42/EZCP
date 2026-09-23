@@ -6,16 +6,12 @@
 //! error instead.
 
 use crate::runner::cpp_runner::{CppRunner, ProgramHandle};
-use crate::runner::exec_runner::RunResult;
 use crate::stub::{Part, Stub, stable_hash};
 use crate::{Error, Result, Task, ToOutput};
 use log::{debug, warn};
 use std::io::{BufRead, BufReader, Read, Write};
 use std::panic::{AssertUnwindSafe, catch_unwind};
-
-fn stdout_error(err: std::io::Error) -> Error {
-    Error::IOError { err, file: "stdout".to_owned() }
-}
+use std::path::Path;
 
 impl<T: ToOutput> Task<T> {
     pub(crate) fn serve(&self) -> Result<()> {
@@ -30,7 +26,7 @@ impl<T: ToOutput> Task<T> {
         let mut official_solution = None;
 
         for line in BufReader::new(input).lines() {
-            let line = line.map_err(|err| Error::IOError { err, file: "stdin".to_owned() })?;
+            let line = line.map_err(Error::io(Path::new("stdin")))?;
             if line.trim().is_empty() {
                 continue;
             }
@@ -38,28 +34,22 @@ impl<T: ToOutput> Task<T> {
             debug!("Request: {line}");
             let payload = self.rebuild(&Stub::parse(&line)?, &mut official_solution)?;
 
-            output.write_all(payload.as_bytes()).map_err(stdout_error)?;
-            // The caller may wait for this answer before sending the next stub.
-            output.flush().map_err(stdout_error)?;
+            // Flushed, since the caller may wait for this answer before sending the next stub.
+            output.write_all(payload.as_bytes()).and_then(|()| output.flush()).map_err(Error::io(Path::new("stdout")))?;
         }
 
         Ok(())
     }
 
     fn rebuild(&self, stub: &Stub, official_solution: &mut Option<(CppRunner, ProgramHandle)>) -> Result<String> {
-        if stub.subtask >= self.subtasks.len() {
+        let Some(subtask) = self.subtasks.get(stub.subtask) else {
             return Err(Error::InvalidStub {
                 details: format!("there is no subtask {}; this task has {}", stub.subtask, self.subtasks.len()),
             });
-        }
-        if stub.generator >= self.subtasks[stub.subtask].get_num_generators() {
+        };
+        if stub.generator >= subtask.get_num_generators() {
             return Err(Error::InvalidStub {
-                details: format!(
-                    "there is no generator {} in subtask {}; it has {}",
-                    stub.generator,
-                    stub.subtask,
-                    self.subtasks[stub.subtask].get_num_generators()
-                ),
+                details: format!("there is no generator {} in subtask {}; it has {}", stub.generator, stub.subtask, subtask.get_num_generators()),
             });
         }
 
@@ -105,19 +95,7 @@ impl<T: ToOutput> Task<T> {
             let handle = cpp_runner.add_program(&self.solution_source)?;
             official_solution.insert((cpp_runner, handle))
         };
-
         let results = cpp_runner.check_programs(input, &[*handle], self.time_limit)?;
-
-        match &results[0] {
-            RunResult::Ok(_, output) => Ok(self.normalise_output(output)),
-            RunResult::TimedOut => Err(Error::SolutionTimedOut {
-                test_path: "on-demand generation".to_owned(),
-                gen_id: stub.generator + 1,
-            }),
-            RunResult::Crashed => Err(Error::SolutionCrash {
-                test_path: "on-demand generation".to_owned(),
-                gen_id: stub.generator + 1,
-            }),
-        }
+        Ok(self.normalise_output(results[0].official_output("on-demand generation", stub.generator + 1)?))
     }
 }

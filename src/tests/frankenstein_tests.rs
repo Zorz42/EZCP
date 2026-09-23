@@ -3,65 +3,40 @@
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod frankenstein_tests {
-    use crate::Mode;
-    use crate::tests::test_shared::initialize_logger;
-    use crate::{Error, Subtask, Task};
-    use tempfile::TempDir;
+    use crate::tests::generic_tests::generic_tests::test_task;
+    use crate::{Error, Mode, Subtask};
 
-    const MAIN: &str = "
-        #include <iostream>
-        using namespace std;
-        int main() {
-            int n; cin >> n;
-            cout << n << endl;
-            return 0;
-        }
-        ";
+    const ECHO: &str = "#include <iostream>\nint main() { int n; std::cin >> n; std::cout << n << std::endl; }";
 
     /// `wrong_when` is a C++ condition on `n`.
     fn partial(wrong_when: &str) -> String {
-        format!(
-            "
-        #include <iostream>
-        using namespace std;
-        int main() {{
-             int n; cin >> n;
-             if ({wrong_when}) cout << n + 1 << endl;
-             else cout << n << endl;
-             return 0;
-        }}
-        "
-        )
+        format!("#include <iostream>\nint main() {{ int n; std::cin >> n; std::cout << (({wrong_when}) ? n + 1 : n) << std::endl; }}")
     }
 
-    fn test_inputs(task_path: &std::path::Path) -> Vec<i32> {
-        std::fs::read_dir(task_path.join("tests"))
+    /// Generates tests from `0..50` that break two partial solutions, wrong where
+    /// `wrong_when` holds, `min_failures` times each, and returns the test inputs.
+    fn generated_inputs(wrong_when: [&str; 2], min_failures: usize) -> Vec<i32> {
+        let (dir, task) = test_task();
+        task.with_solution_source(ECHO)
+            .with_subtask(Subtask::new(0, "").with_test(0, |rng| rng.random_range(0..50).to_string()))
+            .with_partial_solution("first", &partial(wrong_when[0]), &[])
+            .with_partial_solution("second", &partial(wrong_when[1]), &[])
+            .with_min_failures(min_failures)
+            .run_mode(Mode::Files)
+            .unwrap();
+
+        std::fs::read_dir(dir.path().join("tests"))
             .unwrap()
-            .filter_map(|entry| {
-                let path = entry.unwrap().path();
-                path.extension().is_some_and(|ext| ext == "in").then(|| std::fs::read_to_string(path).unwrap().trim().parse().unwrap())
-            })
+            .map(|entry| entry.unwrap().path())
+            .filter(|path| path.extension().is_some_and(|extension| extension == "in"))
+            .map(|path| std::fs::read_to_string(path).unwrap().trim().parse().unwrap())
             .collect()
     }
 
     /// A test in 11..20 breaks both at once; every kept test must break at least one.
     #[test]
     fn overlapping_weak_spots_are_both_covered() {
-        initialize_logger();
-        let tempdir = TempDir::new().unwrap();
-        let task_name = "frankenstein_overlap";
-        let task_path = tempdir.path().join(task_name);
-
-        let task = Task::new(task_name, &task_path)
-            .with_solution_source(MAIN)
-            .with_subtask(Subtask::new(0, "").with_test(0, |rng| format!("{}", rng.random_range(0..50))))
-            .with_partial_solution("bad above ten", &partial("n > 10"), &[])
-            .with_partial_solution("bad below twenty", &partial("n < 20"), &[])
-            .with_min_failures(5);
-
-        task.run_mode(Mode::Files).unwrap();
-
-        let inputs = test_inputs(&task_path);
+        let inputs = generated_inputs(["n > 10", "n < 20"], 5);
         assert!(inputs.iter().all(|&n| n > 10 || n < 20), "a test breaks neither partial solution: {inputs:?}");
         assert!(inputs.iter().filter(|&&n| n > 10).count() >= 5, "too few tests break the first partial solution: {inputs:?}");
         assert!(inputs.iter().filter(|&&n| n < 20).count() >= 5, "too few tests break the second partial solution: {inputs:?}");
@@ -71,21 +46,7 @@ mod frankenstein_tests {
     /// per solution.
     #[test]
     fn disjoint_weak_spots_still_finish() {
-        initialize_logger();
-        let tempdir = TempDir::new().unwrap();
-        let task_name = "frankenstein_disjoint";
-        let task_path = tempdir.path().join(task_name);
-
-        let task = Task::new(task_name, &task_path)
-            .with_solution_source(MAIN)
-            .with_subtask(Subtask::new(0, "").with_test(0, |rng| format!("{}", rng.random_range(0..50))))
-            .with_partial_solution("bad above", &partial("n >= 25"), &[])
-            .with_partial_solution("bad below", &partial("n < 25"), &[])
-            .with_min_failures(3);
-
-        task.run_mode(Mode::Files).unwrap();
-
-        let inputs = test_inputs(&task_path);
+        let inputs = generated_inputs(["n >= 25", "n < 25"], 3);
         assert!(inputs.iter().filter(|&&n| n >= 25).count() >= 3, "too few tests break the first partial solution: {inputs:?}");
         assert!(inputs.iter().filter(|&&n| n < 25).count() >= 3, "too few tests break the second partial solution: {inputs:?}");
     }
@@ -93,20 +54,16 @@ mod frankenstein_tests {
     /// Reported right after the first subtask, not after all of them.
     #[test]
     fn a_partial_solution_that_never_fails_is_reported_at_its_subtask() {
-        initialize_logger();
-        let tempdir = TempDir::new().unwrap();
-        let task_name = "frankenstein_never_fails";
-        let task_path = tempdir.path().join(task_name);
-
-        let task = Task::new(task_name, &task_path)
-            .with_solution_source(MAIN)
-            .with_subtask(Subtask::new(0, "first").with_test(3, |rng| format!("{}", rng.random_range(0..50))))
-            .with_subtask(Subtask::new(0, "second").with_test(3, |rng| format!("{}", rng.random_range(0..50))))
+        let (_dir, task) = test_task();
+        let err = task
+            .with_solution_source(ECHO)
+            .with_subtask(Subtask::new(0, "first").with_test(3, |rng| rng.random_range(0..50).to_string()))
+            .with_subtask(Subtask::new(0, "second").with_test(3, |rng| rng.random_range(0..50).to_string()))
             .with_partial_solution("secretly correct", &partial("false"), &[])
             .with_min_failures(1)
-            .with_max_tries(3);
-
-        let err = task.run_mode(Mode::Files).unwrap_err();
+            .with_max_tries(3)
+            .run_mode(Mode::Files)
+            .unwrap_err();
         assert!(
             matches!(
                 err,

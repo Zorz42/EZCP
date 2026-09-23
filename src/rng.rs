@@ -99,13 +99,11 @@ impl Rng {
     ///
     /// # Panics
     /// Panics if `probability` is not between 0 and 1.
-    #[allow(clippy::manual_assert)]
     pub fn random_bool(&mut self, probability: f64) -> bool {
         // The full f64 mantissa, so every probability is represented exactly.
         const SCALE: f64 = (1_u64 << 53) as f64;
 
         assert!((0.0..=1.0).contains(&probability), "a probability has to be between 0 and 1, got {probability}");
-        #[allow(clippy::cast_sign_loss)]
         let threshold = (probability * SCALE) as u64;
         (self.next_u64() >> 11) < threshold
     }
@@ -177,12 +175,10 @@ macro_rules! impl_sample_uniform {
                     }
 
                     // Wrapping, so it is the distance even when the range spans zero.
-                    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss, clippy::cast_lossless)]
                     let span = (high as u64).wrapping_sub(low as u64);
                     // Wraps to zero, meaning "any value", for a range covering all of `u64`.
                     let offset = rng.below(span.wrapping_add(1));
-                    #[allow(clippy::cast_possible_truncation, clippy::cast_possible_wrap)]
-                    { (low as u64).wrapping_add(offset) as Self }
+                    (low as u64).wrapping_add(offset) as Self
                 }
             }
         )*

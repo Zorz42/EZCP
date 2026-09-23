@@ -1,6 +1,5 @@
 use crate::Error;
 use crate::Result;
-use crate::task::path_str;
 use log::{debug, trace};
 use std::io::{Read, Write};
 use std::path::Path;
@@ -28,11 +27,14 @@ pub enum RunResult {
 }
 
 impl RunResult {
-    pub fn to_display_string(&self) -> String {
+    /// The official solution's output, or the error for its failure on the test
+    /// described by `test_path` and `gen_id`.
+    pub fn official_output(&self, test_path: &str, gen_id: usize) -> Result<&str> {
+        let test_path = test_path.to_owned();
         match self {
-            Self::Ok(_, _) => "OK".to_owned(),
-            Self::TimedOut => "TLE".to_owned(),
-            Self::Crashed => "RTE".to_owned(),
+            Self::Ok(_, output) => Ok(output),
+            Self::TimedOut => Err(Error::SolutionTimedOut { test_path, gen_id }),
+            Self::Crashed => Err(Error::SolutionCrash { test_path, gen_id }),
         }
     }
 }
@@ -76,17 +78,15 @@ fn read_tail(mut stderr: impl Read) -> std::io::Result<Vec<u8>> {
 
 /// Runs a solution under the timer, with `time_limit` in milliseconds of CPU time.
 pub fn run_solution(executable_file: &Path, input_data: Arc<str>, time_limit: i32, timer_path: &Path) -> Result<RunResult> {
-    let mut solution_process = Command::new(timer_path);
-    solution_process.arg(executable_file);
-    solution_process.arg(format!("{time_limit}"));
-
-    trace!("Running command: {solution_process:?}");
-    let mut solution_process = solution_process
+    let mut command = Command::new(timer_path);
+    command
+        .arg(executable_file)
+        .arg(time_limit.to_string())
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .map_err(|err| Error::IOError { err, file: path_str(timer_path) })?;
+        .stderr(Stdio::piped());
+    trace!("Running command: {command:?}");
+    let mut solution_process = command.spawn().map_err(Error::io(timer_path))?;
 
     // stdin, stdout and stderr are all serviced at once: any of them filling up
     // while nobody services it would deadlock.
@@ -108,13 +108,12 @@ pub fn run_solution(executable_file: &Path, input_data: Arc<str>, time_limit: i3
         drop(stdin_writer.join());
     }
 
-    let io_error = |err| Error::IOError { err, file: path_str(executable_file) };
     let stdout = stdout_reader
         .join()
         .unwrap_or_else(|_panic| Err(std::io::Error::other("the thread reading stdout panicked")))
-        .map_err(io_error)?;
-    let stderr = stderr.map_err(io_error)?;
-    let status = status.map_err(io_error)?;
+        .map_err(Error::io(executable_file))?;
+    let stderr = stderr.map_err(Error::io(executable_file))?;
+    let status = status.map_err(Error::io(executable_file))?;
 
     let stderr_str = String::from_utf8_lossy(&stderr);
     let Some((verdict, elapsed_time_ms)) = parse_result_marker(&stderr_str) else {

@@ -53,7 +53,7 @@ mod seed_mode_tests {
     fn input_file(path: &Path, prefix: &str) -> String {
         test_files(path)
             .into_iter()
-            .find(|(name, _contents)| name.starts_with(prefix) && std::path::Path::new(name).extension().is_some_and(|extension| extension == "in"))
+            .find(|(name, _contents)| name.starts_with(prefix) && Path::new(name).extension().is_some_and(|extension| extension == "in"))
             .expect("there should be a test with that name")
             .1
     }
@@ -183,6 +183,8 @@ mod seed_mode_tests {
             matches!(err, Error::PartialSolutionPassesExtraSubtask { .. } | Error::PartialSolutionFailsSubtask { .. }),
             "expected the partial solution to be caught, got {err}"
         );
+        assert!(test_files(dir.path()).is_empty(), "a failed run should not leave tests behind");
+        assert!(!dir.path().join("tests.zip").exists(), "a failed run should not leave an archive behind");
     }
 
     #[test]
@@ -298,45 +300,25 @@ mod seed_mode_tests {
         assert_eq!(*gen_id, 1);
         assert_eq!(*attempts, crate::DEFAULT_REPRODUCIBILITY_CHECKS);
         assert!(details.contains("differ"), "{details}");
+        let message = err.to_string();
+        for part in ["not reproducible", "Rng it is given", "seed 0x"] {
+            assert!(message.contains(part), "{message}");
+        }
 
         assert!(test_files(dir.path()).is_empty(), "nothing should be written for tests that cannot be rebuilt");
     }
 
     #[test]
-    fn the_error_explains_what_went_wrong() {
-        let dir = TempDir::new().unwrap();
-        let message = unfaithful_task(dir.path()).run_mode(Mode::Seeds).unwrap_err().to_string();
-
-        assert!(message.contains("not reproducible"), "{message}");
-        assert!(message.contains("Rng it is given"), "{message}");
-        assert!(message.contains("seed 0x"), "{message}");
-    }
-
-    #[test]
-    fn files_mode_does_not_check_by_default() {
+    fn the_check_follows_its_setting() {
         let dir = TempDir::new().unwrap();
         unfaithful_task(dir.path()).run_mode(Mode::Files).unwrap();
+        assert_eq!(num_tests(dir.path()), 3, "files mode does not check by default");
 
-        assert_eq!(num_tests(dir.path()), 3);
-    }
-
-    #[test]
-    fn files_mode_checks_when_asked_to() {
-        let dir = TempDir::new().unwrap();
         let err = unfaithful_task(dir.path()).with_reproducibility_checks(4).run_mode(Mode::Files).unwrap_err();
+        assert!(matches!(err, Error::GeneratorNotReproducible { attempts: 4, .. }), "got {err}");
 
-        let Error::GeneratorNotReproducible { attempts, .. } = &err else {
-            unreachable!("expected an unreproducible generator, got {err}")
-        };
-        assert_eq!(*attempts, 4);
-    }
-
-    #[test]
-    fn the_check_can_be_turned_off() {
-        let dir = TempDir::new().unwrap();
         unfaithful_task(dir.path()).with_reproducibility_checks(0).run_mode(Mode::Seeds).unwrap();
-
-        assert_eq!(num_tests(dir.path()), 3);
+        assert_eq!(num_tests(dir.path()), 3, "the check can be turned off");
     }
 
     #[test]
@@ -370,15 +352,5 @@ mod seed_mode_tests {
 
         // Four to generate, then seven rebuilds of each.
         assert_eq!(calls.load(Ordering::SeqCst), 4 + 4 * 7);
-    }
-
-    #[test]
-    fn a_failed_run_leaves_no_tests() {
-        let dir = TempDir::new().unwrap();
-        let task = build_task(dir.path()).with_partial_solution("always 2", PARTIAL, &[0, 1]);
-        assert!(task.run_mode(Mode::Seeds).is_err());
-
-        assert!(test_files(dir.path()).is_empty(), "a failed run should not leave tests behind");
-        assert!(!dir.path().join("tests.zip").exists(), "a failed run should not leave an archive behind");
     }
 }

@@ -68,16 +68,18 @@ Options:
                     Ignored by --serve, which takes each test's seed from the stub.
   -h, --help        Print this text.";
 
+const fn invalid(details: String) -> Error {
+    Error::InvalidArguments { details }
+}
+
 fn parse_seed(value: &str) -> Result<SeedChoice> {
     if value == "random" {
         return Ok(SeedChoice::Random);
     }
-
-    let parsed = value.strip_prefix("0x").map_or_else(|| value.parse::<u64>().ok(), |hex| u64::from_str_radix(hex, 16).ok());
-
-    parsed.map(SeedChoice::Fixed).ok_or_else(|| Error::InvalidArguments {
-        details: format!("\"{value}\" is not a seed; give a number, a 0x-prefixed hexadecimal number, or `random`"),
-    })
+    let parsed = value.strip_prefix("0x").map_or_else(|| value.parse().ok(), |hex| u64::from_str_radix(hex, 16).ok());
+    parsed
+        .map(SeedChoice::Fixed)
+        .ok_or_else(|| invalid(format!("\"{value}\" is not a seed; give a number, a 0x-prefixed hexadecimal number, or `random`")))
 }
 
 impl CliOptions {
@@ -91,36 +93,23 @@ impl CliOptions {
             let argument = argument.as_ref();
             match argument {
                 "--seeds" | "--serve" | "--files" => {
-                    if let Some(first) = &mode_argument
+                    if let Some(first) = mode_argument.replace(argument.to_owned())
                         && first != argument
                     {
-                        return Err(Error::InvalidArguments {
-                            details: format!("{first} and {argument} cannot both be given"),
-                        });
+                        return Err(invalid(format!("{first} and {argument} cannot both be given")));
                     }
                     options.mode = match argument {
                         "--seeds" => Mode::Seeds,
                         "--serve" => Mode::Serve,
                         _ => Mode::Files,
                     };
-                    mode_argument = Some(argument.to_owned());
                 }
-                "--seed" => {
-                    let value = arguments.next().ok_or_else(|| Error::InvalidArguments {
-                        details: "--seed needs a value".to_owned(),
-                    })?;
-                    options.seed = Some(parse_seed(value.as_ref())?);
-                }
+                "--seed" => options.seed = Some(parse_seed(arguments.next().ok_or_else(|| invalid("--seed needs a value".to_owned()))?.as_ref())?),
                 "-h" | "--help" => options.help = true,
-                _ => {
-                    if let Some(value) = argument.strip_prefix("--seed=") {
-                        options.seed = Some(parse_seed(value)?);
-                    } else {
-                        return Err(Error::InvalidArguments {
-                            details: format!("unknown argument \"{argument}\""),
-                        });
-                    }
-                }
+                _ => match argument.strip_prefix("--seed=") {
+                    Some(value) => options.seed = Some(parse_seed(value)?),
+                    None => return Err(invalid(format!("unknown argument \"{argument}\""))),
+                },
             }
         }
 

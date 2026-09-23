@@ -1,148 +1,47 @@
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod array_tests {
-    use crate::Mode;
-    use crate::tests::generic_tests::generic_tests::Test;
-    use crate::{Subtask, array_generator};
-
-    #[test]
-    fn test_array_generator() {
-        let mut task = Test::new();
-
-        let solution_contents = r#"
-        #include <iostream>
-        using namespace std;
-        
-        int main() {
-            int n;
-            cin>>n;
-            int a[n];
-            for(int i=0;i<n;i++) {
-                cin>>a[i];
-            }
-            cout<<"1\n";
-            return 0; 
-        }
-        
-        "#;
-
-        task.task = task.task.with_solution_source(solution_contents);
-
-        let subtask1 = Subtask::new(0, "")
-            .with_test(5, array_generator(1, 100, 1, 100))
-            .with_test(5, array_generator(1, 100, 1, 1))
-            .with_test(5, array_generator(100, 100, 1, 100))
-            .with_test(5, array_generator(100, 100, 1, 1))
-            .with_test(1, array_generator(100, 100, 1, 1));
-
-        let subtask2 = Subtask::new(0, "")
-            .with_test(5, array_generator(42, 42, 1, 100))
-            .with_test(5, array_generator(42, 42, 1, 1))
-            .with_test(5, array_generator(42, 42, 100, 100));
-
-        let subtask3 = Subtask::new(0, "")
-            .with_test(5, array_generator(1, 100, 47, 47))
-            .with_test(5, array_generator(100, 100, 47, 47))
-            .with_test(5, array_generator(1, 1, 47, 47));
-
-        task.task = task.task.with_subtask(subtask1);
-        task.task = task.task.with_subtask(subtask2);
-        task.task = task.task.with_subtask(subtask3);
-
-        task.task.run_mode(Mode::Files).unwrap();
-    }
-}
-
-#[cfg(test)]
-#[allow(clippy::unwrap_used)]
-mod array_unit_tests {
     use crate::rng::Rng;
-    use std::sync::atomic::{AtomicU64, Ordering};
-
-    /// A different seed on every call.
-    fn rng() -> Rng {
-        static NEXT_SEED: AtomicU64 = AtomicU64::new(0);
-        Rng::from_seed(NEXT_SEED.fetch_add(1, Ordering::Relaxed))
-    }
-
-    use crate::{array_generator, array_to_string};
+    use crate::tests::generic_tests::generic_tests::test_task;
+    use crate::{Mode, Subtask, array_generator, array_to_string};
 
     #[test]
-    fn test_array_to_string_empty_with_count() {
-        let arr = vec![];
-        let result = array_to_string(&arr, true);
-        assert!(result.starts_with("0\n"), "expected count line, got: {result:?}");
-    }
-
-    #[test]
-    fn test_array_to_string_empty_no_count() {
-        let arr: Vec<i32> = vec![];
-        let result = array_to_string(&arr, false);
-        assert!(!result.starts_with('0'), "unexpected count prefix in: {result:?}");
-        assert_eq!(result, "\n");
+    fn test_array_generator_in_a_task() {
+        let solution = "#include <iostream>\nint main() { int n; std::cin >> n; for (int i = 0; i < n; i++) { int a; std::cin >> a; } std::cout << \"1\\n\"; }";
+        let (_dir, task) = test_task();
+        task.with_solution_source(solution)
+            .with_subtask(
+                Subtask::new(0, "")
+                    .with_test(5, array_generator(1, 100, 1, 100))
+                    .with_test(5, array_generator(1, 100, 1, 1))
+                    .with_test(5, array_generator(100, 100, 1, 100))
+                    .with_test(1, array_generator(100, 100, 1, 1)),
+            )
+            .with_subtask(Subtask::new(0, "").with_test(5, array_generator(42, 42, 1, 100)).with_test(5, array_generator(42, 42, 100, 100)))
+            .with_subtask(Subtask::new(0, "").with_test(5, array_generator(1, 100, 47, 47)).with_test(5, array_generator(1, 1, 47, 47)))
+            .run_mode(Mode::Files)
+            .unwrap();
     }
 
     #[test]
-    fn test_array_to_string_single_element_with_count() {
-        let arr = vec![7];
-        let result = array_to_string(&arr, true);
-        assert!(result.starts_with("1\n"), "count line missing, got: {result:?}");
-        assert!(result.contains('7'));
-    }
-
-    #[test]
-    fn test_array_to_string_no_count_omits_count_line() {
-        let arr = vec![1, 2, 3];
-        let result_with = array_to_string(&arr, true);
-        let result_without = array_to_string(&arr, false);
-        let lines_with: Vec<&str> = result_with.lines().collect();
-        assert_eq!(lines_with.len(), result_without.lines().count() + 1);
-        assert_eq!(lines_with[0], "3");
-    }
-
-    #[test]
-    fn test_array_to_string_exact_format() {
+    fn test_array_to_string_format() {
         assert_eq!(array_to_string(&[1, 2, 3], true), "3\n1 2 3\n");
         assert_eq!(array_to_string(&[1, 2, 3], false), "1 2 3\n");
         assert_eq!(array_to_string(&[7], true), "1\n7\n");
+        assert_eq!(array_to_string(&[], true), "0\n\n");
+        assert_eq!(array_to_string(&[], false), "\n");
     }
 
     #[test]
-    fn test_array_to_string_values_present() {
-        let arr = vec![10, 20, 30];
-        let result = array_to_string(&arr, false);
-        assert!(result.contains("10"));
-        assert!(result.contains("20"));
-        assert!(result.contains("30"));
-    }
-
-    #[test]
-    fn test_array_generator_min_equals_max_length() {
-        let generator = array_generator(5, 5, 1, 100);
-        for _ in 0..20 {
-            let output = generator(&mut rng());
+    fn test_array_generator_length_and_values() {
+        for seed in 0..50 {
+            let output = array_generator(5, 8, 10, 20)(&mut Rng::from_seed(seed));
             let mut lines = output.lines();
-            let count: usize = lines.next().unwrap().trim().parse().unwrap();
-            assert_eq!(count, 5, "expected length 5");
-            assert_eq!(lines.next().unwrap_or("").split_whitespace().filter_map(|s| s.parse::<i32>().ok()).count(), 5, "expected 5 elements");
-        }
-    }
-
-    #[test]
-    fn test_array_generator_values_in_range() {
-        let min_x = 10;
-        let max_x = 20;
-        let generator = array_generator(1, 50, min_x, max_x);
-        for _ in 0..50 {
-            let output = generator(&mut rng());
-            let mut lines = output.lines();
-            let _count_line = lines.next();
-            if let Some(elem_line) = lines.next() {
-                for tok in elem_line.split_whitespace() {
-                    let v: i32 = tok.parse().unwrap();
-                    assert!(v >= min_x && v <= max_x, "value {v} out of range [{min_x}, {max_x}]");
-                }
-            }
+            let count: usize = lines.next().unwrap().parse().unwrap();
+            let values: Vec<i32> = lines.next().unwrap().split_whitespace().map(|value| value.parse().unwrap()).collect();
+            assert!((5..=8).contains(&count), "length {count} out of range");
+            assert_eq!(values.len(), count);
+            assert!(values.iter().all(|value| (10..=20).contains(value)), "values out of range: {values:?}");
         }
     }
 }

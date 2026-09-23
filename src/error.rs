@@ -170,5 +170,14 @@ pub enum Error {
     },
 }
 
+impl Error {
+    pub(crate) fn io(file: &std::path::Path) -> impl FnOnce(std::io::Error) -> Self + '_ {
+        |err| Self::IOError {
+            err,
+            file: file.display().to_string(),
+        }
+    }
+}
+
 /// A `Result` whose error defaults to [`enum@Error`].
 pub type Result<T, E = Error> = std::result::Result<T, E>;

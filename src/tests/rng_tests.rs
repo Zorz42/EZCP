@@ -50,11 +50,6 @@ mod rng_tests {
             let value: i32 = rng.random_range(-5..=5);
             assert!((-5..=5).contains(&value), "{value} is outside -5..=5");
         }
-    }
-
-    #[test]
-    fn a_single_value_range_returns_that_value() {
-        let mut rng = Rng::from_seed(1);
         assert_eq!(rng.random_range(4..=4), 4);
         assert_eq!(rng.random_range(4..5), 4);
     }
@@ -101,46 +96,26 @@ mod rng_tests {
         assert!(!rng.random_bool(0.0));
         assert!(rng.random_bool(1.0));
 
-        let mut trues = 0;
-        for _ in 0..10_000 {
-            if rng.random_bool(0.25) {
-                trues += 1;
-            }
-        }
+        let trues = (0..10_000).filter(|_| rng.random_bool(0.25)).count();
         assert!((2_200..2_800).contains(&trues), "p = 0.25 came up {trues} times in 10000 draws");
     }
 
     #[test]
-    fn shuffle_keeps_every_element() {
-        let mut rng = Rng::from_seed(5);
-        let mut values = (0..100).collect::<Vec<_>>();
-        rng.shuffle(&mut values);
-
-        let mut sorted = values.clone();
-        sorted.sort_unstable();
-        assert_eq!(sorted, (0..100).collect::<Vec<_>>());
-        assert_ne!(values, sorted, "a shuffle of 100 elements left them in order");
-    }
-
-    #[test]
-    fn shuffle_is_reproducible() {
-        let shuffled = |seed| {
-            let mut rng = Rng::from_seed(seed);
-            let mut values = (0..50).collect::<Vec<_>>();
-            rng.shuffle(&mut values);
+    fn shuffle_is_a_reproducible_permutation() {
+        let shuffled = |seed, len| {
+            let mut values = (0..len).collect::<Vec<_>>();
+            Rng::from_seed(seed).shuffle(&mut values);
             values
         };
-        assert_eq!(shuffled(9), shuffled(9));
-        assert_ne!(shuffled(9), shuffled(10));
-    }
+        let mut sorted = shuffled(5, 100);
+        assert_ne!(sorted, (0..100).collect::<Vec<_>>(), "a shuffle of 100 elements left them in order");
+        sorted.sort_unstable();
+        assert_eq!(sorted, (0..100).collect::<Vec<_>>());
 
-    #[test]
-    fn shuffle_handles_short_slices() {
-        let mut rng = Rng::from_seed(6);
-        rng.shuffle(&mut [0_i32; 0]);
-        let mut one = [1];
-        rng.shuffle(&mut one);
-        assert_eq!(one, [1]);
+        assert_eq!(shuffled(9, 50), shuffled(9, 50));
+        assert_ne!(shuffled(9, 50), shuffled(10, 50));
+        assert!(shuffled(6, 0).is_empty());
+        assert_eq!(shuffled(6, 1), vec![0]);
     }
 
     #[test]

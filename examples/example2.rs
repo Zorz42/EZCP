@@ -43,8 +43,7 @@ impl Coins {
 
     fn random(rng: &mut Rng, n: RangeInclusive<i32>, x: RangeInclusive<i32>) -> Self {
         let count = rng.random_range(n);
-        let (min, max) = (*x.start(), *x.end());
-        Self::new((0..count).map(|_ignored| rng.random_range(min..=max)).collect())
+        Self::new((0..count).map(|_ignored| rng.random_range(x.clone())).collect())
     }
 }
 

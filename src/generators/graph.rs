@@ -28,6 +28,14 @@ const fn max_bipartite_edges(n: i32) -> i64 {
     (n / 2) * ((n + 1) / 2)
 }
 
+fn assert_edges_fit(n: i32, m: i32) {
+    assert!(
+        i64::from(m) <= max_simple_edges(n),
+        "cannot fit {m} edges in a graph with {n} nodes (at most {} are possible)",
+        max_simple_edges(n)
+    );
+}
+
 impl Graph {
     /// Creates a graph with `n` nodes and no edges.
     ///
@@ -68,11 +76,7 @@ impl Graph {
     pub fn new_random(rng: &mut Rng, n: i32, m: i32) -> Self {
         let mut result = Self::new_empty(rng, n);
         assert!(m >= 0, "a graph cannot have {m} edges");
-        assert!(
-            i64::from(m) <= max_simple_edges(n),
-            "cannot fit {m} edges in a graph with {n} nodes (at most {} are possible)",
-            max_simple_edges(n)
-        );
+        assert_edges_fit(n, m);
         result.add_random_edges(rng, m);
         result
     }
@@ -93,14 +97,7 @@ impl Graph {
             return;
         }
 
-        let mut candidates = Vec::new();
-        for u in 0..n as usize {
-            for v in 0..u {
-                if !self.has_edge(u, v) {
-                    candidates.push((u, v));
-                }
-            }
-        }
+        let candidates = (0..n as usize).flat_map(|u| (0..u).map(move |v| (u, v))).filter(|&(u, v)| !self.has_edge(u, v)).collect();
         self.add_edges_from(rng, candidates, m);
     }
 
@@ -116,23 +113,28 @@ impl Graph {
         }
     }
 
-    /// Creates a random path, which counts as a tree.
-    ///
-    /// # Panics
-    /// Panics if `n` is not positive.
-    #[must_use]
-    pub fn new_random_path(rng: &mut Rng, n: i32) -> Self {
+    /// A tree on the nodes in shuffled order, where each node is joined to the
+    /// one `parent` picks from `(rng, shuffled nodes, its position)`.
+    fn new_shuffled_tree(rng: &mut Rng, n: i32, mut parent: impl FnMut(&mut Rng, &[i32], i32) -> i32) -> Self {
         assert!(n >= 1, "a tree needs at least one node, got {n}");
         let mut result = Self::new_empty(rng, n);
         result.is_tree = true;
         let mut nodes = (0..n).collect::<Vec<_>>();
         rng.shuffle(&mut nodes);
         for i in 1..n {
-            let u = nodes[(i - 1) as usize];
-            let v = nodes[i as usize];
-            result.add_edge(u as usize, v as usize);
+            let v = parent(rng, &nodes, i);
+            result.add_edge(nodes[i as usize] as usize, v as usize);
         }
         result
+    }
+
+    /// Creates a random path, which counts as a tree.
+    ///
+    /// # Panics
+    /// Panics if `n` is not positive.
+    #[must_use]
+    pub fn new_random_path(rng: &mut Rng, n: i32) -> Self {
+        Self::new_shuffled_tree(rng, n, |_rng, nodes, i| nodes[i as usize - 1])
     }
 
     /// Creates a random tree with `n` nodes.
@@ -141,17 +143,7 @@ impl Graph {
     /// Panics if `n` is not positive.
     #[must_use]
     pub fn new_random_tree(rng: &mut Rng, n: i32) -> Self {
-        assert!(n >= 1, "a tree needs at least one node, got {n}");
-        let mut result = Self::new_empty(rng, n);
-        result.is_tree = true;
-        let mut nodes = (0..n).collect::<Vec<_>>();
-        rng.shuffle(&mut nodes);
-        for i in 1..n {
-            let u = nodes[i as usize];
-            let v = nodes[rng.random_range(0..i) as usize];
-            result.add_edge(u as usize, v as usize);
-        }
-        result
+        Self::new_shuffled_tree(rng, n, |rng, nodes, i| nodes[rng.random_range(0..i) as usize])
     }
 
     /// Creates a random tree with depth in O(n).
@@ -160,24 +152,15 @@ impl Graph {
     /// Panics if `n` is not positive.
     #[must_use]
     pub fn new_random_deep_tree(rng: &mut Rng, n: i32) -> Self {
-        assert!(n >= 1, "a tree needs at least one node, got {n}");
-        let mut result = Self::new_empty(rng, n);
-        result.is_tree = true;
-        let mut nodes = (0..n).collect::<Vec<_>>();
-        rng.shuffle(&mut nodes);
-        let mut last_on_chain = nodes[0];
-        for i in 1..n {
-            let u = nodes[i as usize];
-            let v = if rng.random_bool(0.5) {
-                let res = last_on_chain;
-                last_on_chain = u;
-                res
+        // Half the nodes extend one chain.
+        let mut chain_end = None;
+        Self::new_shuffled_tree(rng, n, |rng, nodes, i| {
+            if rng.random_bool(0.5) {
+                chain_end.replace(nodes[i as usize]).unwrap_or(nodes[0])
             } else {
                 nodes[rng.random_range(0..i) as usize]
-            };
-            result.add_edge(u as usize, v as usize);
-        }
-        result
+            }
+        })
     }
 
     /// Creates a random connected graph with `n` nodes and `max(m, n - 1)` edges.
@@ -187,11 +170,7 @@ impl Graph {
     /// on `n` nodes.
     #[must_use]
     pub fn new_random_connected(rng: &mut Rng, n: i32, m: i32) -> Self {
-        assert!(
-            i64::from(m) <= max_simple_edges(n),
-            "cannot fit {m} edges in a graph with {n} nodes (at most {} are possible)",
-            max_simple_edges(n)
-        );
+        assert_edges_fit(n, m);
         let mut result = Self::new_random_tree(rng, n);
         result.is_tree = false;
         result.add_random_edges(rng, m);
@@ -234,12 +213,8 @@ impl Graph {
             return result;
         }
 
-        let mut candidates = Vec::new();
-        for &u in &nodes[..size1 as usize] {
-            for &v in &nodes[size1 as usize..] {
-                candidates.push((u as usize, v as usize));
-            }
-        }
+        let (left, right) = nodes.split_at(size1 as usize);
+        let candidates = left.iter().flat_map(|&u| right.iter().map(move |&v| (u as usize, v as usize))).collect();
         result.add_edges_from(rng, candidates, m);
         result
     }
@@ -281,24 +256,24 @@ impl Graph {
     /// The connected components, as lists of nodes in no particular order.
     #[must_use]
     pub fn get_connected_components(&self) -> Vec<Vec<usize>> {
+        let mut visited = vec![false; self.nodes.len()];
         let mut result = Vec::new();
-        let mut visited = vec![false; self.get_num_nodes() as usize];
-        for i in 0..self.get_num_nodes() {
-            if !visited[i as usize] {
-                let mut component = Vec::new();
-                let mut queue = vec![i as usize];
-                visited[i as usize] = true;
-                while let Some(u) = queue.pop() {
-                    component.push(u);
-                    for &v in &self.nodes[u] {
-                        if !visited[v] {
-                            visited[v] = true;
-                            queue.push(v);
-                        }
+        for start in 0..self.nodes.len() {
+            if visited[start] {
+                continue;
+            }
+            visited[start] = true;
+            let (mut component, mut stack) = (Vec::new(), vec![start]);
+            while let Some(u) = stack.pop() {
+                component.push(u);
+                for &v in &self.nodes[u] {
+                    if !visited[v] {
+                        visited[v] = true;
+                        stack.push(v);
                     }
                 }
-                result.push(component);
             }
+            result.push(component);
         }
         result
     }
@@ -324,23 +299,21 @@ impl Graph {
     /// Whether the graph is bipartite.
     #[must_use]
     pub fn is_bipartite(&self) -> bool {
-        let mut visited = vec![false; self.get_num_nodes() as usize];
-        let mut colors = vec![0; self.get_num_nodes() as usize];
-        let mut queue = Vec::new();
-        for i in 0..self.get_num_nodes() {
-            if !visited[i as usize] {
-                queue.push(i as usize);
-                visited[i as usize] = true;
-                colors[i as usize] = 1;
-                while let Some(u) = queue.pop() {
-                    for &v in &self.nodes[u] {
-                        if !visited[v] {
-                            visited[v] = true;
-                            colors[v] = -colors[u];
-                            queue.push(v);
-                        } else if colors[v] == colors[u] {
-                            return false;
-                        }
+        // 0 while unvisited, then 1 or -1 for the two sides.
+        let mut colors = vec![0_i8; self.nodes.len()];
+        for start in 0..self.nodes.len() {
+            if colors[start] != 0 {
+                continue;
+            }
+            colors[start] = 1;
+            let mut stack = vec![start];
+            while let Some(u) = stack.pop() {
+                for &v in &self.nodes[u] {
+                    if colors[v] == 0 {
+                        colors[v] = -colors[u];
+                        stack.push(v);
+                    } else if colors[v] == colors[u] {
+                        return false;
                     }
                 }
             }
@@ -365,24 +338,18 @@ impl ToOutput for Graph {
     /// # Panics
     /// Panics if `is_tree` is set but the graph is not a tree.
     fn to_output(self) -> String {
-        if self.is_tree {
-            assert!(self.is_tree());
-        }
-        let mut result = String::new();
-        if self.is_tree {
-            writeln!(result, "{}", self.get_num_nodes()).ok();
+        assert!(!self.is_tree || self.is_tree(), "the graph is marked as a tree but is not one");
+        let mut result = if self.is_tree {
+            format!("{}\n", self.get_num_nodes())
         } else {
-            writeln!(result, "{} {}", self.get_num_nodes(), self.get_num_edges()).ok();
-        }
-        let mut edges = self.edges_iter().collect::<Vec<_>>();
+            format!("{} {}\n", self.get_num_nodes(), self.get_num_edges())
+        };
+        let mut edges = self.edges;
         let mut rng = Rng::from_seed(self.output_seed);
         rng.shuffle(&mut edges);
         for (u, v) in edges {
-            if rng.random_bool(0.5) {
-                writeln!(result, "{} {}", u + 1, v + 1).ok();
-            } else {
-                writeln!(result, "{} {}", v + 1, u + 1).ok();
-            }
+            let (first, second) = if rng.random_bool(0.5) { (u, v) } else { (v, u) };
+            writeln!(result, "{} {}", first + 1, second + 1).ok();
         }
         result
     }

@@ -3,234 +3,105 @@ mod test_to_output_tests {
     use crate::ToOutput;
 
     #[test]
-    fn string_passthrough() {
+    fn scalars() {
         assert_eq!("hello".to_owned().to_output(), "hello");
-    }
-
-    #[test]
-    fn str_to_output() {
         assert_eq!("hello".to_output(), "hello");
-    }
-
-    #[test]
-    fn empty_string() {
         assert_eq!(String::new().to_output(), "");
-    }
-
-    #[test]
-    fn char_single() {
         assert_eq!('a'.to_output(), "a");
-    }
-
-    #[test]
-    fn char_unicode() {
         assert_eq!('\u{e9}'.to_output(), "\u{e9}");
-    }
-
-    #[test]
-    fn bool_true() {
         assert_eq!(true.to_output(), "1");
-    }
-
-    #[test]
-    fn bool_false() {
         assert_eq!(false.to_output(), "0");
-    }
-
-    #[test]
-    fn i8_positive() {
         assert_eq!(42_i8.to_output(), "42");
-    }
-
-    #[test]
-    fn i8_negative() {
         assert_eq!((-1_i8).to_output(), "-1");
-    }
-
-    #[test]
-    fn i32_zero() {
         assert_eq!(0_i32.to_output(), "0");
-    }
-
-    #[test]
-    fn i64_large() {
         assert_eq!(1_000_000_000_000_i64.to_output(), "1000000000000");
-    }
-
-    #[test]
-    fn i128_boundaries() {
         assert_eq!(i128::MAX.to_output(), i128::MAX.to_string());
         assert_eq!(i128::MIN.to_output(), i128::MIN.to_string());
-    }
-
-    #[test]
-    fn u32_value() {
         assert_eq!(42_u32.to_output(), "42");
-    }
-
-    #[test]
-    fn u64_max() {
         assert_eq!(u64::MAX.to_output(), u64::MAX.to_string());
-    }
-
-    #[test]
-    fn usize_value() {
         assert_eq!(100_usize.to_output(), "100");
-    }
-
-    #[test]
-    fn f32_value() {
         assert_eq!(1.5_f32.to_output(), "1.5");
-    }
-
-    #[test]
-    fn f64_value() {
         assert_eq!(2.75_f64.to_output(), "2.75");
-    }
-
-    #[test]
-    fn f64_negative() {
         assert_eq!((-0.5_f64).to_output(), "-0.5");
     }
 
     #[test]
-    fn vec_empty() {
-        let v: Vec<i32> = vec![];
-        assert_eq!(v.to_output(), "");
-    }
-
-    #[test]
-    fn vec_single_element() {
+    fn vecs() {
+        assert_eq!(Vec::<i32>::new().to_output(), "");
         assert_eq!(vec![42].to_output(), "42\n");
-    }
-
-    #[test]
-    fn vec_integers() {
         assert_eq!(vec![1, 2, 3].to_output(), "1 2 3\n");
-    }
-
-    #[test]
-    fn vec_strings_space_separated() {
         assert_eq!(vec!["hello".to_owned(), "world".to_owned()].to_output(), "hello world\n");
-    }
-
-    #[test]
-    fn vec_str_refs() {
         assert_eq!(vec!["a", "b", "c"].to_output(), "a b c\n");
-    }
-
-    #[test]
-    fn vec_all_elements_end_with_newline() {
-        let v = vec!["line1\n".to_owned(), "line2\n".to_owned()];
-        assert_eq!(v.to_output(), "line1\nline2\n");
-    }
-
-    #[test]
-    fn vec_mixed_newlines() {
-        let v = vec!["a\n", "b", "c\n"];
-        assert_eq!(v.to_output(), "a\nb c\n");
-    }
-
-    #[test]
-    fn vec_nested_vecs() {
-        let v = vec![vec![1, 2], vec![3, 4]];
-        assert_eq!(v.to_output(), "1 2\n3 4\n");
-    }
-
-    #[test]
-    fn vec_bools() {
+        assert_eq!(vec!["line1\n", "line2\n"].to_output(), "line1\nline2\n");
+        assert_eq!(vec!["a\n", "b", "c\n"].to_output(), "a\nb c\n");
+        assert_eq!(vec![vec![1, 2], vec![3, 4]].to_output(), "1 2\n3 4\n");
         assert_eq!(vec![true, false, true].to_output(), "1 0 1\n");
     }
 
+    #[test]
+    fn tuples() {
+        assert_eq!((42,).to_output(), "42\n");
+        assert_eq!((1, 2).to_output(), "1 2\n");
+        assert_eq!((1_i32, "hello", true).to_output(), "1 hello 1\n");
+        assert_eq!(("a\n", "b\n", "c").to_output(), "a\nb\nc\n");
+        assert_eq!((1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12).to_output(), "1 2 3 4 5 6 7 8 9 10 11 12\n");
+        // A field that already ends a line does not get a second newline.
+        assert_eq!((1, "x\n").to_output(), "1 x\n");
+        assert_eq!(("a\n",).to_output(), "a\n");
+        assert_eq!((vec![1, 2], vec![3, 4]).to_output(), "1 2\n3 4\n");
+    }
+
     #[derive(ToOutput)]
-    struct MyStruct {
+    struct Named {
         a: i32,
         b: String,
         c: Vec<i32>,
     }
 
-    #[test]
-    fn derive_struct_named() {
-        let s = MyStruct {
-            a: 42,
-            b: "hello".to_owned(),
-            c: vec![1, 2, 3],
-        };
-        assert_eq!(s.to_output(), "42\nhello\n1 2 3\n");
-    }
+    #[derive(ToOutput)]
+    struct Tuple(i32, String, Vec<i32>);
 
     #[derive(ToOutput)]
-    struct MyTupleStruct(i32, String, Vec<i32>);
-
-    #[test]
-    fn derive_struct_tuple() {
-        let s = MyTupleStruct(42, "hello".to_owned(), vec![1, 2, 3]);
-        assert_eq!(s.to_output(), "42\nhello\n1 2 3\n");
-    }
+    struct Unit;
 
     #[derive(ToOutput)]
-    struct UnitStruct;
-
-    #[test]
-    fn derive_struct_unit() {
-        let s = UnitStruct;
-        assert_eq!(s.to_output(), "");
+    struct WithEmpty {
+        first: Vec<i32>,
+        middle: i32,
+        last: Vec<i32>,
     }
 
     #[test]
-    fn derive_struct_skips_empty_fields() {
-        #[derive(ToOutput)]
-        struct WithEmpty {
-            first: Vec<i32>,
-            middle: i32,
-            last: Vec<i32>,
-        }
-
-        let s = WithEmpty {
-            first: vec![],
-            middle: 7,
-            last: vec![],
-        };
-        assert_eq!(s.to_output(), "7\n");
-
-        let s = WithEmpty {
-            first: vec![1],
-            middle: 7,
-            last: vec![2],
-        };
-        assert_eq!(s.to_output(), "1\n7\n2\n");
-    }
-
-    #[test]
-    fn tuple_single() {
-        assert_eq!((42,).to_output(), "42\n");
-    }
-
-    #[test]
-    fn tuple_pair() {
-        assert_eq!((1, 2).to_output(), "1 2\n");
-    }
-
-    #[test]
-    fn tuple_mixed() {
-        assert_eq!((1_i32, "hello", true).to_output(), "1 hello 1\n");
-    }
-
-    #[test]
-    fn tuple_with_newlines() {
-        assert_eq!(("a\n", "b\n", "c").to_output(), "a\nb\nc\n");
-    }
-
-    #[test]
-    fn tuple_large() {
-        assert_eq!((1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12).to_output(), "1 2 3 4 5 6 7 8 9 10 11 12\n");
-    }
-
-    #[test]
-    fn tuple_ending_in_newline_is_not_double_terminated() {
-        assert_eq!((1, "x\n").to_output(), "1 x\n");
-        assert_eq!(("a\n",).to_output(), "a\n");
-        assert_eq!((vec![1, 2], vec![3, 4]).to_output(), "1 2\n3 4\n");
+    fn derived() {
+        assert_eq!(
+            Named {
+                a: 42,
+                b: "hello".to_owned(),
+                c: vec![1, 2, 3]
+            }
+            .to_output(),
+            "42\nhello\n1 2 3\n"
+        );
+        assert_eq!(Tuple(42, "hello".to_owned(), vec![1, 2, 3]).to_output(), "42\nhello\n1 2 3\n");
+        assert_eq!(Unit.to_output(), "");
+        assert_eq!(
+            WithEmpty {
+                first: vec![],
+                middle: 7,
+                last: vec![]
+            }
+            .to_output(),
+            "7\n"
+        );
+        assert_eq!(
+            WithEmpty {
+                first: vec![1],
+                middle: 7,
+                last: vec![2]
+            }
+            .to_output(),
+            "1\n7\n2\n"
+        );
     }
 }
 
@@ -245,7 +116,6 @@ mod derive_without_the_trait_in_scope {
 
     #[test]
     fn derive_works_without_importing_the_trait() {
-        let input = Input { n: 2, values: vec![1, 2] };
-        assert_eq!(crate::ToOutput::to_output(input), "2\n1 2\n");
+        assert_eq!(crate::ToOutput::to_output(Input { n: 2, values: vec![1, 2] }), "2\n1 2\n");
     }
 }
