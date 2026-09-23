@@ -9,7 +9,6 @@ mod array_tests {
     fn test_array_generator() {
         let mut task = Test::new();
 
-        // create solution file
         let solution_contents = r#"
         #include <iostream>
         using namespace std;
@@ -29,7 +28,6 @@ mod array_tests {
 
         task.task = task.task.with_solution_source(solution_contents);
 
-        // create subtasks
         let subtask1 = Subtask::new(0, "")
             .with_test(5, array_generator(1, 100, 1, 100))
             .with_test(5, array_generator(1, 100, 1, 1))
@@ -37,13 +35,11 @@ mod array_tests {
             .with_test(5, array_generator(100, 100, 1, 1))
             .with_test(1, array_generator(100, 100, 1, 1));
 
-        // n = 42
         let subtask2 = Subtask::new(0, "")
             .with_test(5, array_generator(42, 42, 1, 100))
             .with_test(5, array_generator(42, 42, 1, 1))
             .with_test(5, array_generator(42, 42, 100, 100));
 
-        // all values are 47
         let subtask3 = Subtask::new(0, "")
             .with_test(5, array_generator(1, 100, 47, 47))
             .with_test(5, array_generator(100, 100, 47, 47))
@@ -63,8 +59,7 @@ mod array_unit_tests {
     use crate::rng::Rng;
     use std::sync::atomic::{AtomicU64, Ordering};
 
-    /// A generator for the array tests, using a fresh seed on every call so a
-    /// loop still exercises many different arrays.
+    /// A different seed on every call.
     fn rng() -> Rng {
         static NEXT_SEED: AtomicU64 = AtomicU64::new(0);
         Rng::from_seed(NEXT_SEED.fetch_add(1, Ordering::Relaxed))
@@ -76,7 +71,6 @@ mod array_unit_tests {
     fn test_array_to_string_empty_with_count() {
         let arr = vec![];
         let result = array_to_string(&arr, true);
-        // Should contain the count (0) then a newline for the (empty) elements line
         assert!(result.starts_with("0\n"), "expected count line, got: {result:?}");
     }
 
@@ -84,7 +78,6 @@ mod array_unit_tests {
     fn test_array_to_string_empty_no_count() {
         let arr: Vec<i32> = vec![];
         let result = array_to_string(&arr, false);
-        // No count line; just the trailing newline for the element line
         assert!(!result.starts_with('0'), "unexpected count prefix in: {result:?}");
         assert_eq!(result, "\n");
     }
@@ -102,14 +95,11 @@ mod array_unit_tests {
         let arr = vec![1, 2, 3];
         let result_with = array_to_string(&arr, true);
         let result_without = array_to_string(&arr, false);
-        // With count has one extra line at the front
         let lines_with: Vec<&str> = result_with.lines().collect();
         assert_eq!(lines_with.len(), result_without.lines().count() + 1);
         assert_eq!(lines_with[0], "3");
     }
 
-    /// The other tests only check that the pieces are present, which happily
-    /// accepted a stray space before the newline.
     #[test]
     fn test_array_to_string_exact_format() {
         assert_eq!(array_to_string(&[1, 2, 3], true), "3\n1 2 3\n");

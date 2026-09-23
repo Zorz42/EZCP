@@ -21,7 +21,6 @@ pub mod generic_tests {
 
         pub fn test(self) {
             self.task.run_mode(Mode::Files).unwrap();
-            // Clean up the temporary directory
             drop(self.task_path);
         }
     }
@@ -30,7 +29,6 @@ pub mod generic_tests {
     fn create_empty() {
         let mut task = Test::<String>::new();
 
-        // create solution file
         let solution_contents = "int main() { return 0; }";
         task.task = task.task.with_solution_source(solution_contents);
 
@@ -41,7 +39,6 @@ pub mod generic_tests {
     fn create_with_subtasks() {
         let mut task = Test::<String>::new();
 
-        // create solution file
         let solution_contents = r#"
         #include <iostream>
         using namespace std;
@@ -59,7 +56,6 @@ pub mod generic_tests {
         let subtask2 = Subtask::new(0, "");
         let subtask3 = Subtask::new(0, "");
 
-        // create subtasks
         task.task = task.task.with_subtask(subtask1).with_subtask(subtask2).with_subtask(subtask3);
 
         task.test();
@@ -69,7 +65,6 @@ pub mod generic_tests {
     fn create_with_tests() {
         let mut task = Test::new();
 
-        // create solution file
         let solution_contents = r#"
         #include <iostream>
         using namespace std;
@@ -93,7 +88,6 @@ pub mod generic_tests {
             .with_test(1, |_rng| "3\n".to_owned());
         let subtask3 = Subtask::new(0, "").with_test(1, |_rng| "1\n".to_owned()).with_test(1, |_rng| "2\n".to_owned());
 
-        // create subtasks
         task.task = task.task.with_subtask(subtask1).with_subtask(subtask2).with_subtask(subtask3);
 
         task.test();
@@ -111,7 +105,6 @@ pub mod generic_tests {
         let mut task = Test::new();
         task.task = task.task.with_time_limit(100);
 
-        // create solution file
         let solution_contents = r#"
         #include<iostream>
         using namespace std;
@@ -132,7 +125,6 @@ pub mod generic_tests {
 
         let subtask1 = Subtask::new(0, "").with_test(1, |_rng| "1\n".to_owned());
 
-        // create subtasks
         task.task = task.task.with_subtask(subtask1);
 
         assert!(matches!(task.task.run_mode(Mode::Files), Err(Error::SolutionTimedOut { .. })));
@@ -142,7 +134,6 @@ pub mod generic_tests {
     fn test_compile_error() {
         let mut task = Test::new();
 
-        // create solution file
         let solution_contents = "
         int main() {
             this is a compile error
@@ -154,7 +145,6 @@ pub mod generic_tests {
 
         let subtask1 = Subtask::new(0, "").with_test(1, |_rng| "1\n".to_owned());
 
-        // create subtasks
         task.task = task.task.with_subtask(subtask1);
 
         assert!(matches!(task.task.run_mode(Mode::Files), Err(Error::CompilerError { .. })));
@@ -169,7 +159,6 @@ pub mod generic_tests {
             .with_get_input_file_name(|test_id: i32, subtask_id: i32, test_id_in_subtask: i32| format!("in_{subtask_id}_{test_id_in_subtask}_{test_id}.txt"))
             .with_get_output_file_name(|test_id: i32, subtask_id: i32, test_id_in_subtask: i32| format!("out_{subtask_id}_{test_id_in_subtask}_{test_id}.txt"));
 
-        // create solution file
         let solution_contents = r#"
         #include <iostream>
         using namespace std;
@@ -192,7 +181,6 @@ pub mod generic_tests {
             .with_test(1, |_rng| "3\n".to_owned());
         let subtask3 = Subtask::new(0, "").with_test(1, |_rng| "1\n".to_owned()).with_test(1, |_rng| "2\n".to_owned());
 
-        // create subtasks
         task.task = task.task.with_subtask(subtask1).with_subtask(subtask2).with_subtask(subtask3);
 
         task.test();
@@ -207,7 +195,6 @@ pub mod generic_tests {
             .with_get_input_file_name(|_test_id: i32, subtask_id: i32, test_id_in_subtask: i32| format!("in_{subtask_id}_{test_id_in_subtask}.txt"))
             .with_get_output_file_name(|_test_id: i32, subtask_id: i32, test_id_in_subtask: i32| format!("out_{subtask_id}_{test_id_in_subtask}.txt"));
 
-        // create solution file
         let solution_contents = r#"
         #include <iostream>
         using namespace std;
@@ -231,7 +218,6 @@ pub mod generic_tests {
             .with_test(1, |_rng| "3\n".to_owned());
         let subtask3 = Subtask::new(0, "").with_test(1, |_rng| "1\n".to_owned()).with_test(1, |_rng| "2\n".to_owned());
 
-        // create subtasks
         task.task = task.task.with_subtask(subtask1).with_subtask(subtask2).with_subtask(subtask3);
 
         task.test();
@@ -246,7 +232,6 @@ pub mod generic_tests {
             .with_get_input_file_name(|test_id: i32, _subtask_id: i32, _test_id_in_subtask: i32| format!("in_{test_id}.txt"))
             .with_get_output_file_name(|test_id: i32, _subtask_id: i32, _test_id_in_subtask: i32| format!("out_{test_id}.txt"));
 
-        // create solution file
         let solution_contents = r#"
         #include <iostream>
         using namespace std;
@@ -270,26 +255,18 @@ pub mod generic_tests {
             .with_test(1, |_rng| "3\n".to_owned());
         let subtask3 = Subtask::new(0, "").with_test(1, |_rng| "1\n".to_owned()).with_test(1, |_rng| "2\n".to_owned());
 
-        // create subtasks
         task.task = task.task.with_subtask(subtask1).with_subtask(subtask2).with_subtask(subtask3);
 
         task.test();
     }
 
-    // --- Task-level edge cases from ANALYSIS.md ---
-
     #[test]
     fn test_task_no_subtasks_succeeds() {
-        // A task with a solution but no subtasks should complete successfully
-        // (the implementation warns but does not return an error).
         let mut task = Test::<String>::new();
         task.task = task.task.with_solution_source("int main() { return 0; }");
         task.task.run_mode(Mode::Files).unwrap();
     }
 
-    /// Every edit to a solution compiles to a binary of its own, so a build
-    /// folder that is never swept keeps growing with binaries no run will ever
-    /// use again.
     #[test]
     fn test_stale_build_artifacts_are_removed_on_the_next_run() {
         let tempdir = TempDir::new().unwrap();
@@ -315,7 +292,6 @@ pub mod generic_tests {
         };
 
         run_with("int main() { return 0; }");
-        // The timer and the solution.
         let after_first_run = sources_in_build_folder();
         assert_eq!(after_first_run.len(), 2, "expected the timer and one solution, got {after_first_run:?}");
 
@@ -325,9 +301,6 @@ pub mod generic_tests {
         assert_ne!(after_first_run, after_second_run, "the edited solution should have replaced the original one");
     }
 
-    /// A naming closure that ignores the ids it is given maps every test to the
-    /// same file. Without a check the tests would overwrite each other and the
-    /// archive would end up with one entry where the task promised many.
     #[test]
     fn test_colliding_test_file_names_are_reported() {
         let mut task = Test::new();
@@ -348,7 +321,6 @@ pub mod generic_tests {
         task.task = task.task.with_time_limit(1_000_000).with_solution_source("int main() { return 0; }");
         let subtask = Subtask::new(0, "").with_test(1, |_rng| "\n".to_owned());
         task.task = task.task.with_subtask(subtask);
-        // Should complete without panicking; may succeed or error but must not panic
         let _ = task.task.run_mode(Mode::Files);
     }
 }

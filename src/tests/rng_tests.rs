@@ -15,17 +15,13 @@ mod rng_tests {
 
     #[test]
     fn different_seeds_give_different_streams() {
-        // Neighbouring seeds are the interesting case: a generator that copied the
-        // seed into its state would produce nearly the same tests for them.
         let mut seen = HashSet::new();
         for seed in 0..64 {
             assert!(seen.insert(Rng::from_seed(seed).next_u64()), "seed {seed} repeated an earlier stream");
         }
     }
 
-    /// The stream is a compatibility promise: a task that published its seeds
-    /// gets these exact numbers back forever. If this test fails, the algorithm
-    /// changed and every previously generated test changed with it.
+    /// Published seeds depend on this exact stream: it must never change.
     #[test]
     fn the_stream_is_frozen() {
         let mut rng = Rng::from_seed(0);
@@ -94,8 +90,6 @@ mod rng_tests {
         for _ in 0..60_000 {
             counts[rng.random_range(0..6_usize)] += 1;
         }
-        // A uniform generator gives each side 10_000; the bound is loose enough
-        // never to fail by chance and tight enough to catch a real bias.
         for (side, count) in counts.iter().enumerate() {
             assert!((9_000..11_000).contains(count), "side {side} came up {count} times in 60000 rolls");
         }
@@ -170,8 +164,6 @@ mod rng_tests {
 
     #[test]
     fn entropy_seeds_differ_between_generators() {
-        // Two generators made in the same millisecond still have to differ, or a
-        // `--seed random` run would repeat an earlier one.
         let a = Rng::from_entropy().next_u64();
         let b = Rng::from_entropy().next_u64();
         assert_ne!(a, b);

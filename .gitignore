@@ -3,18 +3,10 @@ Build/
 .idea/
 target
 
-
-# Added by cargo
-
 /target
 /test_tasks
 /bench_tasks
 **.profraw
 
-# Added by cargo
-#
-# already existing elements were commented out
-
-#/target
 task1
 task2

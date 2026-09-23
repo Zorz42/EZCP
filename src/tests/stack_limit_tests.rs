@@ -13,18 +13,15 @@ pub mod stack_limit_tests {
         let tempdir = TempDir::new().unwrap();
         let mut runner = CppRunner::new(tempdir.path()).unwrap();
 
-        // This program uses deep recursion and should exceed the default stack limit (usually 8MB on macOS).
-        // 16384 * 1024 bytes = 16MB
+        // About 100 MB of stack, far beyond the usual 8 MB default.
         let program_source = r#"
         #include <iostream>
 
         void recursive_function(int depth) {
             if (depth == 0) return;
-            // Use 1KB of stack space per frame
             volatile char large_array[1024];
             for (int i = 0; i < 1024; ++i) large_array[i] = (char)(i % 256);
             recursive_function(depth - 1);
-            // Prevent optimization
             if (large_array[0] != 0) std::cout << "sumthin" << std::endl;
         }
 
@@ -39,7 +36,6 @@ pub mod stack_limit_tests {
         let results = runner.check_programs("", &[program_handle], 2000).unwrap();
         let result = &results[0];
 
-        // This is expected to FAIL currently (it will return Crashed due to stack overflow)
         assert!(matches!(result, RunResult::Ok(..)), "Expected OK but got {result:?}");
 
         if let RunResult::Ok(_, output) = result {

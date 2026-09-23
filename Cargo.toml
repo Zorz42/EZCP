@@ -3,17 +3,14 @@ name = "ezcp"
 version = "0.5.1"
 edition = "2024"
 description = "A simple tool to automatically generate test cases for competitive programming problems."
-# Let chains and the `zip` dependency both need 1.88; declaring it turns an
-# unsupported toolchain into a clear message instead of a syntax error.
+# Let chains and `zip` need 1.88.
 rust-version = "1.88"
 license = "GPL-3.0-only"
 repository = "https://github.com/Zorz42/EZCP"
 keywords = ["cp", "test_data", "framework", "generator"]
 categories = ["development-tools"]
 readme = "README.md"
-# Development tooling that means nothing to someone depending on the crate.
-# src/tests stays in: distro packagers run `cargo test` on the published tarball,
-# and lib.rs declares `mod tests` under cfg(test).
+# src/tests stays in, so `cargo test` works on the published crate.
 exclude = [
     ".github/",
     ".gitignore",
@@ -28,15 +25,11 @@ members = ["ezcp_macros"]
 workspace = true
 
 [dependencies]
-# Both a version and a path: the path is used in the workspace, the version is
-# what a published crate depends on (packaging fails without it).
+# The version is what the published crate depends on.
 ezcp_macros = { version = "0.1.0", path = "ezcp_macros" }
-# JSON is the interchange format for the seed manifest and the on-demand
-# protocol, both of which are read by other programs.
 serde_json = { version = "1.0", default-features = false, features = ["std"] }
-# "deflate" would also pull in zopfli, which only ever runs at compression
-# levels this crate never asks for; naming the flate2/zlib-rs backend directly
-# writes the same archives without it.
+# Unlike "deflate", this does not pull in zopfli, which is only used at
+# compression levels this crate never asks for.
 zip = { version = "8.4", default-features = false, features = ["deflate-flate2-zlib-rs"] }
 thiserror = { version = "2.0", default-features = false }
 which = { version = "8.0", default-features = false, features = ["real-sys"] }
@@ -48,7 +41,6 @@ log = { version = "0.4", default-features = false, features = [] }
 dunce = { version = "1.0", default-features = false }
 
 [dev-dependencies]
-# Only the test modules build scratch directories.
 tempfile = { version = "3.20", default-features = false }
 
 [workspace.lints.clippy]
@@ -187,9 +179,7 @@ indexing_slicing = "allow"
 allow_attributes_without_reason = "allow"
 assigning_clones = "allow"
 
-# Only applies to builds inside this repository; a crate depending on ezcp
-# picks its own profile. `panic = "abort"` is deliberately absent: serve mode
-# catches a panicking generator and answers with an error instead of dying.
+# No `panic = "abort"`: serve mode catches panicking generators.
 [profile.release]
 lto = true
 codegen-units = 1

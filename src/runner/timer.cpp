@@ -1,34 +1,21 @@
-// Timer utility used by EZCP to run one compiled solution under a time limit.
-//
 // Usage: timer <executable> <time_limit_ms>
 //
-// The solution inherits stdin/stdout/stderr, so it reads its input and writes
-// its answer straight through EZCP's pipes. Once the solution is done the timer
-// appends a single result line to stderr:
+// Runs the solution on the inherited stdin/stdout/stderr, then appends
 //
 //     \n__EZCP_RESULT__ <OK|TLE|RTE|ERR> <cpu_time_ms>\n
 //
-// EZCP parses the *last* occurrence of that marker, so a solution that writes to
-// stderr itself cannot confuse the protocol, and no information has to be
-// smuggled through the exit code (exit codes are not portable: Unix reports
-// signals separately, Windows reports 32-bit NTSTATUS values).
+// to stderr. EZCP reads the last such line, so the solution's own stderr
+// cannot spoof it; exit codes are not used because they are not portable.
+// ERR means the solution could not be started.
 //
-// ERR means the timer could not start the solution at all; every other verdict
-// describes the solution itself.
-//
-// The time limit is enforced on CPU time on both platforms so that a machine
-// under load (EZCP runs several solutions in parallel) does not turn correct
-// solutions into false TLEs. A wall-clock safety net catches solutions that
-// block forever without burning CPU.
-//
-// The reported time is CPU time too, for the same reason: a wall-clock figure
-// would swing with the load on the machine, so the same solution on the same
-// test would be reported differently from one run to the next.
+// Limits and times are CPU time, so that load from the solutions EZCP runs in
+// parallel does not change verdicts. A wall-clock deadline catches solutions
+// that block without using CPU.
 
 #ifdef _WIN32
 
 #define WIN32_LEAN_AND_MEAN
-// windows.h has to come first: shellapi.h relies on the types it defines.
+// Must precede shellapi.h, which uses its types.
 #include <windows.h>
 
 #include <io.h>
@@ -46,10 +33,9 @@ static long long filetime_to_ms(const FILETIME &ft) {
   ULARGE_INTEGER value;
   value.LowPart = ft.dwLowDateTime;
   value.HighPart = ft.dwHighDateTime;
-  return (long long)(value.QuadPart / 10000ULL); // 100ns ticks -> ms
+  return (long long)(value.QuadPart / 10000ULL); // 100 ns ticks
 }
 
-// User + kernel time consumed by the process so far.
 static long long get_cpu_time_ms(HANDLE process) {
   FILETIME creation_time, exit_time, kernel_time, user_time;
   if (!GetProcessTimes(process, &creation_time, &exit_time, &kernel_time, &user_time)) {
@@ -65,14 +51,10 @@ static void make_inheritable(HANDLE handle) {
 }
 
 int main() {
-  // A crashing solution must never pop up the Windows Error Reporting dialog:
-  // it would block the whole test run until somebody clicks it away. Child
-  // processes inherit the error mode of their parent.
+  // Inherited by the solution: a crash must not open an error dialog and block the run.
   SetErrorMode(SEM_FAILCRITICALERRORS | SEM_NOGPFAULTERRORBOX | SEM_NOOPENFILEERRORBOX);
 
-  // Take the arguments as UTF-16 so that paths containing non-ASCII characters
-  // (a user name with an accent is enough) survive; the narrow argv would have
-  // been mangled by the process code page.
+  // UTF-16, since the narrow argv mangles non-ASCII paths.
   int argc = 0;
   LPWSTR *argv = CommandLineToArgvW(GetCommandLineW(), &argc);
   if (argv == NULL || argc < 3) {
@@ -86,8 +68,7 @@ int main() {
     time_limit_ms = 1000;
   }
 
-  // CreateProcessW needs a modifiable command line buffer. The executable path
-  // is passed separately as well, so quoting only has to keep argv[0] intact.
+  // CreateProcessW needs a mutable command line.
   std::wstring quoted;
   quoted.push_back(L'"');
   quoted.append(executable);
@@ -109,28 +90,19 @@ int main() {
   PROCESS_INFORMATION process_info;
   ZeroMemory(&process_info, sizeof(process_info));
 
-  // Round the CPU limit up to whole seconds. Unix has to do that because
-  // RLIMIT_CPU only has second granularity, and both platforms must reach the
-  // same verdict for the same solution.
+  // Whole seconds, like RLIMIT_CPU on Unix, so both platforms agree. EZCP
+  // applies the exact limit to the reported time.
   const long long cpu_limit_ms = (long long)((time_limit_ms + 999) / 1000) * 1000;
 
-  // Put the solution in a job object, which gives two guarantees that do not
-  // depend on this timer staying alive:
-  //   * KILL_ON_JOB_CLOSE - Windows does not kill children together with their
-  //     parent, so without it a solution stuck in an endless loop would keep
-  //     burning a core forever if this timer were killed instead of exiting on
-  //     its own. Closing the last handle (which happens even on abnormal exit)
-  //     tears the whole job down.
-  //   * PerProcessUserTimeLimit - a kernel enforced CPU backstop, the counterpart
-  //     of the RLIMIT_CPU hard limit on Unix. The generous margin over the real
-  //     limit keeps the polling loop below in charge of the actual verdict.
-  // The handle is deliberately never closed by hand.
+  // The job kills the solution when this timer dies, however it dies, since
+  // Windows does not kill children with their parent. Its CPU limit is a kernel
+  // backstop; the loop below decides the verdict. Never closed by hand.
   HANDLE job = CreateJobObjectW(NULL, NULL);
   if (job != NULL) {
     JOBOBJECT_EXTENDED_LIMIT_INFORMATION job_limits;
     ZeroMemory(&job_limits, sizeof(job_limits));
     job_limits.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE | JOB_OBJECT_LIMIT_PROCESS_TIME;
-    // The field counts 100ns ticks.
+    // In 100 ns ticks.
     job_limits.BasicLimitInformation.PerProcessUserTimeLimit.QuadPart = (cpu_limit_ms + 5000) * 10000LL;
     SetInformationJobObject(job, JobObjectExtendedLimitInformation, &job_limits, sizeof(job_limits));
   }
@@ -139,8 +111,7 @@ int main() {
   QueryPerformanceFrequency(&frequency);
   QueryPerformanceCounter(&start_counter);
 
-  // Start suspended so the solution cannot fork anything off before it is inside
-  // the job.
+  // Suspended until it is in the job, so nothing it starts escapes the job.
   if (!CreateProcessW(executable, command_line.data(), NULL, NULL, TRUE, CREATE_NO_WINDOW | CREATE_SUSPENDED, NULL, NULL, &startup_info, &process_info)) {
     report("ERR", 0);
     return 1;
@@ -158,14 +129,9 @@ int main() {
     return 1;
   }
 
-  // Drop our own copy of the input pipe. Without this the pipe stays open even
-  // after the solution exits, and EZCP would block forever writing input that
-  // nobody is going to read.
+  // Otherwise EZCP could block forever writing input nobody reads.
   _close(0);
 
-  // Solutions that block instead of burning CPU never hit the CPU limit, so
-  // keep a wall-clock safety net as well. The multiplier is small so that a
-  // sleeping solution does not hold up the whole run.
   const long long wall_deadline_ms = (long long)time_limit_ms * 2 + 2000;
   const char *verdict = "RTE";
 
@@ -196,7 +162,6 @@ int main() {
     }
   }
 
-  // Read the CPU time before closing the handle it is read from.
   long long cpu_time_ms = get_cpu_time_ms(process_info.hProcess);
 
   CloseHandle(process_info.hProcess);
@@ -209,6 +174,7 @@ int main() {
 #else
 
 #include <errno.h>
+#include <fcntl.h>
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -226,8 +192,7 @@ static void report(const char *verdict, long long elapsed_ms) {
   fflush(stderr);
 }
 
-// User + kernel time consumed by the solution. RUSAGE_CHILDREN only counts
-// children that have been reaped, and this timer only ever has the one.
+// Only counts reaped children, and the solution is the only child.
 static long long get_child_cpu_time_ms() {
   struct rusage usage;
   if (getrusage(RUSAGE_CHILDREN, &usage) != 0) {
@@ -263,6 +228,14 @@ int main(int argc, char *argv[]) {
     time_limit_ms = 1000;
   }
 
+  // A failed exec writes errno here; a successful one just closes it. Otherwise
+  // a failed exec would look like a solution exiting with 127, i.e. a crash.
+  int exec_status[2];
+  if (pipe(exec_status) != 0 || fcntl(exec_status[1], F_SETFD, FD_CLOEXEC) != 0) {
+    report("ERR", 0);
+    return 1;
+  }
+
   long long start = get_wall_time_ms();
 
   pid_t parent_pid = getpid();
@@ -274,11 +247,11 @@ int main(int argc, char *argv[]) {
   }
 
   if (pid == 0) {
+    close(exec_status[0]);
+
 #ifdef __linux__
-    // Have the kernel kill the solution if this timer dies without being able to
-    // clean up, so an endless loop can never be left burning a core. Re-check the
-    // parent afterwards: it may already have died before the call landed, in
-    // which case the signal would never be delivered.
+    // Kill the solution if the timer dies. The parent may have died already,
+    // before this took effect.
     prctl(PR_SET_PDEATHSIG, SIGKILL);
     if (getppid() != parent_pid) {
       _exit(127);
@@ -287,17 +260,13 @@ int main(int argc, char *argv[]) {
     (void)parent_pid;
 #endif
 
-    // Child: limit CPU time before exec, so that TLE reflects the CPU the
-    // solution actually consumed and is unaffected by scheduler delays or by
-    // the other solutions EZCP runs in parallel.
-    int limit_s = (time_limit_ms + 999) / 1000; // round up to whole seconds
+    int limit_s = (time_limit_ms + 999) / 1000;
     struct rlimit cpu_limit;
     cpu_limit.rlim_cur = (rlim_t)limit_s;       // soft limit -> SIGXCPU
     cpu_limit.rlim_max = (rlim_t)(limit_s + 5); // hard limit -> SIGKILL
     setrlimit(RLIMIT_CPU, &cpu_limit);
 
-    // Raise the stack and address space limits as far as the system allows;
-    // competitive programming solutions routinely recurse very deeply.
+    // Solutions often recurse very deeply.
     struct rlimit stack_limit;
     if (getrlimit(RLIMIT_STACK, &stack_limit) == 0 && stack_limit.rlim_cur != stack_limit.rlim_max) {
       stack_limit.rlim_cur = stack_limit.rlim_max;
@@ -311,17 +280,30 @@ int main(int argc, char *argv[]) {
     }
 
     execl(command, command, (char *)NULL);
+    int exec_error = errno;
+    if (write(exec_status[1], &exec_error, sizeof(exec_error)) < 0) {
+      // The parent then just sees exit status 127.
+    }
     _exit(127);
   }
 
-  // Parent: drop our own copy of the input pipe. Without this the pipe stays
-  // open even after the solution exits, and EZCP would block forever writing
-  // input that nobody is going to read.
+  close(exec_status[1]);
+  int exec_error = 0;
+  ssize_t exec_report;
+  do {
+    exec_report = read(exec_status[0], &exec_error, sizeof(exec_error));
+  } while (exec_report < 0 && errno == EINTR);
+  close(exec_status[0]);
+
+  if (exec_report > 0) {
+    waitpid(pid, NULL, 0);
+    report("ERR", 0);
+    return 1;
+  }
+
+  // Otherwise EZCP could block forever writing input nobody reads.
   close(STDIN_FILENO);
 
-  // Solutions that block instead of burning CPU never hit RLIMIT_CPU, so keep a
-  // wall-clock safety net as well. The multiplier is small so that a sleeping
-  // solution does not hold up the whole run.
   long long wall_deadline = start + (long long)time_limit_ms * 2 + 2000;
 
   for (;;) {
@@ -334,8 +316,7 @@ int main(int argc, char *argv[]) {
         report(WEXITSTATUS(status) == 0 ? "OK" : "RTE", elapsed);
       } else if (WIFSIGNALED(status)) {
         int signal_number = WTERMSIG(status);
-        // SIGXCPU: CPU soft limit reached.
-        // SIGKILL: CPU hard limit reached, or our wall-clock safety kill.
+        // SIGXCPU and SIGKILL come from the CPU limits or the wall-clock kill.
         report((signal_number == SIGXCPU || signal_number == SIGKILL) ? "TLE" : "RTE", elapsed);
       } else {
         report("RTE", elapsed);

@@ -1,29 +1,12 @@
-//! What a test file holds in [seed mode](crate::Mode::Seeds): the recipe for a
-//! test instead of the test itself.
+//! The one-line JSON a test file holds in [seed mode](crate::Mode::Seeds).
 //!
-//! A generated test is a generator plus the seed it was run with, so a stub of a
-//! few dozen bytes stands in for a file that can be megabytes. Seed mode writes a
-//! whole test set of them, under the file names a normal run would have used, and
-//! [the server](crate::serve) turns one back into the bytes it stands for:
-//!
-//! ```text
-//! $ ./task --serve < tests/test.01.001.in > test.in
-//! ```
-//!
-//! A stub is one line of JSON, so a judge written in anything can read it, and it
-//! is self-contained: nothing else has to be kept alongside it. The seed and the
-//! hash are hexadecimal strings rather than numbers, because both use all 64 bits
-//! and a JSON number would silently lose the low ones in any reader that parses
-//! numbers as doubles, JavaScript above all.
+//! The seed and hash are hexadecimal strings because JSON readers that parse
+//! numbers as doubles would lose their low bits.
 
 use crate::{Error, Result};
 use serde_json::Value;
 
-/// A 64-bit hash that does not change between Rust releases.
-///
-/// `DefaultHasher` explicitly makes no such promise, and a hash written into a
-/// stub is compared against one computed by a different build, possibly years
-/// later. This is FNV-1a, which is fixed by its specification.
+/// FNV-1a, a hash that, unlike `DefaultHasher`, never changes between builds.
 #[must_use]
 pub fn stable_hash(data: &str) -> u64 {
     const OFFSET_BASIS: u64 = 0xcbf2_9ce4_8422_2325;
@@ -40,15 +23,14 @@ pub fn stable_hash(data: &str) -> u64 {
 /// Which half of a test a stub stands for.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Part {
-    /// The test's input, as the `.in` file of a normal run holds it.
+    /// The input file.
     Input,
-    /// The official solution's output for that input, as the `.out` file holds
-    /// it. Producing it means running the solution.
+    /// The output file, which is rebuilt by running the official solution.
     Output,
 }
 
 impl Part {
-    /// The word a stub writes for this half.
+    /// The name used in a stub.
     #[must_use]
     pub const fn as_str(self) -> &'static str {
         match self {
@@ -58,36 +40,29 @@ impl Part {
     }
 }
 
-/// Everything needed to rebuild one half of one test.
+/// Everything needed to rebuild one file of one test.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Stub {
-    /// Which subtask the test belongs to, counted from zero.
+    /// 0-based subtask index.
     pub subtask: usize,
-    /// Which of that subtask's generators produced it.
+    /// 0-based index of the generator within the subtask.
     pub generator: usize,
-    /// The seed that generator was run with.
+    /// The seed the generator is run with.
     pub seed: u64,
-    /// Which half of the test this stub stands for.
+    /// Which file of the test this is.
     pub part: Part,
-    /// Hash of the bytes it stands for, which is what catches a generator that
-    /// has changed since the stub was written.
-    ///
-    /// `None` in a request written by hand, which the server then has to take on
-    /// trust.
+    /// [`stable_hash`] of the file, to detect generators that changed since.
+    /// `None` skips the check.
     pub hash: Option<u64>,
 }
 
-/// Reads a required index field.
 fn index(object: &Value, key: &str) -> Result<usize> {
     object.get(key).and_then(Value::as_u64).and_then(|value| usize::try_from(value).ok()).ok_or_else(|| Error::InvalidStub {
         details: format!("\"{key}\" is missing or is not a non-negative integer"),
     })
 }
 
-/// Reads one of the 64-bit values a stub stores as a hexadecimal string.
-///
-/// A plain number is accepted too, for a request written by hand where the value
-/// is small enough that nothing can be lost.
+/// Also accepts a plain number, for stubs written by hand.
 fn hex_u64(value: &Value, what: &str) -> Result<u64> {
     match value {
         Value::String(text) => u64::from_str_radix(text.trim_start_matches("0x"), 16).map_err(|_ignored| Error::InvalidStub {
@@ -103,11 +78,7 @@ fn hex_u64(value: &Value, what: &str) -> Result<u64> {
 }
 
 impl Stub {
-    /// Renders the stub as the single line a test file holds.
-    ///
-    /// Written by hand rather than through a serialiser to keep the fields in
-    /// reading order; every value is a number or a fixed word, so there is
-    /// nothing here that could need escaping.
+    /// Renders the stub as a line of JSON. Nothing in it needs escaping.
     #[must_use]
     pub fn to_line(&self) -> String {
         let hash = self.hash.map_or_else(String::new, |hash| format!(",\"hash\":\"{hash:016x}\""));
@@ -120,7 +91,7 @@ impl Stub {
         )
     }
 
-    /// Parses a stub, which is also what a request to the server looks like.
+    /// Parses a line written by [`Stub::to_line`], or one written by hand.
     pub fn parse(line: &str) -> Result<Self> {
         let value: Value = serde_json::from_str(line).map_err(|err| Error::InvalidStub {
             details: format!("not a JSON object: {err}"),

@@ -1,9 +1,5 @@
-//! Tests for on-demand test generation: seed mode, the stubs it writes in place
-//! of test data, and the server that turns one back into the test it stands for.
-//!
-//! The claim these have to hold up is a strong one — a test rebuilt from its
-//! stub is the file a normal run would have written — so most of them work by
-//! generating a task both ways and comparing the bytes.
+//! Seed mode and serving. Most tests check that a test rebuilt from its stub
+//! is byte for byte the file a normal run writes.
 
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used)]
@@ -13,29 +9,22 @@ mod seed_mode_tests {
     use std::path::Path;
     use tempfile::TempDir;
 
-    /// Doubles the number it is given.
     const SOLUTION: &str = "
         #include <iostream>
         int main() { long long n; std::cin >> n; std::cout << n * 2 << std::endl; }
     ";
 
-    /// Always answers 2, so it is only right when the input is 1.
+    /// Only right when n is 1.
     const PARTIAL: &str = "
         #include <iostream>
         int main() { std::cout << 2 << std::endl; }
     ";
 
-    /// How many tests [`build_task`] generates when no partial solution sends it
-    /// looking for more.
-    ///
-    /// The second subtask draws from a range wide enough that its six tests are
-    /// never duplicates of one another, so the count does not depend on luck.
+    /// Tests in [`build_task`] when nothing is hunted for. The range is wide enough
+    /// that duplicates never lower the count.
     const NUM_TESTS: usize = 7;
 
-    /// The task the tests generate.
-    ///
-    /// The first subtask is the one [`PARTIAL`] gets right; the second never
-    /// contains n = 1, so [`PARTIAL`] fails every test in it.
+    /// [`PARTIAL`] passes the first subtask and fails every test of the second.
     fn build_task(path: &Path) -> Task<String> {
         Task::new("Doubler", path)
             .with_debug_level(LevelFilter::Off)
@@ -44,8 +33,7 @@ mod seed_mode_tests {
             .with_subtask(Subtask::new(70, "n <= 1000000000").with_test(6, |rng| format!("{}\n", rng.random_range(2..=1_000_000_000))))
     }
 
-    /// Every file a run left in the tests directory, as (name, contents), in name
-    /// order.
+    /// `(name, contents)` of every test file, sorted by name.
     fn test_files(path: &Path) -> Vec<(String, String)> {
         let mut files = std::fs::read_dir(path.join("tests"))
             .expect("a run should leave a tests directory")
@@ -58,13 +46,10 @@ mod seed_mode_tests {
         files
     }
 
-    /// How many tests a run produced, counting a `.in` and its `.out` as one.
     fn num_tests(path: &Path) -> usize {
         test_files(path).len() / 2
     }
 
-    /// The contents of the first input file whose name starts with `prefix`,
-    /// which in seed mode is the stub that rebuilds it.
     fn input_file(path: &Path, prefix: &str) -> String {
         test_files(path)
             .into_iter()
@@ -73,17 +58,13 @@ mod seed_mode_tests {
             .1
     }
 
-    /// Feeds stubs to a task's server, returning what it wrote and how the
-    /// session ended: one that cannot be answered stops the server, and what it
-    /// had written before that still matters.
+    /// Also returns what was written when the session ended with an error.
     fn serve_raw(task: &Task<String>, requests: &str) -> (crate::Result<()>, String) {
         let mut output = Vec::new();
         let result = task.serve_io(&mut requests.as_bytes(), &mut output);
         (result, String::from_utf8(output).expect("what was served is UTF-8"))
     }
 
-    /// Feeds stubs to a freshly built task, exactly as piping a test file into
-    /// `--serve` would, and returns the raw bytes it answered with.
     fn serve(path: &Path, requests: &str) -> String {
         let (result, written) = serve_raw(&build_task(path), requests);
         result.expect("the server should answer");
@@ -98,7 +79,6 @@ mod seed_mode_tests {
         assert_eq!(num_tests(dir.path()), NUM_TESTS);
         assert!(dir.path().join("tests.zip").exists());
 
-        // The first subtask's only test is n = 1, which the solution doubles.
         let files = test_files(dir.path());
         assert_eq!(files[0].1, "1\n");
         assert_eq!(files[1].1.trim(), "2");
@@ -120,8 +100,6 @@ mod seed_mode_tests {
         }
     }
 
-    /// The whole point of the feature: piping a stub into the server gives back
-    /// the file a normal run would have written, byte for byte.
     #[test]
     fn a_stub_rebuilds_the_file_a_normal_run_wrote() {
         let files_dir = TempDir::new().unwrap();
@@ -139,9 +117,7 @@ mod seed_mode_tests {
         }
     }
 
-    /// A task with no normalisation at all, whose test is the part most easily
-    /// lost in transport: leading spaces, a tab, doubled blank lines and no
-    /// trailing newline.
+    /// A test whose whitespace any normalisation would change.
     fn whitespace_task(path: &Path, trim: bool) -> Task<String> {
         Task::new("Whitespace", path)
             .with_debug_level(LevelFilter::Off)
@@ -169,13 +145,10 @@ mod seed_mode_tests {
         let (result, served) = serve_raw(&whitespace_task(seeds_dir.path(), false), &stub);
         result.unwrap();
 
-        // Not even a newline of its own: what comes back is the file, and this
-        // file does not end in one.
+        // Byte for byte, so without a trailing newline either.
         assert_eq!(served, awkward);
     }
 
-    /// The whitespace setting changes the bytes of a test, so a task whose
-    /// setting has moved since its stubs were written must not serve them.
     #[test]
     fn a_changed_whitespace_setting_is_refused() {
         let dir = TempDir::new().unwrap();
@@ -188,8 +161,6 @@ mod seed_mode_tests {
         assert!(written.is_empty(), "a test that does not match its stub must not reach the caller");
     }
 
-    /// A run is reproducible: the same seed gives the same tests, a different one
-    /// does not.
     #[test]
     fn the_seed_decides_the_tests() {
         let run = |seed: u64| {
@@ -202,14 +173,9 @@ mod seed_mode_tests {
         assert_ne!(run(1234), run(5678), "two seeds produced identical tests");
     }
 
-    /// Seed mode still hunts for counterexamples and still checks the partial
-    /// solutions afterwards: keeping the tests as stubs must not drop the
-    /// verification that makes the test data worth anything.
     #[test]
     fn seed_mode_still_verifies_partial_solutions() {
         let dir = TempDir::new().unwrap();
-        // The partial solution only survives where n is 1, so declaring that it
-        // passes the second subtask too has to be caught.
         let task = build_task(dir.path()).with_partial_solution("always 2", PARTIAL, &[0, 1]);
 
         let err = task.run_mode(Mode::Seeds).unwrap_err();
@@ -219,9 +185,6 @@ mod seed_mode_tests {
         );
     }
 
-    /// The partial solution is wrong on every test of the second subtask, so the
-    /// tests that were going to be generated anyway are already the two
-    /// counterexamples that are asked for: nothing extra has to be hunted down.
     #[test]
     fn a_partial_solution_the_initial_tests_already_break_costs_no_extra_tests() {
         let dir = TempDir::new().unwrap();
@@ -234,21 +197,32 @@ mod seed_mode_tests {
         assert_eq!(num_tests(dir.path()), NUM_TESTS);
     }
 
-    /// A stub written by hand carries no hash, so the server takes it on trust —
-    /// and it is the `part` that decides whether the solution is run at all.
     #[test]
     fn a_stub_written_by_hand_is_served() {
         let dir = TempDir::new().unwrap();
         build_task(dir.path()).run_mode(Mode::Seeds).unwrap();
 
-        // Subtask 0 has one generator, and it answers n = 1 whatever seed it gets.
+        // That generator ignores its seed and always gives n = 1.
         assert_eq!(serve(dir.path(), r#"{"subtask":0,"generator":0,"seed":"1234","part":"input"}"#), "1\n");
         assert_eq!(serve(dir.path(), r#"{"subtask":0,"generator":0,"seed":"1234","part":"output"}"#).trim(), "2");
     }
 
-    /// With nothing framing a payload, a stub that cannot be answered has no way
-    /// to say so in the stream. It ends the session instead, having written
-    /// nothing, so a caller never mistakes an error for the test it asked for.
+    #[test]
+    fn serving_inputs_compiles_nothing() {
+        let dir = TempDir::new().unwrap();
+
+        let requests = [
+            r#"{"subtask":0,"generator":0,"seed":"1234","part":"input"}"#,
+            r#"{"subtask":1,"generator":0,"seed":"5678","part":"input"}"#,
+        ]
+        .join("\n");
+        let served = serve(dir.path(), &requests);
+
+        assert!(served.starts_with("1\n"), "{served:?}");
+        assert!(!dir.path().join("build").exists(), "serving inputs should not have compiled anything");
+    }
+
+    /// Unframed output cannot carry an error, so the session ends instead.
     #[test]
     fn a_stub_that_cannot_be_answered_ends_the_session() {
         let dir = TempDir::new().unwrap();
@@ -264,8 +238,7 @@ mod seed_mode_tests {
             r#"{"subtask":9,"generator":0,"seed":"1","part":"input"}"#,
             r#"{"subtask":0,"generator":9,"seed":"1","part":"input"}"#,
         ] {
-            // A good stub in front of it: what was already answered has to
-            // survive the failure that follows.
+            // What was answered before the bad stub must remain.
             let requests = format!("{{\"subtask\":0,\"generator\":0,\"seed\":\"1\",\"part\":\"input\"}}\n{bad}");
             let (result, written) = serve_raw(&build_task(dir.path()), &requests);
 
@@ -275,17 +248,12 @@ mod seed_mode_tests {
         }
     }
 
-    /// If the generators change after the stubs are written, everything built
-    /// from them is wrong. The server has to say so rather than serve a test
-    /// that is not the one that was verified.
     #[test]
     fn a_changed_generator_is_detected() {
         let dir = TempDir::new().unwrap();
         build_task(dir.path()).run_mode(Mode::Seeds).unwrap();
         let stub = input_file(dir.path(), "test.02");
 
-        // Same task, same shape, but the second subtask's generator now produces
-        // something else entirely.
         let changed = Task::new("Doubler", dir.path())
             .with_debug_level(LevelFilter::Off)
             .with_solution_source(SOLUTION)
@@ -299,9 +267,7 @@ mod seed_mode_tests {
         assert!(written.is_empty(), "a test that does not match its stub must not reach the caller");
     }
 
-    /// A generator that ignores the `Rng` it is given and counts instead, so no
-    /// two calls agree. Nothing stops one being written, which is why seed mode
-    /// goes looking for it.
+    /// Ignores its `Rng`, so no two calls agree.
     fn unfaithful_task(path: &Path) -> Task<String> {
         use std::sync::Arc;
         use std::sync::atomic::{AtomicI64, Ordering};
@@ -313,8 +279,6 @@ mod seed_mode_tests {
             .with_subtask(Subtask::new(100, "counted").with_test(3, move |_rng| format!("{}\n", counter.fetch_add(1, Ordering::SeqCst))))
     }
 
-    /// The check seed mode exists for: a test that cannot be rebuilt from its
-    /// seed must not be written as a stub that promises it can.
     #[test]
     fn seed_mode_catches_a_generator_that_is_not_reproducible() {
         let dir = TempDir::new().unwrap();
@@ -338,8 +302,6 @@ mod seed_mode_tests {
         assert!(test_files(dir.path()).is_empty(), "nothing should be written for tests that cannot be rebuilt");
     }
 
-    /// The error has to say what to do about it, because the cause is always the
-    /// same mistake in the generator.
     #[test]
     fn the_error_explains_what_went_wrong() {
         let dir = TempDir::new().unwrap();
@@ -350,8 +312,6 @@ mod seed_mode_tests {
         assert!(message.contains("seed 0x"), "{message}");
     }
 
-    /// File mode keeps the tests themselves, so it does not pay for the check
-    /// unless it is asked to.
     #[test]
     fn files_mode_does_not_check_by_default() {
         let dir = TempDir::new().unwrap();
@@ -379,8 +339,6 @@ mod seed_mode_tests {
         assert_eq!(num_tests(dir.path()), 3);
     }
 
-    /// A faithful generator has to survive the check, however many times it is
-    /// run - the check is worthless if it also rejects correct tasks.
     #[test]
     fn a_faithful_generator_passes_the_check() {
         let dir = TempDir::new().unwrap();
@@ -389,8 +347,6 @@ mod seed_mode_tests {
         assert_eq!(num_tests(dir.path()), NUM_TESTS);
     }
 
-    /// Only the tests that were kept are rebuilt, and each of them exactly as
-    /// many times as was asked for.
     #[test]
     fn the_check_rebuilds_every_kept_test_the_requested_number_of_times() {
         use std::sync::Arc;
@@ -400,8 +356,7 @@ mod seed_mode_tests {
         let calls = Arc::new(AtomicUsize::new(0));
         let counted = Arc::clone(&calls);
 
-        // Faithful - the value comes from the rng - but it counts how often it is
-        // asked for a test.
+        // Uses its rng, but counts the calls.
         let task = Task::new("Counted", dir.path())
             .with_debug_level(LevelFilter::Off)
             .with_solution_source(SOLUTION)
@@ -413,12 +368,10 @@ mod seed_mode_tests {
 
         task.run_mode(Mode::Seeds).unwrap();
 
-        // Four calls to generate the tests, then seven rebuilds of each of them.
+        // Four to generate, then seven rebuilds of each.
         assert_eq!(calls.load(Ordering::SeqCst), 4 + 4 * 7);
     }
 
-    /// Nothing is written until everything has been verified, so a test set on
-    /// disk always describes tests that were checked all the way through.
     #[test]
     fn a_failed_run_leaves_no_tests() {
         let dir = TempDir::new().unwrap();

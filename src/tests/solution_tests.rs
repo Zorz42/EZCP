@@ -13,7 +13,6 @@ mod solution_tests {
 
     #[test]
     fn test_solution_should_fail_true() {
-        // Solution that only passes subtask 0 should fail subtask 1
         let sol = Solution::new("sol_fail".to_owned(), "src".to_owned(), &[0]);
         assert!(sol.should_fail(1));
         assert!(sol.should_fail(2));
@@ -29,7 +28,6 @@ mod solution_tests {
 
     #[test]
     fn test_solution_should_fail_empty_pass_list() {
-        // A solution that passes no subtasks should fail every subtask
         let sol = Solution::new("sol_empty".to_owned(), "src".to_owned(), &[]);
         for i in 0..10 {
             assert!(sol.should_fail(i));
@@ -42,7 +40,6 @@ mod solution_tests {
         for i in 0..5 {
             assert!(!sol.should_fail(i));
         }
-        // Still fails subtasks outside the list
         assert!(sol.should_fail(5));
     }
 
@@ -55,7 +52,6 @@ mod solution_tests {
 
     #[test]
     fn test_solution_duplicate_subtask_indices() {
-        // Duplicate indices should be deduplicated via HashSet
         let sol = Solution::new("sol_dup".to_owned(), "src".to_owned(), &[1, 1, 1]);
         assert!(!sol.should_fail(1));
         assert_eq!(sol.passes_subtasks.len(), 1);

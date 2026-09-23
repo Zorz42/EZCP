@@ -11,8 +11,6 @@ pub fn logger_format(buf: &mut Formatter, record: &Record) -> std::io::Result<()
         log::Level::Trace => "T",
     };
 
-    // Continuation lines line up under the first one instead of repeating the
-    // prefix, so a multi-line message still reads as a single entry.
     let continuation_indent = " ".repeat(prefix.len());
 
     let message = record.args().to_string();

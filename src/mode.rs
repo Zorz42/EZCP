@@ -1,48 +1,34 @@
-//! What a task binary does when it is run, and how the command line selects it.
-
 use crate::rng::Rng;
 use crate::{Error, Result};
 
-/// The three ways a task can be built.
+/// What a task run does.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
 pub enum Mode {
-    /// Generate the tests and write them out as files, then pack them into a zip.
-    ///
-    /// This is what a task does when it is run without arguments.
+    /// Generate the tests, write them to files and archive them.
     #[default]
     Files,
-    /// Generate and verify exactly as [`Mode::Files`] does, but write each test
-    /// file as the [stub](crate::Stub) that rebuilds it instead of as the test.
-    ///
-    /// Every test is still generated, run against the official solution and used
-    /// to hunt for counterexamples; none of the data is written to disk. This is
-    /// how a task can have far more tests than there is room to store. The file
-    /// names, the layout and the archive are the same as file mode's.
+    /// Like [`Mode::Files`], but each file holds the [stub](crate::Stub) that
+    /// rebuilds the test instead of the test itself.
     Seeds,
-    /// Turn stubs back into tests, on stdin and stdout.
-    ///
-    /// Nothing is generated up front. Every line of stdin is a stub, as written
-    /// by [`Mode::Seeds`], and the answer is the raw bytes it stands for: pipe a
-    /// stub file in and the test file a normal run would have written comes back
-    /// out.
+    /// Read stubs from stdin, one per line, and write the raw test data each one
+    /// stands for to stdout.
     Serve,
 }
 
 /// Where the master seed comes from.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
 pub enum SeedChoice {
-    /// The task's own default, which does not change between runs.
+    /// [`DEFAULT_SEED`](crate::DEFAULT_SEED).
     #[default]
     Default,
-    /// A seed given on the command line or in the task definition.
+    /// A given seed.
     Fixed(u64),
-    /// A fresh seed from the operating system, reported so the run can be
-    /// repeated.
+    /// A new seed on every run.
     Random,
 }
 
 impl SeedChoice {
-    /// Resolves the choice into an actual seed.
+    /// Returns the seed, `default` for [`SeedChoice::Default`].
     #[must_use]
     pub fn resolve(self, default: u64) -> u64 {
         match self {
@@ -53,19 +39,17 @@ impl SeedChoice {
     }
 }
 
-/// What the command line asked a task binary to do.
+/// The parsed command line of a task binary.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
 pub struct CliOptions {
-    /// Which of the three modes to run in.
+    /// The mode to run in.
     pub mode: Mode,
-    /// The seed from `--seed`, or `None` if the argument was not given, in which
-    /// case whatever the task itself was configured with applies.
+    /// The `--seed` value, if given.
     pub seed: Option<SeedChoice>,
-    /// Set by `--help`, which prints the usage text and does nothing else.
+    /// Whether `--help` was given.
     pub help: bool,
 }
 
-/// The usage text, printed by `--help`.
 pub const USAGE: &str = "\
 Usage: <task> [options]
 
@@ -84,7 +68,6 @@ Options:
                     Ignored by --serve, which takes each test's seed from the stub.
   -h, --help        Print this text.";
 
-/// Parses a seed given on the command line.
 fn parse_seed(value: &str) -> Result<SeedChoice> {
     if value == "random" {
         return Ok(SeedChoice::Random);
@@ -98,9 +81,7 @@ fn parse_seed(value: &str) -> Result<SeedChoice> {
 }
 
 impl CliOptions {
-    /// Parses the arguments a task binary was started with.
-    ///
-    /// `arguments` must not include the name of the program itself.
+    /// Parses arguments, not including the program name.
     pub fn parse<I: IntoIterator<Item = S>, S: AsRef<str>>(arguments: I) -> Result<Self> {
         let mut options = Self::default();
         let mut mode_argument: Option<String> = None;
@@ -110,9 +91,6 @@ impl CliOptions {
             let argument = argument.as_ref();
             match argument {
                 "--seeds" | "--serve" | "--files" => {
-                    // Two modes in one command line is a mistake worth reporting:
-                    // silently keeping the last one would generate a whole set of
-                    // tests the caller did not ask for.
                     if let Some(first) = &mode_argument
                         && first != argument
                     {
@@ -151,9 +129,8 @@ impl CliOptions {
 
     /// Parses the arguments of the running process.
     pub fn from_env() -> Result<Self> {
-        // Lossy rather than rejecting: an argument that is not valid UTF-8 is
-        // never one of ours, and the error for an unknown argument says more than
-        // one about encoding would.
+        // A non-UTF-8 argument is never a valid one, and then gets the clearer
+        // "unknown argument" error.
         let arguments = std::env::args_os().skip(1).map(|argument| argument.to_string_lossy().into_owned()).collect::<Vec<_>>();
         Self::parse(arguments)
     }

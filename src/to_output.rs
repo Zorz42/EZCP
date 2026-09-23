@@ -1,13 +1,7 @@
-/// Turns a generated value into the bytes of a test input file.
+/// Renders a generated value as the contents of a test input file.
 ///
-/// A generator returns any type implementing this trait, so a test can be built
-/// as the data it actually is rather than as a `String` assembled by hand.
-/// Implementations are provided for the primitive types, `String`/`&str`,
-/// `Vec<T>` and tuples, and [`Graph`](crate::Graph) writes itself out in the
-/// usual "n m" followed by an edge list form.
-///
-/// The derive writes out a struct's fields in declaration order, which is the
-/// common case for an input format:
+/// A `Vec` or tuple goes on one line, separated by spaces. The derive writes a
+/// struct's fields in order, one per line, skipping fields that render empty:
 ///
 /// ```
 /// use ezcp::ToOutput;
@@ -19,7 +13,7 @@
 /// }
 /// ```
 pub trait ToOutput {
-    /// Renders `self` as the contents of a test input file.
+    /// Renders `self` as test input.
     fn to_output(self) -> String;
 }
 
@@ -98,8 +92,6 @@ macro_rules! impl_tuple_to_output {
                 if res.ends_with(' ') {
                     res.pop();
                 }
-                // Only terminate the line if the last field did not already do so,
-                // matching how `Vec` formats itself instead of adding a blank line.
                 if !res.ends_with('\n') {
                     res.push('\n');
                 }

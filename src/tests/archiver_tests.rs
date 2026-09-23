@@ -21,7 +21,6 @@ mod archiver_tests {
         archive_files(&[], &archive_path, &mp).unwrap();
 
         assert!(archive_path.exists());
-        // Opening the zip should succeed and contain 0 files
         let archive_file = std::fs::File::open(&archive_path).unwrap();
         let zip = zip::ZipArchive::new(archive_file).unwrap();
         assert_eq!(zip.len(), 0);
@@ -39,7 +38,6 @@ mod archiver_tests {
 
         archive_files(&[file_path], &archive_path, &mp).unwrap();
 
-        // Re-open and check content
         let archive_file = std::fs::File::open(&archive_path).unwrap();
         let mut zip = zip::ZipArchive::new(archive_file).unwrap();
         assert_eq!(zip.len(), 1);
@@ -77,7 +75,6 @@ mod archiver_tests {
         let archive_path = dir.path().join("err.zip");
         let mp = make_progress();
 
-        // archive_files will try to read the file, which should fail
         let result = archive_files(&[missing], &archive_path, &mp);
         assert!(matches!(result, Err(Error::IOError { .. })));
     }

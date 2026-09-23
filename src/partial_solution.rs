@@ -38,12 +38,7 @@ impl From<&RunResult> for TestResult {
 }
 
 impl<T: ToOutput> Task<T> {
-    /// Runs one solution on every generated test and reports which subtasks it
-    /// passed.
-    ///
-    /// The tests are the ones held in memory rather than files on disk, because
-    /// in seed mode there are no files: nothing about judging a solution depends
-    /// on the tests having been written out.
+    /// Runs a solution on every test and returns the subtasks it passed.
     pub(crate) fn run_partial_solution(&self, tests: &[Vec<GeneratedTest>], cpp_runner: &mut CppRunner, program_handle: ProgramHandle, lines_of_code: usize) -> Result<HashSet<usize>> {
         cpp_runner.clear_tasks();
         let mut test_handles = Vec::new();
@@ -67,11 +62,8 @@ impl<T: ToOutput> Task<T> {
         let mut results_text = String::new();
         for (subtask_id, subtask_test_handles) in test_handles.iter().enumerate() {
             let mut max_time = Some(0);
-            // count, which result was returned by how many tests
             let mut results = BTreeMap::new();
             for (handle, correct_output) in subtask_test_handles {
-                // The runner still holds the input we fed the solution, so take it
-                // back rather than keeping a second reference to it alive.
                 let input_data = cpp_runner.take_input(*handle);
 
                 let run_result = cpp_runner.get_result(*handle);
@@ -79,8 +71,7 @@ impl<T: ToOutput> Task<T> {
 
                 match run_result {
                     RunResult::Ok(time, program_output) => {
-                        // `None` means some earlier test already failed, and then no
-                        // running time is worth reporting for the subtask.
+                        // `None` once a test has failed: no time is reported then.
                         max_time = max_time.map(|slowest| slowest.max(time));
 
                         if !(self.checker)(&input_data, correct_output, &program_output) {
@@ -92,8 +83,6 @@ impl<T: ToOutput> Task<T> {
                     }
                 }
 
-                // increment the count for the result
-                // keys are strings, because enum has time in the Ok variant
                 results.entry(test_result).and_modify(|count| *count += 1).or_insert(1);
             }
 

@@ -2,8 +2,6 @@
 mod test_to_output_tests {
     use crate::ToOutput;
 
-    // --- String & str ---
-
     #[test]
     fn string_passthrough() {
         assert_eq!("hello".to_owned().to_output(), "hello");
@@ -19,8 +17,6 @@ mod test_to_output_tests {
         assert_eq!(String::new().to_output(), "");
     }
 
-    // --- char ---
-
     #[test]
     fn char_single() {
         assert_eq!('a'.to_output(), "a");
@@ -31,8 +27,6 @@ mod test_to_output_tests {
         assert_eq!('\u{e9}'.to_output(), "\u{e9}");
     }
 
-    // --- bool ---
-
     #[test]
     fn bool_true() {
         assert_eq!(true.to_output(), "1");
@@ -42,8 +36,6 @@ mod test_to_output_tests {
     fn bool_false() {
         assert_eq!(false.to_output(), "0");
     }
-
-    // --- signed integers ---
 
     #[test]
     fn i8_positive() {
@@ -71,8 +63,6 @@ mod test_to_output_tests {
         assert_eq!(i128::MIN.to_output(), i128::MIN.to_string());
     }
 
-    // --- unsigned integers ---
-
     #[test]
     fn u32_value() {
         assert_eq!(42_u32.to_output(), "42");
@@ -88,8 +78,6 @@ mod test_to_output_tests {
         assert_eq!(100_usize.to_output(), "100");
     }
 
-    // --- floats ---
-
     #[test]
     fn f32_value() {
         assert_eq!(1.5_f32.to_output(), "1.5");
@@ -104,8 +92,6 @@ mod test_to_output_tests {
     fn f64_negative() {
         assert_eq!((-0.5_f64).to_output(), "-0.5");
     }
-
-    // --- Vec ---
 
     #[test]
     fn vec_empty() {
@@ -141,14 +127,12 @@ mod test_to_output_tests {
 
     #[test]
     fn vec_mixed_newlines() {
-        // "a\n" ends with newline so no space appended; "b" doesn't so space; "c\n" ends with newline
         let v = vec!["a\n", "b", "c\n"];
         assert_eq!(v.to_output(), "a\nb c\n");
     }
 
     #[test]
     fn vec_nested_vecs() {
-        // Vec<Vec<i32>>: inner vecs produce "1 2\n" and "3 4\n" (ending in \n)
         let v = vec![vec![1, 2], vec![3, 4]];
         assert_eq!(v.to_output(), "1 2\n3 4\n");
     }
@@ -157,8 +141,6 @@ mod test_to_output_tests {
     fn vec_bools() {
         assert_eq!(vec![true, false, true].to_output(), "1 0 1\n");
     }
-
-    // --- derive(ToOutput) ---
 
     #[derive(ToOutput)]
     struct MyStruct {
@@ -195,8 +177,6 @@ mod test_to_output_tests {
         assert_eq!(s.to_output(), "");
     }
 
-    /// A field that renders to nothing (an empty collection, say) must not leave a
-    /// blank line behind, wherever in the struct it sits.
     #[test]
     fn derive_struct_skips_empty_fields() {
         #[derive(ToOutput)]
@@ -220,8 +200,6 @@ mod test_to_output_tests {
         };
         assert_eq!(s.to_output(), "1\n7\n2\n");
     }
-
-    // --- Tuple ---
 
     #[test]
     fn tuple_single() {
@@ -248,12 +226,26 @@ mod test_to_output_tests {
         assert_eq!((1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12).to_output(), "1 2 3 4 5 6 7 8 9 10 11 12\n");
     }
 
-    /// A field that already ends in a newline must not get a second one, the same
-    /// way `Vec` behaves.
     #[test]
     fn tuple_ending_in_newline_is_not_double_terminated() {
         assert_eq!((1, "x\n").to_output(), "1 x\n");
         assert_eq!(("a\n",).to_output(), "a\n");
         assert_eq!((vec![1, 2], vec![3, 4]).to_output(), "1 2\n3 4\n");
+    }
+}
+
+/// Without the trait in scope, as with `#[derive(ezcp::ToOutput)]` elsewhere.
+#[cfg(test)]
+mod derive_without_the_trait_in_scope {
+    #[derive(crate::ToOutput)]
+    struct Input {
+        n: usize,
+        values: Vec<i32>,
+    }
+
+    #[test]
+    fn derive_works_without_importing_the_trait() {
+        let input = Input { n: 2, values: vec![1, 2] };
+        assert_eq!(crate::ToOutput::to_output(input), "2\n1 2\n");
     }
 }

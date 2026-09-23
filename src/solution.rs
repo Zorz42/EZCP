@@ -1,27 +1,17 @@
 use std::collections::HashSet;
 
-/// A solution implementation (correct or partial) to be tested.
-///
-/// A solution is defined by its source code and a set of subtasks it is
-/// expected to pass. The system uses this information during test generation
-/// to ensure that robust tests are found that correctly distinguish between
-/// different solution implementations.
+/// A partial solution and the subtasks it is expected to pass.
 pub struct Solution {
-    /// A short name for the solution, used to identify it in errors and in the
-    /// per-subtask summary.
+    /// Identifies the solution in errors and results.
     pub name: String,
-    /// The C++ source code for the solution.
+    /// C++ source code.
     pub source: String,
-    /// Indices of the subtasks this solution is designed to pass.
+    /// 0-based indices of the subtasks it is expected to pass.
     pub passes_subtasks: HashSet<usize>,
 }
 
 impl Solution {
-    /// Creates a new `Solution` instance.
-    ///
-    /// * `source` - C++ source code.
-    /// * `passes_subtasks` - A slice of subtask indices (0-indexed) that the
-    ///   solution should successfully solve.
+    /// Creates a solution expected to pass `passes_subtasks` (0-based).
     #[must_use]
     pub fn new(name: String, source: String, passes_subtasks: &[usize]) -> Self {
         Self {
@@ -31,7 +21,7 @@ impl Solution {
         }
     }
 
-    /// Returns `true` if this solution is expected to fail on the specified subtask.
+    /// Whether the solution is expected to fail `subtask`.
     #[must_use]
     pub fn should_fail(&self, subtask: usize) -> bool {
         !self.passes_subtasks.contains(&subtask)

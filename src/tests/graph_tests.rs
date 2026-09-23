@@ -6,11 +6,7 @@ mod graph_tests {
     use crate::rng::Rng;
     use std::sync::atomic::{AtomicU64, Ordering};
 
-    /// A generator for tests that care about a graph's shape rather than about
-    /// which particular graph they get.
-    ///
-    /// Each call uses the next seed, so a loop building many graphs still builds
-    /// many different ones, and a failure can be repeated by fixing the counter.
+    /// A different seed on every call.
     fn rng() -> Rng {
         static NEXT_SEED: AtomicU64 = AtomicU64::new(0);
         Rng::from_seed(NEXT_SEED.fetch_add(1, Ordering::Relaxed))
@@ -82,8 +78,6 @@ mod graph_tests {
         assert!(!graph.has_edge(4, 4));
     }
 
-    /// A graph that is asked for (nearly) every possible edge used to be built by
-    /// guessing pairs, so the last edges took unboundedly many attempts to find.
     #[test]
     fn test_random_dense() {
         for n in 2..80 {
@@ -98,8 +92,6 @@ mod graph_tests {
         assert!(Graph::new_random(&mut rng(), 200, 200 * 199 / 2).is_full());
     }
 
-    /// The same for a connected graph, which starts from a spanning tree and then
-    /// fills the rest in.
     #[test]
     fn test_random_connected_dense() {
         for n in 2..80 {
@@ -345,8 +337,6 @@ mod graph_tests {
         assert_eq!(component1, vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9]);
     }
 
-    // --- Edge cases identified in ANALYSIS.md ---
-
     #[test]
     fn test_is_connected_single_node() {
         let graph = Graph::new_empty(&mut rng(), 1);
@@ -356,7 +346,6 @@ mod graph_tests {
     #[test]
     fn test_is_connected_disconnected_two_nodes() {
         let graph = Graph::new_empty(&mut rng(), 2);
-        // Two isolated nodes: not connected
         assert!(!graph.is_connected());
     }
 
@@ -373,7 +362,6 @@ mod graph_tests {
     #[test]
     fn test_is_full_one_node() {
         let graph = Graph::new_full(&mut rng(), 1);
-        // A single node has 0 edges; n*(n-1)/2 = 0, so is_full should be true
         assert_eq!(graph.get_num_edges(), 0);
         assert!(graph.is_full());
     }
@@ -388,11 +376,9 @@ mod graph_tests {
     #[test]
     fn test_is_not_full_when_missing_edge() {
         let graph = Graph::new_full(&mut rng(), 5);
-        // Manually verify; then check a graph missing an edge is not full
         assert!(graph.is_full());
         let partial = Graph::new_empty(&mut rng(), 5);
         assert!(!partial.is_full());
-        // Adding one edge to a 5-node graph: only 1 of 10 edges
         let mut partial2 = Graph::new_empty(&mut rng(), 5);
         partial2.add_edge(0, 1);
         assert!(!partial2.is_full());
@@ -401,12 +387,10 @@ mod graph_tests {
 
     #[test]
     fn test_is_bipartite_disconnected_graph_with_triangle() {
-        // Component 1: triangle (not bipartite); Component 2: isolated node
         let mut graph = Graph::new_empty(&mut rng(), 4);
         graph.add_edge(0, 1);
         graph.add_edge(1, 2);
         graph.add_edge(2, 0); // odd cycle
-        // node 3 is isolated
         assert!(!graph.is_bipartite());
     }
 
@@ -430,7 +414,6 @@ mod graph_tests {
         let graph = Graph::new_empty(&mut rng(), 2);
         let comps = graph.get_connected_components();
         assert_eq!(comps.len(), 2);
-        // Each component has exactly one node
         assert_eq!(comps[0].len(), 1);
         assert_eq!(comps[1].len(), 1);
     }
@@ -443,10 +426,7 @@ mod graph_tests {
         }
     }
 
-    // --- ToOutput tests ---
-
-    /// Helper: parse edges from output lines (skipping the header), normalizing each
-    /// edge so that (min, max) and converting from 1-indexed to 0-indexed.
+    /// The edges after the header line, as sorted 0-based `(min, max)` pairs.
     fn parse_edges(lines: &[&str]) -> Vec<(usize, usize)> {
         let mut edges: Vec<(usize, usize)> = lines
             .iter()
@@ -512,7 +492,6 @@ mod graph_tests {
     #[test]
     fn test_to_output_tree_format() {
         use crate::ToOutput;
-        // Tree format: header is just "n" (no edge count)
         let mut graph = Graph::new_empty(&mut rng(), 4);
         graph.add_edge(0, 1);
         graph.add_edge(1, 2);
@@ -536,7 +515,6 @@ mod graph_tests {
             let output = graph.to_output();
             let lines: Vec<&str> = output.lines().collect();
 
-            // Tree format: header is just "n"
             assert_eq!(lines[0], format!("{n}"));
             assert_eq!(lines.len(), n as usize); // header + (n-1) edges
         }
@@ -554,7 +532,6 @@ mod graph_tests {
             assert_eq!(lines[0], format!("{n} {m}"));
             assert_eq!(lines.len(), (m + 1) as usize);
 
-            // Verify all edges are valid (1-indexed, within bounds)
             for line in lines.iter().skip(1) {
                 let parts: Vec<usize> = line.split_whitespace().map(|s| s.parse().unwrap()).collect();
                 assert_eq!(parts.len(), 2);
@@ -574,16 +551,10 @@ mod graph_tests {
         let lines: Vec<&str> = output.lines().collect();
 
         let parts: Vec<usize> = lines[1].split_whitespace().map(|s| s.parse().unwrap()).collect();
-        // Edge (0,1) should appear as either "1 2" or "2 1"
         let mut edge = vec![parts[0], parts[1]];
         edge.sort_unstable();
         assert_eq!(edge, vec![1, 2]);
     }
-
-    // --- impossible parameters must fail fast ---
-    //
-    // Each of these used to spin forever looking for an edge that cannot exist, or
-    // to panic somewhere deep inside with an unrelated message.
 
     #[test]
     #[should_panic(expected = "at most 3 are possible")]
@@ -633,8 +604,6 @@ mod graph_tests {
         let _ = Graph::new_empty(&mut rng(), -1);
     }
 
-    /// The densest feasible parameters are the ones closest to looping forever, so
-    /// make sure they still terminate and produce exactly what was asked for.
     #[test]
     fn test_maximum_density_graphs_terminate() {
         for n in 2..12 {
@@ -653,9 +622,6 @@ mod graph_tests {
         }
     }
 
-    /// Filling a bipartite graph right up to its capacity is the case where
-    /// guessing pairs almost always finds one that is already there, so it has to
-    /// take the enumerating path instead of guessing its way to the last edges.
     #[test]
     fn test_dense_bipartite_graph_is_generated() {
         let n = 400;
@@ -668,21 +634,12 @@ mod graph_tests {
         assert!(graph.is_connected());
     }
 
-    /// `n * (n - 1) / 2` overflows an i32 well below the node counts a competitive
-    /// programming task can reasonably use.
     #[test]
     fn test_is_full_does_not_overflow_for_large_node_counts() {
         let graph = Graph::new_empty(&mut rng(), 100_000);
         assert!(!graph.is_full());
     }
 
-    /// A graph built from a given seed has to write itself out the same way every
-    /// time, in the same process and in any other.
-    ///
-    /// Holding the edges in a `HashSet` alone would pass every structural test
-    /// above and still fail this one: a hash set is iterated in an order that is
-    /// randomised per process, so the edge list would come out shuffled
-    /// differently on every run and the seed would guarantee nothing.
     #[test]
     fn a_graph_is_written_out_the_same_way_for_the_same_seed() {
         let rendered = |seed: u64, build: fn(&mut Rng, i32) -> Graph| build(&mut Rng::from_seed(seed), 60).to_output();
@@ -698,7 +655,6 @@ mod graph_tests {
         }
     }
 
-    /// The same, for the constructors that take an edge count.
     #[test]
     fn a_random_graph_is_written_out_the_same_way_for_the_same_seed() {
         let rendered = |seed: u64| Graph::new_random(&mut Rng::from_seed(seed), 50, 200).to_output();
@@ -714,8 +670,6 @@ mod graph_tests {
         assert_ne!(connected(3), connected(4));
     }
 
-    /// A graph put together by hand, without any of the random constructors, has
-    /// to be just as reproducible.
     #[test]
     fn a_hand_built_graph_is_written_out_the_same_way_for_the_same_seed() {
         let rendered = |seed: u64| {
@@ -727,7 +681,7 @@ mod graph_tests {
         };
 
         assert_eq!(rendered(7), rendered(7));
-        // Only the order the edges are written in can differ here, and it has to.
+        // Same edges, so only the output shuffle can differ.
         assert_ne!(rendered(7), rendered(8));
     }
 }

@@ -62,14 +62,12 @@ mod subtask_tests {
 
         let mut rng = Rng::from_seed(2);
         let mut seen = std::collections::HashSet::new();
-        // Run enough times to likely hit all three generators
         for _ in 0..200 {
             let gen_idx = st.pick_generator(&mut rng).expect("should return Some");
             let val = st.generate_test(gen_idx, 0);
             assert!(["A", "B", "C"].contains(&val.as_str()), "unexpected: {val}");
             seen.insert(val);
         }
-        // With 200 trials, all 3 should be seen (probability of missing one is ~(2/3)^200 ≈ 0)
         assert_eq!(seen.len(), 3, "expected all generators to be used");
     }
 
@@ -87,8 +85,6 @@ mod subtask_tests {
         assert_eq!(counter.load(Ordering::SeqCst), 3);
     }
 
-    /// The generator that gets picked has to come from the run's own generator,
-    /// so that a seed decides the whole shape of a run and not just the tests.
     #[test]
     fn picking_a_generator_is_reproducible() {
         let subtask = || {
@@ -108,8 +104,6 @@ mod subtask_tests {
         assert_ne!(picks(5), picks(6));
     }
 
-    /// A subtask's checker runs on generated tests, and a test outside the
-    /// subtask's constraints has to be caught rather than written out.
     #[test]
     #[should_panic(expected = "too large")]
     fn a_checker_rejects_a_test_outside_the_constraints() {

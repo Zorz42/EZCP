@@ -10,17 +10,31 @@ use std::collections::{HashMap, HashSet};
 use std::hash::{DefaultHasher, Hash, Hasher};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::thread::{JoinHandle, spawn};
 use std::time::Duration;
 
-/// How many solutions may run at the same time.
-///
-/// Verdicts depend on how much CPU a solution gets to use, so the point of the
-/// cap is to keep the machine from being oversubscribed by the runs themselves:
-/// past a handful of solutions the extra parallelism mostly buys contention.
+/// Kept low so that contention between the runs does not affect verdicts.
 const MAX_CONCURRENT_SOLUTIONS: usize = 4;
 
-/// A unique handle for a compiled C++ program.
+/// Keeps scratch names unique between threads of one process.
+static SCRATCH_FILES: AtomicUsize = AtomicUsize::new(0);
+
+fn scratch_name(hash: u64) -> String {
+    format!("p{hash}-{}-{}.tmp", std::process::id(), SCRATCH_FILES.fetch_add(1, Ordering::Relaxed))
+}
+
+/// Renames a finished file into place, so others see either none or all of it.
+///
+/// On Windows the rename fails while `destination` is open. Names are hashes of
+/// the contents, so an existing `destination` is already the right file.
+fn install(scratch: &Path, destination: &Path) -> Result<()> {
+    std::fs::rename(scratch, destination).or_else(|err| {
+        let _ = std::fs::remove_file(scratch);
+        if destination.exists() { Ok(()) } else { Err(IOError { err, file: path_str(destination) }) }
+    })
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct ProgramHandle {
     pub(crate) id: usize,
@@ -28,36 +42,27 @@ pub struct ProgramHandle {
 
 struct Task {
     program: ProgramHandle,
-    /// Shared, so handing a task to a worker thread does not copy the whole test.
     input: Arc<str>,
-    time_limit: i32, // in milliseconds
+    time_limit: i32,
     result: Option<RunResult>,
 }
 
-/// A unique handle for an asynchronous execution task.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct TaskHandle {
     pub(crate) id: usize,
 }
 
-/// Orchestrates the compilation and parallel execution of C++ solutions.
-///
-/// `CppRunner` manages a build folder, handles program deduplication via hashing,
-/// and provides an asynchronous task-based API for running binaries with time limits.
+/// Compiles C++ programs into a cached build folder and runs them in parallel
+/// under the timer.
 pub struct CppRunner {
-    /// Interface to the system's C++ compiler
     gcc: Gcc,
-    /// Directory where source files and binaries are stored
     build_folder: PathBuf,
-    /// Handle to the internal timer utility
     timer: ProgramHandle,
-    /// Map from program ID to executable path
+    /// Executables, indexed by `ProgramHandle::id`.
     programs: Vec<PathBuf>,
-    /// List of registered execution tasks
     tasks: Vec<Task>,
-    /// Map from source code hash to program handle for deduplication
     hash_to_handle: HashMap<u64, ProgramHandle>,
-    /// Files that should be preserved in the build folder
+    /// What `clean_build_folder` keeps.
     necessary_files: HashSet<PathBuf>,
 }
 
@@ -78,7 +83,7 @@ impl CppRunner {
         let mut res = Self {
             gcc,
             build_folder,
-            timer: ProgramHandle { id: 0 }, // Timer will be built later
+            timer: ProgramHandle { id: 0 },
             programs: Vec::new(),
             tasks: Vec::new(),
             hash_to_handle: HashMap::new(),
@@ -92,19 +97,19 @@ impl CppRunner {
         Ok(res)
     }
 
-    /// Compiles a C++ source string and returns a handle to the executable.
-    ///
-    /// If the same source has already been added, the existing handle is returned.
+    /// Compiles `source_code`, unless it is cached already.
     pub fn add_program(&mut self, source_code: &str) -> Result<ProgramHandle> {
         trace!("Adding program with source code: {source_code}");
         let handle = ProgramHandle { id: self.programs.len() };
         let hash = {
             let mut s = DefaultHasher::new();
             source_code.hash(&mut s);
+            // The version stands in for the flags `Gcc::compile` adds by itself.
+            self.gcc.hash(&mut s);
+            env!("CARGO_PKG_VERSION").hash(&mut s);
             s.finish()
         };
 
-        // Reuse existing program if hashes match
         if let Some(existing_handle) = self.hash_to_handle.get(&hash) {
             trace!("Program already exists with id: {}", existing_handle.id);
             return Ok(*existing_handle);
@@ -116,30 +121,30 @@ impl CppRunner {
         self.necessary_files.insert(source_file.clone());
         self.necessary_files.insert(executable_file.clone());
 
-        // Always rewrite the source. Skipping it when the file exists means a run
-        // that was interrupted mid-write leaves a truncated source behind that is
-        // never repaired, and every later run fails to compile it.
-        std::fs::write(&source_file, source_code).map_err(|err| IOError { err, file: path_str(&source_file) })?;
+        // Written under scratch names and renamed into place, because several
+        // processes (e.g. servers started by a judge) may share the build folder.
+        // The source is always rewritten, to repair one truncated by an old version.
+        let scratch_source = self.build_folder.join(scratch_name(hash));
+        std::fs::write(&scratch_source, source_code).map_err(|err| IOError { err, file: path_str(&scratch_source) })?;
+        install(&scratch_source, &source_file)?;
 
         if !executable_file.exists() {
             trace!("Compiling: {}", executable_file.to_string_lossy());
-            self.gcc.compile(&source_file, Some(&executable_file))?;
+            let scratch_executable = Gcc::transform_output_file(&self.build_folder.join(scratch_name(hash)), None)?;
+            if let Err(err) = self.gcc.compile(&source_file, Some(&scratch_executable)) {
+                let _ = std::fs::remove_file(&scratch_executable);
+                return Err(err);
+            }
+            install(&scratch_executable, &executable_file)?;
         }
 
-        // Record the program only once it really exists. Remembering the handle up
-        // front would make a later `add_program` of the same source hand out an id
-        // that was never filled in, so it would silently address the next program
-        // that did compile.
+        // Only now, so a failed compile leaves no handle to a missing program.
         self.programs.push(executable_file);
         self.hash_to_handle.insert(hash, handle);
         Ok(handle)
     }
 
-    /// Registers a new execution task.
-    ///
-    /// * `program` - Handle to the executable to run.
-    /// * `input` - Data to be sent to stdin.
-    /// * `time_limit` - Maximum CPU time in milliseconds.
+    /// Queues a run of `program`; `time_limit` is in milliseconds of CPU time.
     pub fn add_task(&mut self, program: ProgramHandle, input: Arc<str>, time_limit: i32) -> TaskHandle {
         trace!("Adding task for program id: {}, time limit: {}", program.id, time_limit);
         let handle = TaskHandle { id: self.tasks.len() };
@@ -152,36 +157,25 @@ impl CppRunner {
         handle
     }
 
-    /// Removes all registered tasks.
     pub fn clear_tasks(&mut self) {
         self.tasks.clear();
     }
 
-    /// Moves the input of a task out of the runner.
-    ///
-    /// Once a task has run the runner has no further use for its input, while the
-    /// caller usually needs it one more time to run the checker. Handing it over
-    /// saves reading the whole test back from disk, and dropping the runner's
-    /// reference releases the test as soon as it has been checked.
+    /// Hands over a finished task's input, so the runner no longer keeps it alive.
     pub fn take_input(&mut self, task_handle: TaskHandle) -> Arc<str> {
         std::mem::take(&mut self.tasks[task_handle.id].input)
     }
 
-    /// Retrieves the result of a completed task.
-    ///
     /// # Panics
-    /// Panics if the task has not finished running.
+    /// Panics if the task has not run.
     #[allow(clippy::expect_used)]
     pub fn get_result(&self, task_handle: TaskHandle) -> RunResult {
         self.tasks[task_handle.id].result.clone().expect("Task result not available")
     }
 
-    /// Runs multiple programs against a single input sequentially or in parallel.
-    ///
-    /// This is a convenience method that manages task creation and result collection.
+    /// Runs every program on the same input.
     pub fn check_programs(&mut self, input: &str, programs: &[ProgramHandle], time_limit: i32) -> Result<Vec<RunResult>> {
         self.clear_tasks();
-        // One copy of the input for all of the programs, however many there are.
         let input: Arc<str> = Arc::from(input);
         let mut handles = Vec::new();
         for &program in programs {
@@ -196,13 +190,8 @@ impl CppRunner {
         Ok(results)
     }
 
-    /// Deletes all files in the build directory that are not associated with
-    /// currently registered programs.
-    ///
-    /// Every edit to a solution compiles to a new binary under a new name, so
-    /// without this the build folder keeps every binary the task has ever had.
-    /// Call it once all programs have been added, never before: a binary that is
-    /// removed here has to be compiled again.
+    /// Deletes the files in the build folder that belong to no added program.
+    /// Call it only once every program has been added.
     pub fn clean_build_folder(&self) -> Result<()> {
         trace!("Cleaning build folder: {}", self.build_folder.to_string_lossy());
 
@@ -216,12 +205,8 @@ impl CppRunner {
                 file: path_str(&self.build_folder),
             })?;
             let path = entry.path();
-            // Only ever remove plain files, so a directory somebody put in the
-            // build folder is left alone.
             if !self.necessary_files.contains(&path) && path.is_file() {
-                // Best effort: a leftover we cannot delete (a binary another EZCP
-                // run still has open, an antivirus holding the file on Windows)
-                // costs some disk space, which is no reason to fail the run.
+                // A leftover only costs disk space, which is no reason to fail.
                 if let Err(err) = std::fs::remove_file(&path) {
                     warn!("Could not remove {} from the build folder: {err}", path_str(&path));
                 }
@@ -237,16 +222,12 @@ impl CppRunner {
         let mut threads: Vec<(JoinHandle<Result<RunResult>>, usize)> = Vec::new();
 
         let mut next_task = 0;
-        // Hold on to the first failure rather than returning straight away: every
-        // worker that is already running has a solution process attached to it, and
-        // leaving through `?` would detach both and leave them running.
+        // Returning on the first error would leave running workers detached.
         let mut first_error = None;
 
         let progress_bar = logger.map(|logger| ScopedProgressBar::new(logger, self.tasks.len() as u64));
 
-        // Once something has failed no further task is started, so the remaining
-        // ones stop counting towards the work left to do; only the workers that
-        // are already running still have to be waited for.
+        // After a failure no new task is started; running ones are waited for.
         while (next_task < self.tasks.len() && first_error.is_none()) || !threads.is_empty() {
             while threads.len() < num_threads && next_task < self.tasks.len() && first_error.is_none() {
                 let task = &self.tasks[next_task];

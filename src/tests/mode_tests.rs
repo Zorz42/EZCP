@@ -47,8 +47,6 @@ mod mode_tests {
 
     #[test]
     fn unknown_arguments_are_rejected() {
-        // Task binaries are run by hand and by scripts; an ignored typo would mean
-        // silently generating something other than what was asked for.
         let err = CliOptions::parse(["--nonsense"]).unwrap_err();
         assert!(err.to_string().contains("--nonsense"), "{err}");
     }

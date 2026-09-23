@@ -1,17 +1,11 @@
-//! Procedural macros for [EZCP](https://docs.rs/ezcp).
-//!
-//! Nothing here is meant to be depended on directly; `ezcp` re-exports it.
+//! Procedural macros for [EZCP](https://docs.rs/ezcp), which re-exports them.
 #![warn(missing_docs)]
 use proc_macro::TokenStream;
 use quote::quote;
 use syn::{Data, DeriveInput, parse_macro_input};
 
-/// Derives `ToOutput` for a struct, writing its fields out in declaration order.
-///
-/// Each field is rendered with its own `ToOutput` impl and separated by a
-/// newline; fields that render to nothing are skipped, so a struct holding an
-/// empty `Vec` does not leave a blank line behind. Only structs are supported —
-/// an enum or a union is reported as a compile error.
+/// Derives `ToOutput` for a struct: its fields in order, one per line, skipping
+/// fields that render empty.
 #[proc_macro_derive(ToOutput)]
 pub fn to_output_derive(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
@@ -20,12 +14,10 @@ pub fn to_output_derive(input: TokenStream) -> TokenStream {
     let generics = input.generics;
     let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
 
-    // Each field goes on its own line. A field that produced nothing is skipped
-    // entirely, so an empty collection does not turn into a blank line.
     let field_output = |accessor: proc_macro2::TokenStream| {
         quote! {
             {
-                let field = #accessor.to_output();
+                let field = ::ezcp::ToOutput::to_output(#accessor);
                 if !field.is_empty() {
                     res.push_str(&field);
                     if !res.ends_with('\n') {
@@ -40,8 +32,7 @@ pub fn to_output_derive(input: TokenStream) -> TokenStream {
         Data::Struct(data_struct) => match data_struct.fields {
             syn::Fields::Named(fields_named) => {
                 let field_calls = fields_named.named.into_iter().filter_map(|field| {
-                    // A named field always has an identifier; this only spells that
-                    // out for the type system rather than asserting it.
+                    // Always `Some` for named fields.
                     let field_name = field.ident?;
                     Some(field_output(quote! { self.#field_name }))
                 });
@@ -56,18 +47,17 @@ pub fn to_output_derive(input: TokenStream) -> TokenStream {
             }
             syn::Fields::Unit => quote! {},
         },
-        // Report through the compiler rather than panicking, so the user gets an
-        // error pointing at their type instead of a proc macro backtrace.
         _ => {
             return syn::Error::new(name.span(), "ToOutput can only be derived for structs").to_compile_error().into();
         }
     };
 
+    // Full paths, so `#[derive(ezcp::ToOutput)]` works without importing the trait.
     let expanded = quote! {
         #[automatically_derived]
-        impl #impl_generics ToOutput for #name #ty_generics #where_clause {
-            fn to_output(self) -> String {
-                let mut res = String::new();
+        impl #impl_generics ::ezcp::ToOutput for #name #ty_generics #where_clause {
+            fn to_output(self) -> ::std::string::String {
+                let mut res = ::std::string::String::new();
                 #fields_output
                 res
             }

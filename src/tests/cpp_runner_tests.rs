@@ -1,7 +1,7 @@
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 pub mod cpp_runner_tests {
-    use crate::Error::CompilerError;
+    use crate::Error::{CompilerError, TimerFailed};
     use crate::runner::cpp_runner::CppRunner;
     use crate::runner::exec_runner::RunResult;
     use crate::tests::test_shared::initialize_logger;
@@ -10,9 +10,7 @@ pub mod cpp_runner_tests {
     use std::time::{Duration, Instant};
     use tempfile::TempDir;
 
-    /// Runs `body` on a helper thread and fails the test if it does not finish in
-    /// time, so that a regression shows up as a failure instead of a test run
-    /// that hangs until CI kills it.
+    /// Fails the test instead of hanging if `body` does not finish in time.
     #[allow(clippy::panic)]
     fn run_within<F: FnOnce() -> T + Send + 'static, T: Send + 'static>(timeout: Duration, what: &str, body: F) -> T {
         let (sender, receiver) = std::sync::mpsc::channel();
@@ -148,7 +146,6 @@ pub mod cpp_runner_tests {
             let _program_handle = runner.add_program(HELLO_WORLD_PROGRAM).unwrap();
         }
 
-        // make sure it doesn't take too long
         assert!(time.elapsed().as_secs() < 10, "Adding the same program 100 times took too long");
 
         drop(tempdir);
@@ -164,7 +161,6 @@ pub mod cpp_runner_tests {
         let program_source = "
         int main() {
             while (true) {
-                // Infinite loop to simulate TLE
             }
             return 0;
         }
@@ -173,15 +169,11 @@ pub mod cpp_runner_tests {
         let program_handle = runner.add_program(program_source).unwrap();
         let result = &runner.check_programs("1\n", &[program_handle], 1000).unwrap()[0];
 
-        // Check that the result is indeed a TLE
         assert!(matches!(result, RunResult::TimedOut));
 
         drop(tempdir);
     }
 
-    /// The kernel side of the limit only has whole-second granularity, so a
-    /// solution can finish a run that used more CPU than the limit allows. The
-    /// verdict has to follow the limit that was asked for, not the rounded one.
     #[test]
     fn test_program_over_a_sub_second_limit_is_a_timeout() {
         initialize_logger();
@@ -189,9 +181,7 @@ pub mod cpp_runner_tests {
         let tempdir = TempDir::new().unwrap();
         let mut runner = CppRunner::new(tempdir.path()).unwrap();
 
-        // Spins for 400 ms: well past a 100 ms limit, but comfortably inside the
-        // one second the kernel limit rounds up to, so the timer itself reports
-        // the run as finished.
+        // 400 ms: over the limit, but under the one second the timer rounds up to.
         let program_source = "
         #include <chrono>
         int main() {
@@ -207,7 +197,6 @@ pub mod cpp_runner_tests {
         let over_the_limit = &runner.check_programs("", &[program_handle], 100).unwrap()[0];
         assert!(matches!(over_the_limit, RunResult::TimedOut), "expected TLE, got {over_the_limit:?}");
 
-        // The very same run is fine once it is given enough time.
         let within_the_limit = &runner.check_programs("", &[program_handle], 5000).unwrap()[0];
         assert!(matches!(within_the_limit, RunResult::Ok(_, _)), "expected OK, got {within_the_limit:?}");
 
@@ -225,7 +214,6 @@ pub mod cpp_runner_tests {
         let program_source = "
         #include <signal.h>
         int main() {
-            // Force a deterministic crash via SIGSEGV
             raise(SIGSEGV);
             return 0;
         }
@@ -234,7 +222,6 @@ pub mod cpp_runner_tests {
         let program_handle = runner.add_program(program_source).unwrap();
         let result = &runner.check_programs("1\n", &[program_handle], 1000).unwrap()[0];
 
-        // Check that the result is indeed a crash
         assert!(matches!(result, RunResult::Crashed));
 
         drop(tempdir);
@@ -248,7 +235,6 @@ pub mod cpp_runner_tests {
         let tempdir = TempDir::new().unwrap();
         let mut runner = CppRunner::new(tempdir.path()).unwrap();
 
-        // Force access violation by writing through null pointer, should crash
         let program_source = "
         #include <windows.h>
         int main() {
@@ -269,9 +255,7 @@ pub mod cpp_runner_tests {
         drop(tempdir);
     }
 
-    /// A solution is free to stop reading once it has what it needs, which stalls
-    /// EZCP on a full input pipe until the solution (and the timer holding the
-    /// other read end) goes away.
+    /// Must not leave EZCP blocked writing to a full input pipe.
     #[test]
     fn test_solution_that_ignores_most_of_its_input() {
         initialize_logger();
@@ -286,7 +270,7 @@ pub mod cpp_runner_tests {
         }
         ";
 
-        // Comfortably larger than the pipe buffer on every supported platform.
+        // Larger than any platform's pipe buffer.
         let mut input = String::from("7\n");
         for i in 0..500_000 {
             write!(input, "{i} ").unwrap();
@@ -305,8 +289,6 @@ pub mod cpp_runner_tests {
         }
     }
 
-    /// Reading a large input while writing a large output means neither side may
-    /// block waiting for the other.
     #[test]
     fn test_large_input_and_large_output() {
         initialize_logger();
@@ -344,8 +326,6 @@ pub mod cpp_runner_tests {
         }
     }
 
-    /// Solutions routinely keep debug prints on stderr. That must not be mistaken
-    /// for the timer's own report.
     #[test]
     fn test_solution_writing_to_stderr_is_still_measured() {
         initialize_logger();
@@ -353,7 +333,7 @@ pub mod cpp_runner_tests {
         let tempdir = TempDir::new().unwrap();
         let mut runner = CppRunner::new(tempdir.path()).unwrap();
 
-        // Includes text that looks like a timing line and an unterminated line.
+        // Includes a fake marker and an unterminated line.
         let program_source = r#"
         #include <iostream>
         int main() {
@@ -375,13 +355,113 @@ pub mod cpp_runner_tests {
         drop(tempdir);
     }
 
-    #[cfg(not(windows))]
+    #[test]
+    fn test_runaway_output_is_stopped() {
+        initialize_logger();
+
+        let tempdir = TempDir::new().unwrap();
+        let mut runner = CppRunner::new(tempdir.path()).unwrap();
+
+        // Large writes, so the limit is reached quickly even on a slow machine.
+        let program_source = "
+        #include <cstdio>
+        #include <string>
+        int main() {
+            std::string chunk(1 << 20, 'x');
+            for (;;) {
+                fwrite(chunk.data(), 1, chunk.size(), stdout);
+            }
+        }
+        ";
+
+        let program_handle = runner.add_program(program_source).unwrap();
+        let result = run_within(Duration::from_secs(60), "a solution that never stops printing", move || {
+            runner.check_programs("", &[program_handle], 5000).unwrap().remove(0)
+        });
+
+        assert_eq!(result, RunResult::Crashed);
+    }
+
+    #[test]
+    fn test_solution_writing_a_lot_to_stderr_is_still_measured() {
+        initialize_logger();
+
+        let tempdir = TempDir::new().unwrap();
+        let mut runner = CppRunner::new(tempdir.path()).unwrap();
+
+        // 16 MB, far more than the tail that is kept.
+        let program_source = r"
+        #include <iostream>
+        #include <string>
+        int main() {
+            std::string line(1 << 12, 'd');
+            for (int i = 0; i < 4096; i++) {
+                std::cerr << line << '\n';
+            }
+            std::cout << 42 << std::endl;
+        }
+        ";
+
+        let program_handle = runner.add_program(program_source).unwrap();
+        let result = &runner.check_programs("", &[program_handle], 5000).unwrap()[0];
+
+        assert!(matches!(result, RunResult::Ok(_, output) if output.trim() == "42"), "Expected OK with 42 but got {result:?}");
+    }
+
+    /// As when a judge starts many `--serve` processes on a fresh build folder.
+    #[test]
+    fn test_runners_sharing_a_build_folder() {
+        initialize_logger();
+
+        let tempdir = TempDir::new().unwrap();
+        let workers = (0..8)
+            .map(|_| {
+                let build_folder = tempdir.path().to_path_buf();
+                std::thread::spawn(move || -> crate::Result<RunResult> {
+                    let mut runner = CppRunner::new(&build_folder)?;
+                    let program_handle = runner.add_program(HELLO_WORLD_PROGRAM)?;
+                    Ok(runner.check_programs("", &[program_handle], 5000)?.remove(0))
+                })
+            })
+            .collect::<Vec<_>>();
+
+        for worker in workers {
+            let result = worker.join().unwrap();
+            assert!(matches!(&result, Ok(RunResult::Ok(_, output)) if output.trim() == "Hello, World!"), "got {result:?}");
+        }
+
+        // The timer and the program, each a source and a binary; no scratch files.
+        assert_eq!(build_folder_files(tempdir.path()).len(), 4, "{:?}", build_folder_files(tempdir.path()));
+    }
+
+    /// A crash would blame the solution, and count as a failure of a partial
+    /// solution that never ran.
+    #[test]
+    fn test_missing_binary_is_not_reported_as_a_crash() {
+        initialize_logger();
+
+        let tempdir = TempDir::new().unwrap();
+        let mut runner = CppRunner::new(tempdir.path()).unwrap();
+        let binaries = || {
+            build_folder_files(tempdir.path())
+                .into_iter()
+                .filter(|path| path.extension().is_none_or(|extension| extension != "cpp"))
+                .collect::<Vec<_>>()
+        };
+
+        let timer_only = binaries();
+        let program_handle = runner.add_program(HELLO_WORLD_PROGRAM).unwrap();
+        let program = binaries().into_iter().find(|path| !timer_only.contains(path)).unwrap();
+        std::fs::remove_file(&program).unwrap();
+
+        let result = runner.check_programs("", &[program_handle], 1000);
+        assert!(matches!(result, Err(TimerFailed { .. })), "got {result:?}");
+    }
+
     fn build_folder_files(build_folder: &std::path::Path) -> Vec<std::path::PathBuf> {
         std::fs::read_dir(build_folder).unwrap().flatten().map(|entry| entry.path()).collect()
     }
 
-    /// A failing task must not strand the ones that are still running, and it must
-    /// not leave `run_tasks` waiting for tasks it has decided never to start.
     #[test]
     #[cfg(not(windows))]
     fn test_run_tasks_reports_failure_without_hanging() {
@@ -389,8 +469,7 @@ pub mod cpp_runner_tests {
 
         let result = run_within(Duration::from_secs(60), "running tasks that all fail to start", || {
             let tempdir = TempDir::new().unwrap();
-            // Creating the runner builds the timer, which is the only binary in the
-            // build folder at this point.
+            // The timer is the only binary so far.
             let mut runner = CppRunner::new(tempdir.path()).unwrap();
             let binaries: Vec<_> = build_folder_files(tempdir.path()).into_iter().filter(|path| path.extension().is_none()).collect();
             assert_eq!(binaries.len(), 1, "the timer should be the only binary in a fresh build folder");
@@ -398,9 +477,7 @@ pub mod cpp_runner_tests {
 
             let program_handle = runner.add_program(HELLO_WORLD_PROGRAM).unwrap();
 
-            // With the timer gone no task can be started at all, so every one of
-            // them fails. More tasks than worker threads, so some are still queued
-            // when the first failure comes in.
+            // Every task now fails. More tasks than workers, so some are still queued.
             std::fs::remove_file(&timer).unwrap();
 
             for _ in 0..20 {
@@ -412,8 +489,6 @@ pub mod cpp_runner_tests {
         assert!(result.is_err(), "a task that cannot be started must be reported, got {result:?}");
     }
 
-    /// Cleaning the build folder must drop strays but keep everything the runner
-    /// still needs, which only holds if all paths are normalised the same way.
     #[test]
     fn test_clean_build_folder_keeps_compiled_programs() {
         initialize_logger();
@@ -429,7 +504,6 @@ pub mod cpp_runner_tests {
 
         assert!(!stray.exists(), "cleanup should have removed the stray file");
 
-        // Both the solution and the timer must have survived the cleanup.
         runner.clear_tasks();
         let result = &runner.check_programs("", &[program_handle], 1000).unwrap()[0];
         assert!(matches!(result, RunResult::Ok(..)), "Expected OK but got {result:?}");
@@ -447,7 +521,6 @@ pub mod cpp_runner_tests {
 
         for it in 0..30 {
             if it == 1 {
-                // After the first iteration, we should have a cache
                 start = Instant::now();
             }
             let mut runner = CppRunner::new(tempdir.path()).unwrap();

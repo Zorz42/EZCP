@@ -14,7 +14,6 @@ jobs:
     name: Test (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     strategy:
-      # Always run every platform, so one failure does not hide the others.
       fail-fast: false
       matrix:
         os: [ ubuntu-latest, macos-latest, windows-latest ]
@@ -27,8 +26,7 @@ jobs:
       - name: Rust Cache
         uses: Swatinem/rust-cache@v2.7.3
 
-      # EZCP shells out to g++, so the C++ toolchain is part of what is tested.
-      # Linux and macOS runners already ship one; Windows needs MinGW on PATH.
+      # Linux and macOS runners ship a C++ compiler; Windows needs MinGW on PATH.
       - name: Set up MinGW
         if: runner.os == 'Windows'
         shell: bash
@@ -63,15 +61,8 @@ jobs:
       - name: Rust Cache
         uses: Swatinem/rust-cache@v2.7.3
 
-      # `rust-version` in Cargo.toml is a promise to users, and nothing else in
-      # this workflow tests it: every other job runs on stable.
-      #
-      # --locked so this checks the committed Cargo.lock. A dependency that
-      # raises its own MSRV should turn this job red rather than break someone
-      # who took the crate at its word.
-      #
-      # `check` is enough. There is no build script, and timer.cpp is compiled
-      # at run time, so nothing here needs a C++ compiler.
+      # --locked, so a dependency that raises its MSRV fails here. `check` is
+      # enough: timer.cpp is only compiled at run time.
       - name: Check on the minimum supported Rust version
         run: cargo +1.88 check --workspace --all-targets --locked
 

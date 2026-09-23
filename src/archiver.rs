@@ -7,8 +7,6 @@ use std::path::{Path, PathBuf};
 use zip::write::SimpleFileOptions;
 
 pub fn archive_files(files: &[PathBuf], archive_path: &Path, logger: &MultiProgress) -> Result<()> {
-    // Paths are only ever guaranteed to be UTF-8 on some platforms, so never
-    // unwrap on the conversion: a lossy label is enough for error messages.
     let mut zipper = zip::ZipWriter::new(std::fs::File::create(archive_path).map_err(|err| Error::IOError {
         err,
         file: archive_path.to_string_lossy().into_owned(),
@@ -28,9 +26,7 @@ pub fn archive_files(files: &[PathBuf], archive_path: &Path, logger: &MultiProgr
         zipper.write_all(&input_file).map_err(|err| Error::IOError { err, file: file_name.clone() })?;
     }
 
-    // Write the central directory by hand instead of leaving it to `Drop`, which
-    // has nowhere to report a failure to. Without this a full disk would leave a
-    // truncated archive behind and the run would still be reported as a success.
+    // `Drop` would finish it too, but silently ignore a failure such as a full disk.
     zipper.finish().map_err(|err| Error::ZipError { err })?;
 
     Ok(())

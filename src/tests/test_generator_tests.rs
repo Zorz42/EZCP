@@ -40,8 +40,6 @@ mod test_generator_tests {
         assert_eq!(generator.generate(7), "3\n1 2 3\n");
     }
 
-    /// The whole point of handing a generator a seed: the same one has to give
-    /// the same test back, and a different one has to give a different test.
     #[test]
     fn a_seed_decides_what_a_generator_produces() {
         let generator = TestGenerator::new(|rng: &mut Rng| rng.random_range(0..1_000_000).to_string());
@@ -50,8 +48,6 @@ mod test_generator_tests {
         assert_ne!(generator.generate(123), generator.generate(124));
     }
 
-    /// A generator must not be able to tell how many tests came before it, or a
-    /// test could not be rebuilt on its own from its seed.
     #[test]
     fn a_generator_does_not_depend_on_earlier_calls() {
         let generator = TestGenerator::new(|rng: &mut Rng| rng.random_range(0..1_000_000).to_string());

@@ -27,7 +27,6 @@ pub mod gcc_tests {
         "#;
 
         let source_path = tempdir.path().join("test.cpp");
-        // Write the source code to a file
         std::fs::write(&source_path, source_code).unwrap();
         let out_file = gcc.compile(&source_path, None).unwrap();
 
@@ -55,7 +54,6 @@ pub mod gcc_tests {
         "#;
 
         let source_path = tempdir.path().join("test.cpp");
-        // Write the source code to a file
         std::fs::write(&source_path, source_code).unwrap();
         let out_file = gcc.compile(&source_path, None).unwrap();
 
@@ -84,14 +82,12 @@ pub mod gcc_tests {
         .replace("KEY", &key.to_string());
 
         let source_path = tempdir.path().join("test.cpp");
-        // Write the source code to a file
         std::fs::write(&source_path, source_code).unwrap();
 
         let output_path = gcc.compile(&source_path, None).unwrap();
 
         assert!(output_path.exists());
 
-        // run the compiled program
         let output = std::process::Command::new(&output_path).output().unwrap();
 
         assert!(output.status.success());
@@ -109,7 +105,6 @@ pub mod gcc_tests {
         let source_path = tempdir.path().join("foo.cpp");
         std::fs::write(&source_path, "int main(){return 0;}").unwrap();
 
-        // No explicit output path → based on source
         let transformed = Gcc::transform_output_file(&source_path, None).unwrap();
 
         #[cfg(windows)]
@@ -117,7 +112,6 @@ pub mod gcc_tests {
 
         #[cfg(unix)]
         {
-            // No extension on Unix; filename should be exactly "foo"
             assert_eq!(transformed.extension(), None);
             assert_eq!(transformed.file_name().unwrap().to_string_lossy(), "foo");
         }
@@ -125,8 +119,6 @@ pub mod gcc_tests {
         drop(tempdir);
     }
 
-    /// On Unix the binary name is the source name without its extension, so a
-    /// source that has no extension must not be overwritten by its own binary.
     #[test]
     fn test_transform_output_file_never_overwrites_the_source() {
         let tempdir = tempfile::TempDir::new().unwrap();
@@ -137,15 +129,12 @@ pub mod gcc_tests {
 
         assert_ne!(transformed, source_path);
         assert!(transformed.is_absolute(), "{transformed:?} should be absolute");
-        // Predicting the path must not leave a placeholder behind.
         assert!(!transformed.exists(), "{transformed:?} should not have been created");
         assert_eq!(std::fs::read_to_string(&source_path).unwrap(), "int main(){return 0;}");
 
         drop(tempdir);
     }
 
-    /// The predicted path has to land in the requested directory, which is what
-    /// lets the build folder cleanup recognise its own binaries.
     #[test]
     fn test_transform_output_file_stays_in_its_directory() {
         let tempdir = tempfile::TempDir::new().unwrap();
@@ -178,14 +167,11 @@ pub mod gcc_tests {
         "#;
 
         let source_path = tempdir.path().join("test.cpp");
-        // Write the source code to a file
         std::fs::write(&source_path, source_code).unwrap();
         assert!(matches!(gcc.compile(&source_path, None), Err(Error::CompilerError { .. })));
 
         drop(tempdir);
     }
-
-    // --- Additional GCC coverage from ANALYSIS.md ---
 
     fn compile_hello_world_with(gcc: &Gcc) {
         let tempdir = tempfile::TempDir::new().unwrap();

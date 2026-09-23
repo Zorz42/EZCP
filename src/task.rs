@@ -22,105 +22,59 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::Once;
 
-/// The master seed a task uses when none is given.
-///
-/// It is a constant rather than something drawn from the clock so that running a
-/// task twice produces the same test data twice. Pass `--seed random` (or
-/// [`Task::with_random_seed`]) to explore new tests instead; the seed that was
-/// used is always written to `results.txt`.
+/// The master seed used when none is given, so that repeated runs produce the
+/// same tests.
 pub const DEFAULT_SEED: u64 = 0x455A_4350_5345_4544;
 
-/// How many times seed mode rebuilds each finished test to prove it is
-/// reproducible.
-///
-/// Seed mode keeps nothing but the recipe for a test, so a generator that is not
-/// reproducible costs the whole run: there is no test data to fall back on, and the
-/// mistake would only surface much later, when a judge asked for a test and got
-/// something else. Ten rebuilds is cheap next to generating and judging the tests
-/// in the first place, and it catches a generator that is only occasionally
-/// unfaithful as well as one that never repeats itself.
+/// How many times seed mode rebuilds each finished test to check that its seed
+/// reproduces it.
 pub const DEFAULT_REPRODUCIBILITY_CHECKS: usize = 10;
 
 pub static LOGGER_INIT: Once = Once::new();
 
-// Convert a Path to an owned String for error contexts and logs
 pub fn path_str(p: &Path) -> String {
     p.to_string_lossy().into_owned()
 }
 
-/// Represents an entire competitive programming task.
+/// A competitive programming task: its solutions, subtasks and generation
+/// settings.
 ///
-/// A `Task` manages subtasks, solutions and test generation settings. It is put
-/// together with a builder-like pattern and then run with [`Task::run`], which
-/// compiles every solution, generates the tests and verifies the outcomes.
-///
-/// Test generation keeps going until each solution that is expected to fail on a
-/// subtask has failed on at least `min_failures_per_solution` of that subtask's
-/// tests, or until `max_tries` candidates in a row have added nothing.
+/// For each subtask, test generation keeps going until every partial solution
+/// meant to fail it has failed `min_failures` of its tests, or `max_tries`
+/// candidates in a row have added nothing.
 pub struct Task<T: ToOutput> {
-    /// Name of the task
     pub(crate) name: String,
-    /// Directory where the whole problem is stored
     pub(crate) problem_path: PathBuf,
-    /// Directory where generated tests will be saved
     pub(crate) tests_path: PathBuf,
-    /// Time limit in milliseconds for solutions
+    /// In milliseconds of CPU time.
     pub(crate) time_limit: i32,
-    /// Path to the final ZIP archive containing all tests
     pub(crate) tests_archive_path: PathBuf,
-    /// Where the master seed for test generation comes from
     pub(crate) seed: SeedChoice,
-    /// How many times each finished test is rebuilt to check it comes out the
-    /// same. `None` leaves it to the mode: see [`Task::reproducibility_checks`].
+    /// `None` leaves it to the mode, see [`Task::reproducibility_checks`].
     pub(crate) reproducibility_checks: Option<usize>,
-    /// Closure to determine input file names: `(test_id, subtask_id, id_in_subtask) -> String`
+    /// `(test_id, subtask_id, id_in_subtask) -> file name`
     pub(crate) get_input_file_name: Box<dyn Fn(i32, i32, i32) -> String>,
-    /// Closure to determine output file names: `(test_id, subtask_id, id_in_subtask) -> String`
     pub(crate) get_output_file_name: Box<dyn Fn(i32, i32, i32) -> String>,
-    /// Internal build directory for compiling solutions
     pub(crate) build_folder_path: PathBuf,
-    /// Registered subtasks
     pub(crate) subtasks: Vec<Subtask<T>>,
-    /// Source code of the correct (main) solution
     pub(crate) solution_source: String,
-    /// Partial solutions to be verified against subtasks
+    /// The partial solutions.
     pub(crate) solutions: Vec<Solution>,
-    /// Target number of failures per "bad" solution per subtask
     pub(crate) min_failures_per_solution: usize,
-    /// Maximum number of candidates in a row that may add no failure before the
-    /// search for supplemental tests gives up
     pub(crate) max_tries: usize,
-    /// Test checker, used for problems with multiple different possible outputs.
-    /// By default it is a diff checker (up to whitespace).
-    /// The function takes 3 arguments: (`test_input`, `correct_output`, `program_output`)
-    /// and returns `true` if the program output is accepted (correct), `false` if rejected.
+    /// `(input, official_output, output) -> accepted`
     pub(crate) checker: fn(&str, &str, &str) -> bool,
-    /// If you want to automatically trim whitespace from outputs
     pub(crate) trim_whitespace: bool,
-
-    /// Log level for output
     pub(crate) debug_level: LevelFilter,
-    /// Progress reporting manager
     pub(crate) logger: MultiProgress,
 }
 
-/// The two files one generated test is written to.
 struct TestFiles {
-    /// Name of the input file, from the task's own naming closure.
     input: String,
-    /// Name of the output file.
     output: String,
 }
 
-/// Formats a byte count for a report line, in whichever unit keeps it readable.
-///
-/// A seed mode run produces a few kilobytes where a normal one produces
-/// megabytes, and the same line reports both.
-/// Adds up the size of every file below `path`.
-///
-/// A directory that cannot be read counts as nothing rather than as an error:
-/// this only ever feeds the size line in the summary, and a run that produced
-/// the tests should not fail over the report about them.
+/// An unreadable directory counts as empty: this only feeds the size report.
 fn dir_size(path: &Path) -> u64 {
     let Ok(entries) = fs::read_dir(path) else {
         return 0;
@@ -145,12 +99,8 @@ fn format_size(bytes: u64) -> String {
     }
 }
 
-/// Removes a directory tree, retrying briefly before giving up.
-///
-/// The previous run leaves hundreds of test files behind, and on Windows an
-/// antivirus scanner or the search indexer routinely still holds one of them
-/// open for a moment, which makes a single `remove_dir_all` fail for no lasting
-/// reason.
+/// On Windows an antivirus scanner or the search indexer often holds one of the
+/// old test files open for a moment, which makes a single attempt fail.
 fn remove_dir_all_with_retry(path: &Path) -> Result<()> {
     const ATTEMPTS: u32 = 5;
 
@@ -170,21 +120,15 @@ fn remove_dir_all_with_retry(path: &Path) -> Result<()> {
     Ok(())
 }
 
-/// Describes how two supposedly identical tests differ, briefly enough to sit in
-/// an error message.
-///
-/// The point of failure is what matters when a generator turns out to be
-/// unfaithful, so this shows where the two first part ways rather than dumping
-/// two tests that may be megabytes each.
+/// Where two supposedly identical tests first differ, short enough for an error
+/// message.
 fn describe_difference(first: &str, second: &str) -> String {
-    /// How much of each version to quote around the first difference.
     const EXCERPT_WIDTH: usize = 24;
 
     fn excerpt(text: &str, offset: usize) -> String {
         let bytes = text.as_bytes();
         let end = offset.saturating_add(EXCERPT_WIDTH).min(bytes.len());
-        // Lossy, because the cut can land in the middle of a multi-byte
-        // character and this is only ever shown to a person.
+        // The cut can split a multi-byte character.
         String::from_utf8_lossy(&bytes[offset.min(bytes.len())..end]).into_owned()
     }
 
@@ -210,10 +154,7 @@ fn diff_checker(_test_input: &str, official_output: &str, program_output: &str) 
 }
 
 impl<T: ToOutput> Task<T> {
-    /// Creates a new `Task` with the given name and root directory.
-    ///
-    /// * `name` - Descriptive name for the task.
-    /// * `path` - Root directory where tests and build files will be stored.
+    /// Creates a task whose tests, archive and build files go under `path`.
     #[must_use]
     pub fn new(name: &str, path: &Path) -> Self {
         let build_folder_path = path.join("build");
@@ -258,7 +199,7 @@ impl<T: ToOutput> Task<T> {
         Ok(())
     }
 
-    /// Sets the source code of the correct (main) solution.
+    /// Sets the source code of the official solution.
     ///
     /// # Panics
     /// Panics if it is called a second time.
@@ -269,65 +210,52 @@ impl<T: ToOutput> Task<T> {
         self
     }
 
-    /// Sets custom checker
+    /// Sets the checker, called as `checker(input, official_output, output)`,
+    /// for tasks with more than one correct answer. The default compares
+    /// whitespace-separated tokens.
     #[must_use]
     pub fn with_checker(mut self, checker: fn(&str, &str, &str) -> bool) -> Self {
         self.checker = checker;
         self
     }
 
-    /// Adds a subtask to the task.
+    /// Adds a subtask.
     #[must_use]
     pub fn with_subtask(mut self, subtask: Subtask<T>) -> Self {
         self.subtasks.push(subtask);
         self
     }
 
-    /// Trims trailing whitespace from each line of a solution's output, and
-    /// trailing blank lines from the end of it. On by default.
+    /// Whether to normalise the whitespace of inputs and official outputs: each
+    /// run of whitespace becomes one newline if it contains one and one space
+    /// otherwise, and the text ends in a single newline. On by default.
     ///
-    /// This changes the bytes of the test data, so it has to be set the same way
-    /// when tests are generated and when a stub of one is served.
+    /// Stubs have to be served with the same setting they were written with.
     #[must_use]
     pub const fn trim_whitespace(mut self, trim_whitespace: bool) -> Self {
         self.trim_whitespace = trim_whitespace;
         self
     }
 
-    /// Adds a solution (partial or incorrect) to be verified.
-    ///
-    /// * `passes_subtasks` - List of subtask indices this solution is expected to
-    ///   pass, counted from zero. An index the task does not have is reported as
-    ///   an error rather than ignored.
-    ///
-    /// Every other subtask has to reject the solution: test generation looks for
-    /// tests that break it, and [`Task::run`] fails if the finished test data
-    /// still lets it through a subtask it was not declared to pass.
+    /// Adds a partial solution that is expected to pass exactly the subtasks
+    /// in `passes_subtasks` (0-based) and fail all others.
     #[must_use]
     pub fn with_partial_solution(mut self, name: &str, source: &str, passes_subtasks: &[usize]) -> Self {
         self.solutions.push(Solution::new(name.to_owned(), source.to_owned(), passes_subtasks));
         self
     }
 
-    /// Sets how many of a subtask's tests each solution that is meant to fail it
-    /// has to fail.
-    ///
-    /// The count is kept per solution, not per test: one test that breaks three
-    /// partial solutions at once counts for all three, and a test that breaks
-    /// only one is still worth keeping. Zero turns the requirement off.
+    /// Sets how many tests of a subtask each partial solution meant to fail it
+    /// has to fail. One test counts for every solution it breaks; zero turns the
+    /// search off.
     #[must_use]
     pub const fn with_min_failures(mut self, n: usize) -> Self {
         self.min_failures_per_solution = n;
         self
     }
 
-    /// Sets how many candidates in a row may add no new failure before test
-    /// generation stops looking for more.
-    ///
-    /// Every one of those candidates costs a run of every solution that still
-    /// owes failures, and a solution that is meant to fail usually fails by
-    /// running into the time limit, so a large number here is paid for in
-    /// minutes.
+    /// Sets how many candidates in a row may break no partial solution before
+    /// the search for more tests gives up.
     #[must_use]
     pub const fn with_max_tries(mut self, n: usize) -> Self {
         self.max_tries = n;
@@ -341,125 +269,87 @@ impl<T: ToOutput> Task<T> {
         self
     }
 
-    /// Sets the directory where generated tests will be saved.
+    /// Sets the directory the tests are written to.
     #[must_use]
     pub fn with_tests_path(mut self, path: PathBuf) -> Self {
         self.tests_path = path;
         self
     }
 
-    /// Sets the time limit in milliseconds for solutions.
-    ///
-    /// The limit is on CPU time, so a machine under load does not turn a correct
-    /// solution into a timeout.
+    /// Sets the time limit, in milliseconds of CPU time.
     #[must_use]
     pub const fn with_time_limit(mut self, limit: i32) -> Self {
         self.time_limit = limit;
         self
     }
 
-    /// Sets the path to the final ZIP archive containing all tests.
+    /// Sets the path of the tests archive.
     #[must_use]
     pub fn with_tests_archive_path(mut self, path: PathBuf) -> Self {
         self.tests_archive_path = path;
         self
     }
 
-    /// Sets the closure to determine input file names.
-    ///
-    /// The closure has to give every test its own name — it is passed the global
-    /// test id, the subtask id and the id within the subtask for that. Two tests
-    /// landing on the same name is reported as an error.
+    /// Sets how input files are named, from `(test_id, subtask_id, id_in_subtask)`.
+    /// Every test needs a distinct name.
     #[must_use]
     pub fn with_get_input_file_name<F: Fn(i32, i32, i32) -> String + 'static>(mut self, f: F) -> Self {
         self.get_input_file_name = Box::new(f);
         self
     }
 
-    /// Sets the closure to determine output file names.
-    ///
-    /// The same uniqueness requirement as for [`Task::with_get_input_file_name`]
-    /// applies.
+    /// Sets how output files are named, like [`Task::with_get_input_file_name`].
     #[must_use]
     pub fn with_get_output_file_name<F: Fn(i32, i32, i32) -> String + 'static>(mut self, f: F) -> Self {
         self.get_output_file_name = Box::new(f);
         self
     }
 
-    /// Sets the master seed for test generation.
-    ///
-    /// Two runs with the same seed generate the same tests, so this is how a set
-    /// of test data is pinned down. A `--seed` on the command line overrides it.
+    /// Sets the master seed. `--seed` on the command line overrides it.
     #[must_use]
     pub const fn with_seed(mut self, seed: u64) -> Self {
         self.seed = SeedChoice::Fixed(seed);
         self
     }
 
-    /// Draws a fresh master seed on every run.
-    ///
-    /// Useful while a task is being written, when the point is to keep looking
-    /// for tests that break a partial solution rather than to reproduce an
-    /// earlier run. The seed that was drawn is written to `results.txt`, so a run
-    /// worth keeping can be repeated with [`Task::with_seed`].
+    /// Draws a new master seed on every run. It is written to `results.txt`.
     #[must_use]
     pub const fn with_random_seed(mut self) -> Self {
         self.seed = SeedChoice::Random;
         self
     }
 
-    /// Sets how many times each finished test is rebuilt from its seed to check
-    /// that it comes out the same.
-    ///
-    /// [Seed mode](Mode::Seeds) does this on its own, [`DEFAULT_REPRODUCIBILITY_CHECKS`]
-    /// times; file mode does not, because it has the tests themselves. Setting a
-    /// count applies it to both, and zero turns the check off.
-    ///
-    /// Only the inputs are rebuilt. The official solution is not run again: its
-    /// output is a function of its input, so an input that comes back identical
-    /// brings the same output with it.
+    /// Sets how many times each finished test's input is rebuilt from its seed
+    /// and compared, in every mode. By default only seed mode checks,
+    /// [`DEFAULT_REPRODUCIBILITY_CHECKS`] times; zero turns it off.
     #[must_use]
     pub const fn with_reproducibility_checks(mut self, times: usize) -> Self {
         self.reproducibility_checks = Some(times);
         self
     }
 
-    /// How many rebuilds this run should do, given the mode it is running in.
     const fn reproducibility_checks(&self, mode: Mode) -> usize {
         match self.reproducibility_checks {
             Some(times) => times,
             None if matches!(mode, Mode::Seeds) => DEFAULT_REPRODUCIBILITY_CHECKS,
-            // File mode keeps the tests themselves, so a generator that cannot
-            // rebuild them costs nothing.
             None => 0,
         }
     }
 
-    /// Sets the log level for output.
+    /// Sets the log level.
     #[must_use]
     pub const fn with_debug_level(mut self, level: LevelFilter) -> Self {
         self.debug_level = level;
         self
     }
 
-    /// Runs the task, taking the mode from the command line.
-    ///
-    /// With no arguments this compiles the solutions, generates the tests, writes
-    /// them out and archives them, as it always has. `--seeds` writes the same
-    /// test set as stubs instead of data, and `--serve` turns a stub back into
-    /// the test it stands for; `--help` describes them. See [`Mode`] for what
-    /// each one does.
-    ///
-    /// A task binary is what an online judge invokes, so an argument that is not
-    /// recognised is an error rather than something to ignore. Call
-    /// [`Task::run_mode`] instead to choose the mode in code and leave the
-    /// command line alone.
+    /// Runs the task in the [`Mode`] given on the command line (`--help` lists
+    /// the options). Unknown arguments are an error.
     pub fn run(self) -> Result<()> {
         let options = match CliOptions::from_env() {
             Ok(options) => options,
             Err(err) => {
-                // The logger is not up yet, and this is a usage error rather than
-                // a failure of the task, so it goes straight to the terminal.
+                // The logger is not set up yet.
                 eprintln!("{err}\n\n{USAGE}");
                 return Err(err);
             }
@@ -474,13 +364,12 @@ impl<T: ToOutput> Task<T> {
         self.run_with(options.mode, seed)
     }
 
-    /// Runs the task in a given mode, ignoring the command line.
+    /// Runs the task in `mode`, ignoring the command line.
     pub fn run_mode(self, mode: Mode) -> Result<()> {
         let seed = self.seed;
         self.run_with(mode, seed)
     }
 
-    /// Sets up logging and dispatches to whichever mode was asked for.
     fn run_with(self, mode: Mode, seed: SeedChoice) -> Result<()> {
         LOGGER_INIT.call_once(|| {
             let mut builder = env_logger::builder();
@@ -493,8 +382,6 @@ impl<T: ToOutput> Task<T> {
             debug!("Logger initialized with level: {}", self.debug_level);
         });
 
-        // Serving is a long-running process answering requests, not a build, so
-        // none of the timing or the "Success!" banner belongs to it.
         if mode == Mode::Serve {
             return self.serve().inspect_err(|err| error!("{}", style(err).red().bright()));
         }
@@ -516,19 +403,13 @@ impl<T: ToOutput> Task<T> {
     }
 
     fn print_title(&self, text: &str) {
-        // print title with ===== before and after text
-        // Measure how wide the title actually prints, not how many bytes it takes,
-        // so a task name with non-ASCII characters still gets a matching border.
+        // Display width rather than byte length, for non-ASCII task names.
         let border_text = format!(" {}", "=".repeat(console::measure_text_width(text) + 6));
         self.logger.println(&border_text).ok();
         self.logger.println(format!(" || {} ||", style(text).bold())).ok();
         self.logger.println(&border_text).ok();
     }
 
-    /// Compiles the solutions, generates every test and verifies the outcome.
-    ///
-    /// The two generating modes share all of this: the tests are produced and
-    /// checked identically, and the mode only decides what is kept afterwards.
     fn create_tests_inner(&self, mode: Mode, seed: u64) -> Result<()> {
         self.logger.println("").ok();
         let text = format!("Creating tests for task \"{}\"", self.name);
@@ -540,7 +421,6 @@ impl<T: ToOutput> Task<T> {
 
         self.check_declared_subtasks_exist()?;
 
-        // create build directory if it doesn't exist
         if !self.build_folder_path.exists() {
             fs::create_dir_all(&self.build_folder_path).map_err(|err| Error::IOError {
                 err,
@@ -548,23 +428,18 @@ impl<T: ToOutput> Task<T> {
             })?;
         }
 
-        // check if solution source exists
         if self.solution_source.is_empty() {
             return Err(Error::MissingSolution);
         }
-        // add all cpp files (solution and partial solutions)
         let mut cpp_runner = CppRunner::new(&self.build_folder_path)?;
         let solution_handle = cpp_runner.add_program(&self.solution_source)?;
         let mut solution_handles = Vec::new();
         for solution in &self.solutions {
             solution_handles.push(cpp_runner.add_program(&solution.source)?);
         }
-        // Everything that will be run has been compiled by now, so whatever else
-        // is still in the build folder is left over from an earlier run.
+        // Only after every program has been added: anything else is stale.
         cpp_runner.clean_build_folder()?;
 
-        // Prepare test directory. Both generating modes fill it: seed mode writes
-        // the same set of files, holding stubs rather than test data.
         if self.tests_path.exists() {
             remove_dir_all_with_retry(&self.tests_path)?;
         }
@@ -573,17 +448,12 @@ impl<T: ToOutput> Task<T> {
             file: path_str(&self.tests_path),
         })?;
 
-        // clear log file
         fs::File::create(self.get_results_file()).map_err(|e| Error::IOError {
             err: e,
             file: path_str(&self.get_results_file()),
         })?;
 
-        // Kept in the report as well, because a `--seed random` run cannot be
-        // repeated once its console output is gone.
         self.log_result(&format!("Master seed: {}", style(format!("{seed:#018x}")).bold()))?;
-        // One generator drives the whole run, so the seed alone decides every test
-        // that gets generated.
         let mut rng = Rng::from_seed(seed);
 
         let num_subtasks = self.subtasks.len();
@@ -594,36 +464,28 @@ impl<T: ToOutput> Task<T> {
             all_tests.push(self.create_tests_for_subtask(subtask_idx, subtask, &mut rng, &solution_handles, solution_handle, &mut cpp_runner)?);
         }
 
-        // Before anything is kept or judged: prove that the tests just generated
-        // can be built again from the seeds that are about to be recorded.
         self.check_tests_are_reproducible(self.reproducibility_checks(mode), &all_tests)?;
 
         let names = self.assign_file_names(&all_tests)?;
 
         self.log_result("Running official solution:")?;
         let passed_subtasks = self.run_partial_solution(&all_tests, &mut cpp_runner, solution_handle, self.solution_source.split('\n').count())?;
-        // Every test was checked against the official solution as it was
-        // generated, so this only fires when a run is not reproducible - a
-        // solution sitting right on its time limit is the usual reason, and a
-        // silent "Success!" would hide it.
-        for (subtask_idx, subtask) in self.subtasks.iter().enumerate() {
-            if !passed_subtasks.contains(&subtask_idx) && !all_tests[subtask_idx].is_empty() {
-                warn!(
-                    "The official solution did not pass subtask {} ({}) when it was run on the finished tests.",
-                    subtask_idx + 1,
-                    subtask.name
-                );
-            }
-        }
+        self.warn_about_unreproduced_passes("The official solution", |_subtask_idx| true, &passed_subtasks, &all_tests);
 
         for (i, partial) in solution_handles.iter().enumerate() {
-            self.log_result(&format!("Running partial solution {}: {}", i + 1, self.solutions[i].name))?;
-            let passed_subtasks = self.run_partial_solution(&all_tests, &mut cpp_runner, *partial, self.solutions[i].source.split('\n').count())?;
+            let solution = &self.solutions[i];
+            self.log_result(&format!("Running partial solution {}: {}", i + 1, solution.name))?;
+            let passed_subtasks = self.run_partial_solution(&all_tests, &mut cpp_runner, *partial, solution.source.split('\n').count())?;
             self.check_partial_solution_outcome(i, &passed_subtasks)?;
+            self.warn_about_unreproduced_passes(
+                &format!("Partial solution {} ({})", i + 1, solution.name),
+                |subtask_idx| !solution.should_fail(subtask_idx),
+                &passed_subtasks,
+                &all_tests,
+            );
         }
 
-        // Written last, so what is on disk always describes a set of tests that
-        // was verified all the way through.
+        // Written only once everything is verified, so a failed run leaves no tests.
         self.write_tests(mode, &names, &all_tests)?;
         self.archive_tests(&names)?;
 
@@ -633,7 +495,6 @@ impl<T: ToOutput> Task<T> {
             self.log_result("The test files are seeds: pipe one into the task with --serve to rebuild it")?;
         }
 
-        // Log test counts per subtask
         for (i, tests) in all_tests.iter().enumerate() {
             self.log_result(&format!("Subtask {}: {} tests", i + 1, tests.len()))?;
         }
@@ -641,18 +502,9 @@ impl<T: ToOutput> Task<T> {
         Ok(())
     }
 
-    /// Rebuilds every finished test from its seed `times` over and checks that
-    /// it comes out identical each time.
-    ///
-    /// A seed is only worth recording if it really does reproduce the test. The
-    /// framework cannot stop a generator from reaching for randomness it was not
-    /// given - a `rand::rng()` call, the clock, a value captured when the task was
-    /// described, the iteration order of a `HashMap` - so instead it tries the
-    /// thing that would go wrong and refuses to write a stub that lies.
-    ///
-    /// Only the finished tests are rebuilt, not the candidates that were thrown
-    /// away along the way, and only their inputs: the official solution's output
-    /// follows from its input.
+    /// Rebuilds every kept test's input from its seed `times` over. Nothing can
+    /// stop a generator from using randomness other than its `Rng`, so this is
+    /// how such a generator is caught before its seeds are written down.
     fn check_tests_are_reproducible(&self, times: usize, all_tests: &[Vec<GeneratedTest>]) -> Result<()> {
         let total_tests: usize = all_tests.iter().map(Vec::len).sum();
         if times == 0 || total_tests == 0 {
@@ -685,17 +537,10 @@ impl<T: ToOutput> Task<T> {
         Ok(())
     }
 
-    /// Works out what every test will be called.
-    ///
-    /// The names come from the task's own naming closures in both modes: a seed
-    /// mode run produces a test set with exactly the names, and the layout, that
-    /// a normal run would have produced.
     fn assign_file_names(&self, all_tests: &[Vec<GeneratedTest>]) -> Result<Vec<Vec<TestFiles>>> {
         let mut names = Vec::new();
         let mut global_test_id = 0_i32;
-        // The names come from user supplied closures, and two tests that map to
-        // the same name would overwrite each other on disk and collide in the
-        // archive.
+        // The naming closures come from the user and may map two tests to one name.
         let mut used_names: HashSet<String> = HashSet::new();
 
         for (subtask_idx, subtask_tests) in all_tests.iter().enumerate() {
@@ -721,11 +566,7 @@ impl<T: ToOutput> Task<T> {
         Ok(names)
     }
 
-    /// Writes out every generated test.
-    ///
-    /// In file mode a test file holds the test. In seed mode it holds the stub
-    /// that rebuilds it - the same file names, the same layout, a few dozen bytes
-    /// each in place of however much room the test data would take.
+    /// Writes each test's data, or in seed mode the stub that rebuilds it.
     fn write_tests(&self, mode: Mode, names: &[Vec<TestFiles>], all_tests: &[Vec<GeneratedTest>]) -> Result<()> {
         for (subtask_idx, (subtask_names, subtask_tests)) in names.iter().zip(all_tests).enumerate() {
             for (files, test) in subtask_names.iter().zip(subtask_tests) {
@@ -755,16 +596,11 @@ impl<T: ToOutput> Task<T> {
         Ok(())
     }
 
-    /// Rejects a partial solution that names a subtask the task does not have.
-    ///
-    /// Such an index is always a mistake (1-based numbering is the usual one),
-    /// and it is a quiet one: the solution would simply be treated as one that
-    /// has to fail everywhere, and the run would go on generating test data
-    /// around a declaration that means nothing.
+    /// Otherwise a wrong index (usually 1-based) would silently make the
+    /// solution one that has to fail everywhere.
     fn check_declared_subtasks_exist(&self) -> Result<()> {
         for (partial_idx, solution) in self.solutions.iter().enumerate() {
-            // Sorted, so the message does not depend on the iteration order of
-            // the set behind it.
+            // Sorted so the reported index does not depend on hash set order.
             let mut declared = solution.passes_subtasks.iter().copied().collect::<Vec<_>>();
             declared.sort_unstable();
 
@@ -780,13 +616,8 @@ impl<T: ToOutput> Task<T> {
         Ok(())
     }
 
-    /// Checks the tests really do reject a partial solution everywhere it said
-    /// it would fail.
-    ///
-    /// Test generation aims for this, but it can only report an error when it
-    /// runs out of tries; without this check a task whose generators never
-    /// produced a test that breaks a partial solution would still be reported as
-    /// a success, and the subtask scores it hands out would be wrong.
+    /// Generation only errors out when it runs out of tries, so the finished
+    /// tests are checked again here.
     fn check_partial_solution_outcome(&self, partial_idx: usize, passed_subtasks: &HashSet<usize>) -> Result<()> {
         let solution = &self.solutions[partial_idx];
 
@@ -803,7 +634,17 @@ impl<T: ToOutput> Task<T> {
         Ok(())
     }
 
-    /// Archive all tests into a zip file
+    /// Every test was already checked against these solutions during
+    /// generation, so a failure here means the run is not reproducible, usually
+    /// because a solution is right at the time limit.
+    fn warn_about_unreproduced_passes(&self, solution: &str, meant_to_pass: impl Fn(usize) -> bool, passed_subtasks: &HashSet<usize>, all_tests: &[Vec<GeneratedTest>]) {
+        for (subtask_idx, subtask) in self.subtasks.iter().enumerate() {
+            if meant_to_pass(subtask_idx) && !passed_subtasks.contains(&subtask_idx) && !all_tests[subtask_idx].is_empty() {
+                warn!("{solution} did not pass subtask {} ({}) when it was run on the finished tests.", subtask_idx + 1, subtask.name);
+            }
+        }
+    }
+
     fn archive_tests(&self, names: &[Vec<TestFiles>]) -> Result<()> {
         let mut test_files_vec = Vec::new();
         for subtask in names {
