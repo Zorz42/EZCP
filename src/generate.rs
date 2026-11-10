@@ -91,6 +91,17 @@ impl<T: ToOutput> Task<T> {
         self.subtasks[subtask_idx].generate_input(generator, seed, self.trim_whitespace)
     }
 
+    /// The error for a partial solution that passes a subtask it is declared
+    /// to fail.
+    pub(crate) fn passes_extra_subtask(&self, partial: usize, subtask: usize) -> Error {
+        Error::PartialSolutionPassesExtraSubtask {
+            subtask_number: subtask + 1,
+            partial_number: partial + 1,
+            partial_name: self.solutions[partial].name.clone(),
+            subtask_name: self.subtasks[subtask].name.clone(),
+        }
+    }
+
     pub(crate) fn create_tests_for_subtask(&self, subtask_idx: usize, rng: &mut Rng, runner: &CppRunner, official: ProgramHandle, partials: &[ProgramHandle]) -> Result<Vec<GeneratedTest>> {
         let subtask = &self.subtasks[subtask_idx];
         let (good, bad): (Vec<IndexedProgram>, Vec<IndexedProgram>) = partials.iter().copied().enumerate().partition(|&(i, _)| !self.solutions[i].should_fail(subtask_idx));
@@ -365,12 +376,7 @@ impl<T: ToOutput> Generation<'_, T> {
     /// of the target only weakens the tests, so that is just logged.
     fn report_failures(&self) -> Result<()> {
         if let Some(&(i, _)) = self.bad.iter().find(|&&(i, _)| self.failures[i] == 0) {
-            return Err(Error::PartialSolutionPassesExtraSubtask {
-                subtask_number: self.subtask_idx + 1,
-                partial_number: i + 1,
-                partial_name: self.task.solutions[i].name.clone(),
-                subtask_name: self.subtask.name.clone(),
-            });
+            return Err(self.task.passes_extra_subtask(i, self.subtask_idx));
         }
 
         for &(i, _) in self.bad.iter().filter(|&&(i, _)| self.owes(i)) {

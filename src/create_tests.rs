@@ -139,13 +139,8 @@ impl<T: ToOutput> Task<T> {
             self.log_result(&format!("Running partial solution {}: {}", i + 1, solution.name))?;
             let passed_subtasks = self.run_solution_on_tests(&all_tests, &runner, program, lines_of_code(&solution.source), &|subtask_idx| solution.should_fail(subtask_idx))?;
             // Generation only errors out when it runs out of tries, so this is checked again.
-            if let Some((subtask_idx, subtask)) = self.subtasks.iter().enumerate().find(|&(idx, _)| passed_subtasks.contains(&idx) && solution.should_fail(idx)) {
-                return Err(Error::PartialSolutionPassesExtraSubtask {
-                    subtask_number: subtask_idx + 1,
-                    partial_number: i + 1,
-                    partial_name: solution.name.clone(),
-                    subtask_name: subtask.name.clone(),
-                });
+            if let Some(subtask_idx) = (0..self.subtasks.len()).find(|idx| passed_subtasks.contains(idx) && solution.should_fail(*idx)) {
+                return Err(self.passes_extra_subtask(i, subtask_idx));
             }
             self.warn_about_unreproduced_passes(
                 &format!("Partial solution {} ({})", i + 1, solution.name),
