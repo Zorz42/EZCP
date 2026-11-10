@@ -57,4 +57,4 @@ pub use solution::Solution;
 pub use stub::{Part, Stub, stable_hash};
 pub use subtask::Subtask;
 pub use task::{DEFAULT_REPRODUCIBILITY_CHECKS, DEFAULT_SEED, Task};
-pub use to_output::ToOutput;
+pub use to_output::{Counted, CountedLines, Lines, ToOutput};

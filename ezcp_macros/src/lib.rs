@@ -24,17 +24,20 @@ pub fn to_output_derive(input: TokenStream) -> TokenStream {
         #[automatically_derived]
         impl #impl_generics ::ezcp::ToOutput for #name #ty_generics #where_clause {
             fn to_output(self) -> ::std::string::String {
-                let mut res = ::std::string::String::new();
+                let mut out = ::std::string::String::new();
+                ::ezcp::ToOutput::write_output(self, &mut out);
+                out
+            }
+
+            #[allow(unused_variables)]
+            fn write_output(self, out: &mut ::std::string::String) {
                 #({
-                    let field = ::ezcp::ToOutput::to_output(#fields);
-                    if !field.is_empty() {
-                        res.push_str(&field);
-                        if !res.ends_with('\n') {
-                            res.push('\n');
-                        }
+                    let start = out.len();
+                    ::ezcp::ToOutput::write_output(#fields, out);
+                    if out.len() > start && !out.ends_with('\n') {
+                        out.push('\n');
                     }
                 })*
-                res
             }
         }
     }
