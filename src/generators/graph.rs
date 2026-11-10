@@ -139,8 +139,7 @@ impl Graph {
         assert_edges_fit(n, m, max_simple_edges(n), "directed acyclic graph");
         let mut result = Self::new_empty_directed(rng, n);
         // Every edge leads from an earlier node of a random order to a later one.
-        let mut position: Vec<usize> = (0..n).collect();
-        rng.shuffle(&mut position);
+        let position = rng.shuffled(0..n);
         result.add_random_edges(rng, m, max_simple_edges(n), false, |u, v| if position[u] < position[v] { (u, v) } else { (v, u) });
         result
     }
@@ -174,14 +173,11 @@ impl Graph {
         self.add_edges_from(rng, candidates, m);
     }
 
-    /// Adds edges from `candidates` in random order until there are `m`.
-    fn add_edges_from(&mut self, rng: &mut Rng, mut candidates: Vec<(usize, usize)>, m: usize) {
-        rng.shuffle(&mut candidates);
-
-        for (u, v) in candidates {
-            if self.num_edges() >= m {
-                break;
-            }
+    /// Adds edges from `candidates`, none of which the graph has, in random
+    /// order until there are `m`.
+    fn add_edges_from(&mut self, rng: &mut Rng, candidates: Vec<(usize, usize)>, m: usize) {
+        let missing = m.saturating_sub(self.num_edges());
+        for (u, v) in rng.shuffled(candidates).into_iter().take(missing) {
             self.add_edge(u, v);
         }
     }
@@ -192,8 +188,7 @@ impl Graph {
         assert!(n >= 1, "a tree needs at least one node, got {n}");
         let mut result = Self::new_empty(rng, n);
         result.format = GraphFormat::Tree;
-        let mut nodes = (0..n).collect::<Vec<_>>();
-        rng.shuffle(&mut nodes);
+        let nodes = rng.shuffled(0..n);
         for i in 1..n {
             let v = parent(rng, &nodes, i);
             result.add_edge(nodes[i], v);
@@ -323,8 +318,7 @@ impl Graph {
     pub fn new_random_forest(rng: &mut Rng, n: usize, trees: usize) -> Self {
         assert!((1..=n).contains(&trees), "a forest with {n} nodes cannot have {trees} trees");
         let mut result = Self::new_empty(rng, n);
-        let mut nodes = (0..n).collect::<Vec<_>>();
-        rng.shuffle(&mut nodes);
+        let nodes = rng.shuffled(0..n);
         // The first `trees` nodes are the roots.
         for i in trees..n {
             result.add_edge(nodes[i], nodes[rng.random_range(0..i)]);
@@ -340,8 +334,7 @@ impl Graph {
     pub fn new_cycle(rng: &mut Rng, n: usize) -> Self {
         assert!(n >= 3, "a cycle needs at least three nodes, got {n}");
         let mut result = Self::new_empty(rng, n);
-        let mut nodes = (0..n).collect::<Vec<_>>();
-        rng.shuffle(&mut nodes);
+        let nodes = rng.shuffled(0..n);
         for i in 0..n {
             result.add_edge(nodes[i], nodes[(i + 1) % n]);
         }
@@ -393,8 +386,7 @@ impl Graph {
         assert_edges_fit(n, m, max_bipartite_edges(n), "bipartite graph");
 
         let mut result = Self::new_empty(rng, n);
-        let mut nodes = (0..n).collect::<Vec<_>>();
-        rng.shuffle(&mut nodes);
+        let nodes = rng.shuffled(0..n);
 
         // The splits with room for `m` edges form an interval symmetric around n / 2.
         let mut smallest_side = 1;
@@ -456,8 +448,7 @@ impl Graph {
     /// leaves in the numbers, such as the rows of a grid.
     #[must_use]
     pub fn with_shuffled_labels(mut self, rng: &mut Rng) -> Self {
-        let mut labels: Vec<usize> = (0..self.num_nodes()).collect();
-        rng.shuffle(&mut labels);
+        let labels = rng.shuffled(0..self.num_nodes());
         self.edge_set.clear();
         self.adjacency.iter_mut().for_each(Vec::clear);
         for (u, v) in std::mem::take(&mut self.edges) {
@@ -504,9 +495,8 @@ impl Graph {
     pub fn add_edge(&mut self, u: usize, v: usize) {
         let n = self.num_nodes();
         assert!(u < n && v < n, "cannot join nodes {u} and {v} of a graph with {n} nodes");
-        if u != v && !self.has_edge(u, v) {
-            let edge = self.key(u, v);
-            self.edge_set.insert(edge);
+        let edge = self.key(u, v);
+        if u != v && self.edge_set.insert(edge) {
             self.edges.push(edge);
             self.adjacency[u].push(v);
             if !self.directed {
@@ -632,26 +622,21 @@ impl Graph {
         true
     }
 
-    /// For every node other than node 0, its parent in the tree rooted there
-    /// and the edge between the two.
-    fn parents(&self) -> Vec<(usize, usize)> {
-        let mut edges_at = vec![Vec::new(); self.num_nodes()];
-        for (edge, &(u, v)) in self.edges.iter().enumerate() {
-            edges_at[u].push((v, edge));
-            edges_at[v].push((u, edge));
-        }
-        let mut parents = vec![(0, 0); self.num_nodes()];
+    /// The parent of every node in the tree rooted at node 0, which is its own.
+    fn parents(&self) -> Vec<usize> {
+        let adjacency = self.undirected_adjacency();
+        let mut parents = vec![0; adjacency.len()];
         let mut stack = vec![0];
         while let Some(node) = stack.pop() {
-            for &(neighbour, edge) in &edges_at[node] {
+            for &neighbour in &adjacency[node] {
                 // The root is its own parent, and so never taken for a child.
-                if neighbour != parents[node].0 && neighbour != 0 {
-                    parents[neighbour] = (node, edge);
+                if neighbour != parents[node] && neighbour != 0 {
+                    parents[neighbour] = node;
                     stack.push(neighbour);
                 }
             }
         }
-        parents.split_off(1)
+        parents
     }
 }
 
@@ -676,28 +661,22 @@ impl ToOutput for Graph {
         }
 
         let first_label = usize::from(!self.zero_based);
-        let write_line = |out: &mut String, values: &[usize]| {
-            for (i, &value) in values.iter().enumerate() {
-                if i > 0 {
-                    out.push(' ');
-                }
-                value.write_output(out);
-            }
-            out.push('\n');
-        };
         match self.format {
-            GraphFormat::EdgeList => write_line(out, &[self.num_nodes(), self.num_edges()]),
-            GraphFormat::Tree | GraphFormat::ParentList => write_line(out, &[self.num_nodes()]),
+            GraphFormat::EdgeList => (self.num_nodes(), self.num_edges()).write_output(out),
+            GraphFormat::Tree | GraphFormat::ParentList => (self.num_nodes(),).write_output(out),
             GraphFormat::EdgesOnly => {}
         }
 
         if self.format == GraphFormat::ParentList {
             let parents = self.parents();
-            if !parents.is_empty() {
-                write_line(out, &parents.iter().map(|&(parent, _)| parent + first_label).collect::<Vec<_>>());
-            }
+            parents[1..].iter().map(|parent| parent + first_label).collect::<Vec<_>>().write_output(out);
             if let Some(weights) = &self.weights {
-                parents.iter().map(|&(_, edge)| weights[edge]).collect::<Vec<_>>().write_output(out);
+                // An edge is the one above whichever of its ends is the child.
+                let mut above = vec![0; parents.len()];
+                for (&(u, v), &weight) in self.edges.iter().zip(weights) {
+                    above[if parents[u] == v { u } else { v }] = weight;
+                }
+                above[1..].write_output(out);
             }
             return;
         }
@@ -709,14 +688,11 @@ impl ToOutput for Graph {
         for edge in order {
             let (u, v) = self.edges[edge];
             let (first, second) = if self.directed || rng.random_bool(0.5) { (u, v) } else { (v, u) };
-            (first + first_label).write_output(out);
-            out.push(' ');
-            (second + first_label).write_output(out);
-            if let Some(weights) = &self.weights {
-                out.push(' ');
-                weights[edge].write_output(out);
+            let (first, second) = (first + first_label, second + first_label);
+            match &self.weights {
+                Some(weights) => (first, second, weights[edge]).write_output(out),
+                None => (first, second).write_output(out),
             }
-            out.push('\n');
         }
     }
 }
