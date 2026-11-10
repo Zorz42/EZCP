@@ -3,31 +3,11 @@ use crate::rng::Rng;
 use crate::runner::cpp_runner::{CppRunner, ProgramHandle};
 use crate::runner::exec_runner::RunResult;
 use crate::stub::stable_hash;
+use crate::whitespace::trim_whitespace_owned;
 use crate::{Error, Result, Subtask, Task, ToOutput};
 use log::{error, info, warn};
 use std::collections::HashSet;
 use std::sync::Arc;
-
-/// Turns each run of whitespace into one newline if it contains one and one
-/// space otherwise, drops leading whitespace and ends with a single newline.
-pub fn trim_whitespace(input: &str) -> String {
-    let mut result = String::with_capacity(input.len());
-    for line in input.lines() {
-        let mut words = line.split_whitespace();
-        if let Some(first) = words.next() {
-            result.push_str(first);
-            for word in words {
-                result.push(' ');
-                result.push_str(word);
-            }
-            result.push('\n');
-        }
-    }
-    if result.is_empty() {
-        result.push('\n');
-    }
-    result
-}
 
 /// How many duplicate tests a generator may produce in its initial batch before
 /// it is given up on, since one with a small range may never reach its count.
@@ -49,12 +29,12 @@ impl<T: ToOutput> Task<T> {
     /// Shared by generation and serving, so a served test matches the file
     /// byte for byte.
     pub(crate) fn normalise_input(&self, raw: String) -> String {
-        if self.trim_whitespace { trim_whitespace(&raw) } else { raw }
+        if self.trim_whitespace { trim_whitespace_owned(raw) } else { raw }
     }
 
     pub(crate) fn normalise_output(&self, raw: &str) -> String {
         let trimmed = raw.trim().to_owned() + "\n";
-        if self.trim_whitespace { trim_whitespace(&trimmed) } else { trimmed }
+        if self.trim_whitespace { trim_whitespace_owned(trimmed) } else { trimmed }
     }
 
     /// # Panics

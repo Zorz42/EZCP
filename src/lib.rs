@@ -48,6 +48,7 @@ mod task;
 #[cfg(test)]
 mod tests;
 mod to_output;
+mod whitespace;
 
 pub use error::{Error, Result};
 pub use generators::{Graph, GraphFormat, array_generator, array_generator_custom, array_to_string};
