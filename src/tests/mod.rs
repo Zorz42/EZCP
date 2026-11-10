@@ -6,6 +6,7 @@ mod exec_runner_tests;
 mod frankenstein_tests;
 mod gcc_tests;
 mod generic_tests;
+mod golden_tests;
 mod graph_tests;
 mod mode_tests;
 mod partial_solution_tests;
