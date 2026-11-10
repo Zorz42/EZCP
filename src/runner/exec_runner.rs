@@ -4,7 +4,6 @@ use log::{debug, trace};
 use std::io::{Read, Write};
 use std::path::Path;
 use std::process::{Command, Stdio};
-use std::sync::Arc;
 
 /// See `timer.cpp` for the protocol.
 const RESULT_MARKER: &str = "__EZCP_RESULT__";
@@ -17,11 +16,27 @@ const MAX_OUTPUT_BYTES: u64 = 256 << 20;
 /// the solution's own debug output.
 const STDERR_TAIL_BYTES: usize = 64 << 10;
 
+/// What a solution may use.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct Limits {
+    /// In milliseconds of CPU time.
+    pub time_ms: i32,
+    /// In kilobytes of peak memory. `None` is no limit.
+    pub memory_kb: Option<u64>,
+}
+
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub enum RunResult {
-    /// CPU time in milliseconds, and stdout.
-    Ok(i32, String),
+    Ok {
+        /// CPU time in milliseconds.
+        time_ms: i32,
+        /// Peak memory in kilobytes.
+        memory_kb: u64,
+        /// Everything written to stdout.
+        output: String,
+    },
     TimedOut,
+    MemoryLimitExceeded,
     /// Also a non-zero exit code, or more than [`MAX_OUTPUT_BYTES`] of output.
     Crashed,
 }
@@ -29,24 +44,38 @@ pub enum RunResult {
 impl RunResult {
     /// The official solution's output, or the error for its failure on the test
     /// described by `test_path` and `gen_id`.
-    pub fn official_output(&self, test_path: &str, gen_id: usize) -> Result<&str> {
+    pub fn official_output(self, test_path: &str, gen_id: usize) -> Result<String> {
         let test_path = test_path.to_owned();
         match self {
-            Self::Ok(_, output) => Ok(output),
+            Self::Ok { output, .. } => Ok(output),
             Self::TimedOut => Err(Error::SolutionTimedOut { test_path, gen_id }),
+            Self::MemoryLimitExceeded => Err(Error::SolutionOutOfMemory { test_path, gen_id }),
             Self::Crashed => Err(Error::SolutionCrash { test_path, gen_id }),
         }
     }
 }
 
-/// Returns `(verdict, elapsed_ms)` from the last marker, which the timer writes
-/// after the solution has exited, so the solution cannot spoof it.
-pub fn parse_result_marker(stderr: &str) -> Option<(&str, i32)> {
+/// What the timer reported about a run.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct TimerReport<'stderr> {
+    pub verdict: &'stderr str,
+    pub time_ms: i32,
+    pub memory_kb: u64,
+}
+
+/// Reads the last marker, which the timer writes after the solution has exited,
+/// so the solution cannot spoof it.
+pub fn parse_result_marker(stderr: &str) -> Option<TimerReport<'_>> {
     let after_marker = &stderr[stderr.rfind(RESULT_MARKER)? + RESULT_MARKER.len()..];
     let mut fields = after_marker.lines().next().unwrap_or("").split_whitespace();
     let verdict = fields.next()?;
-    let elapsed_ms = fields.next().and_then(|field| field.parse::<i64>().ok()).unwrap_or(0);
-    Some((verdict, elapsed_ms.clamp(0, i64::from(i32::MAX)) as i32))
+    let mut number = || fields.next().and_then(|field| field.parse::<i64>().ok()).unwrap_or(0).max(0);
+    let (time_ms, memory_kb) = (number(), number());
+    Some(TimerReport {
+        verdict,
+        time_ms: time_ms.min(i64::from(i32::MAX)) as i32,
+        memory_kb: memory_kb as u64,
+    })
 }
 
 /// Returns `None` past [`MAX_OUTPUT_BYTES`]. The pipe is then closed, which
@@ -76,52 +105,53 @@ fn read_tail(mut stderr: impl Read) -> std::io::Result<Vec<u8>> {
     }
 }
 
-/// Runs a solution under the timer, with `time_limit` in milliseconds of CPU time.
-pub fn run_solution(executable_file: &Path, input_data: Arc<str>, time_limit: i32, timer_path: &Path) -> Result<RunResult> {
+/// Runs a solution under the timer.
+pub fn run_solution(executable_file: &Path, input_data: &str, limits: Limits, timer_path: &Path) -> Result<RunResult> {
     let mut command = Command::new(timer_path);
     command
         .arg(executable_file)
-        .arg(time_limit.to_string())
+        .arg(limits.time_ms.to_string())
+        .arg(limits.memory_kb.unwrap_or(0).to_string())
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
     trace!("Running command: {command:?}");
     let mut solution_process = command.spawn().map_err(Error::io(timer_path))?;
+    let (stdin, stdout, stderr) = (solution_process.stdin.take(), solution_process.stdout.take(), solution_process.stderr.take());
 
     // stdin, stdout and stderr are all serviced at once: any of them filling up
     // while nobody services it would deadlock.
-    let stdin_writer = solution_process.stdin.take().map(|mut stdin| {
-        std::thread::spawn(move || {
-            // Fails when the solution does not read all of its input, which is fine.
-            let _ = stdin.write_all(input_data.as_bytes());
-            let _ = stdin.flush();
-        })
+    let (stdout, stderr, status) = std::thread::scope(|scope| {
+        let stdin_writer = stdin.map(|mut stdin| {
+            scope.spawn(move || {
+                // Fails when the solution does not read all of its input, which is fine.
+                let _ = stdin.write_all(input_data.as_bytes());
+                let _ = stdin.flush();
+            })
+        });
+        let stdout_reader = scope.spawn(move || stdout.map_or_else(|| Ok(Some(Vec::new())), read_output));
+        let stderr = stderr.map_or_else(|| Ok(Vec::new()), read_tail);
+        let status = solution_process.wait();
+
+        // Both processes have exited, so the writer cannot still be blocked.
+        if let Some(stdin_writer) = stdin_writer {
+            drop(stdin_writer.join());
+        }
+        let stdout = stdout_reader.join().unwrap_or_else(|_panic| Err(std::io::Error::other("the thread reading stdout panicked")));
+        (stdout, stderr, status)
     });
 
-    let stdout = solution_process.stdout.take();
-    let stdout_reader = std::thread::spawn(move || stdout.map_or_else(|| Ok(Some(Vec::new())), read_output));
-    let stderr = solution_process.stderr.take().map_or_else(|| Ok(Vec::new()), read_tail);
-    let status = solution_process.wait();
-
-    // Both processes have exited, so the writer cannot still be blocked.
-    if let Some(stdin_writer) = stdin_writer {
-        drop(stdin_writer.join());
-    }
-
-    let stdout = stdout_reader
-        .join()
-        .unwrap_or_else(|_panic| Err(std::io::Error::other("the thread reading stdout panicked")))
-        .map_err(Error::io(executable_file))?;
+    let stdout = stdout.map_err(Error::io(executable_file))?;
     let stderr = stderr.map_err(Error::io(executable_file))?;
     let status = status.map_err(Error::io(executable_file))?;
 
     let stderr_str = String::from_utf8_lossy(&stderr);
-    let Some((verdict, elapsed_time_ms)) = parse_result_marker(&stderr_str) else {
+    let Some(report) = parse_result_marker(&stderr_str) else {
         return Err(Error::TimerFailed {
             details: format!("timer did not report a result (exit code {:?})", status.code()),
         });
     };
-    trace!("Timer reported verdict {verdict} after {elapsed_time_ms} ms");
+    trace!("Timer reported {report:?}");
 
     // The timer's verdict is then SIGPIPE's RTE, or on Windows a TLE.
     let Some(stdout) = stdout else {
@@ -129,13 +159,21 @@ pub fn run_solution(executable_file: &Path, input_data: Arc<str>, time_limit: i3
         return Ok(RunResult::Crashed);
     };
 
-    match verdict {
+    // A solution over the limit may well have finished, or crashed for lack of memory.
+    let over_memory_limit = limits.memory_kb.is_some_and(|limit| report.memory_kb > limit);
+
+    match report.verdict {
         "TLE" => Ok(RunResult::TimedOut),
+        "MLE" => Ok(RunResult::MemoryLimitExceeded),
+        "OK" | "RTE" if over_memory_limit => {
+            trace!("Solution used {} kB of memory, more than the limit", report.memory_kb);
+            Ok(RunResult::MemoryLimitExceeded)
+        }
         "RTE" => Ok(RunResult::Crashed),
         "OK" => {
             // The timer enforces the limit rounded up to whole seconds.
-            if time_limit > 0 && elapsed_time_ms > time_limit {
-                trace!("Solution used {elapsed_time_ms} ms of CPU time, more than the {time_limit} ms limit");
+            if limits.time_ms > 0 && report.time_ms > limits.time_ms {
+                trace!("Solution used {} ms of CPU time, more than the {} ms limit", report.time_ms, limits.time_ms);
                 return Ok(RunResult::TimedOut);
             }
 
@@ -144,9 +182,13 @@ pub fn run_solution(executable_file: &Path, input_data: Arc<str>, time_limit: i3
             // MinGW writes stdout in text mode.
             #[cfg(windows)]
             let output = output.replace("\r\n", "\n");
-            Ok(RunResult::Ok(elapsed_time_ms, output))
+            Ok(RunResult::Ok {
+                time_ms: report.time_ms,
+                memory_kb: report.memory_kb,
+                output,
+            })
         }
-        _ => Err(Error::TimerFailed {
+        verdict => Err(Error::TimerFailed {
             details: format!("timer could not run the solution (verdict {verdict})"),
         }),
     }

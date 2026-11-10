@@ -46,6 +46,10 @@ pub struct CliOptions {
     pub mode: Mode,
     /// The `--seed` value, if given.
     pub seed: Option<SeedChoice>,
+    /// The `--jobs` value, if given.
+    pub jobs: Option<usize>,
+    /// Whether `--fail-fast` was given.
+    pub fail_fast: bool,
     /// Whether `--help` was given.
     pub help: bool,
 }
@@ -66,6 +70,10 @@ Options:
   --seed <value>    Master seed for test generation: a decimal number, a 0x-prefixed
                     hexadecimal number, or `random` for an unpredictable one.
                     Ignored by --serve, which takes each test's seed from the stub.
+  --jobs <count>    How many solutions run at once. The default is the number of
+                    CPU cores, but at most 4. The tests do not depend on it.
+  --fail-fast       Stop running a partial solution on a subtask it is meant to
+                    fail at its first failed test there.
   -h, --help        Print this text.";
 
 const fn invalid(details: String) -> Error {
@@ -80,6 +88,14 @@ fn parse_seed(value: &str) -> Result<SeedChoice> {
     parsed
         .map(SeedChoice::Fixed)
         .ok_or_else(|| invalid(format!("\"{value}\" is not a seed; give a number, a 0x-prefixed hexadecimal number, or `random`")))
+}
+
+fn parse_jobs(value: &str) -> Result<usize> {
+    value
+        .parse()
+        .ok()
+        .filter(|&jobs| jobs > 0)
+        .ok_or_else(|| invalid(format!("\"{value}\" is not a number of jobs; give a positive number")))
 }
 
 impl CliOptions {
@@ -105,11 +121,18 @@ impl CliOptions {
                     };
                 }
                 "--seed" => options.seed = Some(parse_seed(arguments.next().ok_or_else(|| invalid("--seed needs a value".to_owned()))?.as_ref())?),
+                "--jobs" => options.jobs = Some(parse_jobs(arguments.next().ok_or_else(|| invalid("--jobs needs a value".to_owned()))?.as_ref())?),
+                "--fail-fast" => options.fail_fast = true,
                 "-h" | "--help" => options.help = true,
-                _ => match argument.strip_prefix("--seed=") {
-                    Some(value) => options.seed = Some(parse_seed(value)?),
-                    None => return Err(invalid(format!("unknown argument \"{argument}\""))),
-                },
+                _ => {
+                    if let Some(value) = argument.strip_prefix("--seed=") {
+                        options.seed = Some(parse_seed(value)?);
+                    } else if let Some(value) = argument.strip_prefix("--jobs=") {
+                        options.jobs = Some(parse_jobs(value)?);
+                    } else {
+                        return Err(invalid(format!("unknown argument \"{argument}\"")));
+                    }
+                }
             }
         }
 

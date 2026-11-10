@@ -2,8 +2,8 @@
 #[allow(clippy::unwrap_used)]
 pub mod cpp_runner_tests {
     use crate::Error::{CompilerError, TimerFailed};
-    use crate::runner::cpp_runner::CppRunner;
-    use crate::runner::exec_runner::RunResult;
+    use crate::runner::cpp_runner::{CppRunner, Job};
+    use crate::runner::exec_runner::{Limits, RunResult};
     use crate::tests::test_shared::initialize_logger;
     use std::path::{Path, PathBuf};
     use std::time::{Duration, Instant};
@@ -29,15 +29,24 @@ pub mod cpp_runner_tests {
         (dir, runner)
     }
 
+    /// A time limit in milliseconds, and no memory limit.
+    const fn limits(time_ms: i32) -> Limits {
+        Limits { time_ms, memory_kb: None }
+    }
+
     /// Compiles `source` and runs it once on `input`.
-    fn run(source: &str, input: &str, time_limit: i32) -> RunResult {
+    fn run_with(source: &str, input: &str, limits: Limits) -> RunResult {
         let (_dir, mut runner) = runner();
         let program = runner.add_program(source).unwrap();
-        runner.check_programs(input, &[program], time_limit).unwrap().remove(0)
+        runner.check_programs(input, &[program], limits).unwrap().remove(0)
+    }
+
+    fn run(source: &str, input: &str, time_limit: i32) -> RunResult {
+        run_with(source, input, limits(time_limit))
     }
 
     fn assert_output(result: &RunResult, expected: &str) {
-        assert!(matches!(result, RunResult::Ok(_, output) if output.trim() == expected), "expected {expected:?}, got {result:?}");
+        assert!(matches!(result, RunResult::Ok { output, .. } if output.trim() == expected), "expected {expected:?}, got {result:?}");
     }
 
     fn build_folder_files(build_folder: &Path) -> Vec<PathBuf> {
@@ -67,7 +76,7 @@ pub mod cpp_runner_tests {
             .collect();
 
         for i in 0..20 {
-            for (j, result) in runner.check_programs(&format!("{i}\n"), &programs, 1000).unwrap().iter().enumerate() {
+            for (j, result) in runner.check_programs(&format!("{i}\n"), &programs, limits(1000)).unwrap().iter().enumerate() {
                 assert_output(result, &format!("{j} {i}"));
             }
         }
@@ -95,8 +104,8 @@ pub mod cpp_runner_tests {
             .add_program("#include <chrono>\nint main() { auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(400); while (std::chrono::steady_clock::now() < deadline) {} }")
             .unwrap();
 
-        assert_eq!(runner.check_programs("", &[program], 100).unwrap()[0], RunResult::TimedOut);
-        assert!(matches!(runner.check_programs("", &[program], 5000).unwrap()[0], RunResult::Ok(..)));
+        assert_eq!(runner.check_programs("", &[program], limits(100)).unwrap()[0], RunResult::TimedOut);
+        assert!(matches!(runner.check_programs("", &[program], limits(5000)).unwrap()[0], RunResult::Ok { .. }));
     }
 
     #[test]
@@ -133,7 +142,7 @@ pub mod cpp_runner_tests {
 
         let result = run_within(Duration::from_secs(90), "running a solution with large input and output", move || run(source, &input, 10000));
 
-        let RunResult::Ok(_, output) = result else { unreachable!("expected OK, got {result:?}") };
+        let RunResult::Ok { output, .. } = result else { unreachable!("expected OK, got {result:?}") };
         let lines: Vec<&str> = output.lines().collect();
         assert_eq!(lines.len(), count + 1, "output was truncated");
         assert_eq!(lines[count], format!("sum {}", count * (count - 1) / 2));
@@ -177,7 +186,7 @@ pub mod cpp_runner_tests {
                 std::thread::spawn(move || -> crate::Result<RunResult> {
                     let mut runner = CppRunner::new(&build_folder)?;
                     let program = runner.add_program(HELLO_WORLD)?;
-                    Ok(runner.check_programs("", &[program], 5000)?.remove(0))
+                    Ok(runner.check_programs("", &[program], limits(5000))?.remove(0))
                 })
             })
             .collect();
@@ -205,28 +214,25 @@ pub mod cpp_runner_tests {
         let program = runner.add_program(HELLO_WORLD).unwrap();
         std::fs::remove_file(binaries().into_iter().find(|path| !timer_only.contains(path)).unwrap()).unwrap();
 
-        let result = runner.check_programs("", &[program], 1000);
+        let result = runner.check_programs("", &[program], limits(1000));
         assert!(matches!(result, Err(TimerFailed { .. })), "got {result:?}");
     }
 
     #[test]
     #[cfg(not(windows))]
-    fn test_run_tasks_reports_failure_without_hanging() {
-        let result = run_within(Duration::from_secs(60), "running tasks that all fail to start", || {
+    fn test_run_all_reports_failure_without_hanging() {
+        let result = run_within(Duration::from_secs(60), "running jobs that all fail to start", || {
             let (dir, mut runner) = runner();
             // The timer is the only binary so far.
             let timer: Vec<_> = build_folder_files(dir.path()).into_iter().filter(|path| path.extension().is_none()).collect();
             assert_eq!(timer.len(), 1, "the timer should be the only binary in a fresh build folder");
             let program = runner.add_program(HELLO_WORLD).unwrap();
 
-            // Every task now fails. More tasks than workers, so some are still queued.
+            // Every job now fails. More jobs than workers, so some are still queued.
             std::fs::remove_file(&timer[0]).unwrap();
-            for _ in 0..20 {
-                runner.add_task(program, "".into(), 1000);
-            }
-            runner.run_tasks(None)
+            runner.run_all(&[Job { program, input: "" }; 20], limits(1000))
         });
-        assert!(result.is_err(), "a task that cannot be started must be reported, got {result:?}");
+        assert!(result.is_err(), "a job that cannot be started must be reported, got {result:?}");
     }
 
     #[test]
@@ -239,7 +245,7 @@ pub mod cpp_runner_tests {
         runner.clean_build_folder().unwrap();
 
         assert!(!stray.exists(), "cleanup should have removed the stray file");
-        assert_output(&runner.check_programs("", &[program], 1000).unwrap()[0], "Hello, World!");
+        assert_output(&runner.check_programs("", &[program], limits(1000)).unwrap()[0], "Hello, World!");
     }
 
     #[test]
@@ -250,7 +256,7 @@ pub mod cpp_runner_tests {
         let run_once = || {
             let mut runner = CppRunner::new(tempdir.path()).unwrap();
             let program = runner.add_program(HELLO_WORLD).unwrap();
-            assert_output(&runner.check_programs("", &[program], 1000).unwrap()[0], "Hello, World!");
+            assert_output(&runner.check_programs("", &[program], limits(1000)).unwrap()[0], "Hello, World!");
         };
 
         run_once();
@@ -259,5 +265,83 @@ pub mod cpp_runner_tests {
             run_once();
         }
         assert!(start.elapsed().as_secs() < 10, "Cache pickup took too long: {:?}", start.elapsed());
+    }
+
+    /// A program that allocates and touches the megabytes it reads.
+    const ALLOCATE: &str = "#include <iostream>\n#include <vector>
+        int main() { size_t megabytes; std::cin >> megabytes; std::vector<char> memory(megabytes << 20, 1); long long sum = 0; for (char byte : memory) sum += byte; std::cout << sum; }";
+
+    #[test]
+    fn test_peak_memory_is_reported() {
+        let peak = |megabytes: usize| match run(ALLOCATE, &megabytes.to_string(), 5000) {
+            RunResult::Ok { memory_kb, .. } => memory_kb,
+            other => unreachable!("expected OK, got {other:?}"),
+        };
+        let (small, large) = (peak(1), peak(100));
+        assert!(small > 0, "no memory was reported");
+        assert!(small < 50 << 10, "a program using 1 MB was measured at {small} kB");
+        assert!((100 << 10..200 << 10).contains(&large), "a program using 100 MB was measured at {large} kB");
+    }
+
+    #[test]
+    fn test_memory_limit() {
+        let limited = |megabytes: usize, limit_megabytes: u64| {
+            let limits = Limits {
+                time_ms: 5000,
+                memory_kb: Some(limit_megabytes << 10),
+            };
+            run_with(ALLOCATE, &megabytes.to_string(), limits)
+        };
+        assert_output(&limited(10, 64), &(10 << 20).to_string());
+        assert_eq!(limited(200, 64), RunResult::MemoryLimitExceeded);
+    }
+
+    /// Far more than the limit is refused by the system rather than measured.
+    /// macOS has no way to set that up, so there the solution would get it all.
+    #[test]
+    #[cfg(not(target_os = "macos"))]
+    fn test_runaway_memory_is_stopped() {
+        let limits = Limits {
+            time_ms: 5000,
+            memory_kb: Some(64 << 10),
+        };
+        let result = run_with(ALLOCATE, "8192", limits);
+        assert!(matches!(result, RunResult::MemoryLimitExceeded | RunResult::Crashed), "got {result:?}");
+    }
+
+    #[test]
+    fn test_jobs_are_answered_in_order_whatever_the_number_of_workers() {
+        let (_dir, mut runner) = runner();
+        let echo = runner.add_program("#include <iostream>\nint main() { int n; std::cin >> n; std::cout << n; }").unwrap();
+        let inputs: Vec<String> = (0..40).map(|i| i.to_string()).collect();
+        let jobs: Vec<_> = inputs.iter().map(|input| Job { program: echo, input }).collect();
+
+        for workers in [1, 3, 16] {
+            runner.set_workers(workers);
+            assert_eq!(runner.workers(), workers);
+            for (result, input) in runner.run_all(&jobs, limits(5000)).unwrap().iter().zip(&inputs) {
+                assert_output(result, input);
+            }
+        }
+        runner.set_workers(0);
+        assert_eq!(runner.workers(), 1, "at least one job runs at a time");
+    }
+
+    #[test]
+    fn test_skipped_jobs_are_not_run() {
+        let (_dir, runner) = runner();
+        let mut runner = runner;
+        let program = runner.add_program(HELLO_WORLD).unwrap();
+        let jobs = [Job { program, input: "" }; 10];
+
+        let mut ran = Vec::new();
+        runner
+            .run_jobs(&jobs, limits(5000), &|job| job % 2 == 1, |job, result| {
+                assert_eq!(result.is_none(), job % 2 == 1, "job {job} got {result:?}");
+                ran.push(job);
+            })
+            .unwrap();
+        ran.sort_unstable();
+        assert_eq!(ran, (0..10).collect::<Vec<_>>(), "every job is answered, skipped or not");
     }
 }

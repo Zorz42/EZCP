@@ -1,18 +1,21 @@
-use crate::progress::ScopedProgressBar;
-use crate::runner::exec_runner::{RunResult, run_solution};
+use crate::runner::exec_runner::{Limits, RunResult, run_solution};
 use crate::runner::gcc::{Gcc, canonicalize};
 use crate::{Error, Result};
-use indicatif::MultiProgress;
 use log::{trace, warn};
 use std::collections::{HashMap, HashSet};
 use std::hash::{DefaultHasher, Hash, Hasher};
 use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::{Arc, mpsc};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::mpsc;
 
 /// Kept low so that contention between the runs does not affect verdicts.
-const MAX_CONCURRENT_SOLUTIONS: usize = 4;
+const MAX_DEFAULT_WORKERS: usize = 4;
+
+/// How many solutions run at once unless the task says otherwise.
+pub fn default_workers() -> usize {
+    std::thread::available_parallelism().map_or(1, std::num::NonZeroUsize::get).min(MAX_DEFAULT_WORKERS)
+}
 
 /// Keeps scratch names unique between threads of one process.
 static SCRATCH_FILES: AtomicUsize = AtomicUsize::new(0);
@@ -35,14 +38,21 @@ fn install(scratch: &Path, destination: &Path) -> Result<()> {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct ProgramHandle(usize);
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub struct TaskHandle(usize);
+/// One run of a program on an input.
+#[derive(Clone, Copy, Debug)]
+pub struct Job<'input> {
+    pub program: ProgramHandle,
+    pub input: &'input str,
+}
 
-struct Task {
-    program: ProgramHandle,
-    input: Arc<str>,
-    time_limit: i32,
-    result: Option<RunResult>,
+/// Stops the workers from taking more jobs if the thread collecting the results
+/// unwinds, so that a panic there is not followed by every remaining run.
+struct StopOnDrop<'flag>(&'flag AtomicBool);
+
+impl Drop for StopOnDrop<'_> {
+    fn drop(&mut self) {
+        self.0.store(true, Ordering::Relaxed);
+    }
 }
 
 /// Compiles C++ programs into a cached build folder and runs them in parallel
@@ -53,10 +63,11 @@ pub struct CppRunner {
     timer: ProgramHandle,
     /// Executables, indexed by `ProgramHandle`.
     programs: Vec<PathBuf>,
-    tasks: Vec<Task>,
     hash_to_handle: HashMap<u64, ProgramHandle>,
     /// What `clean_build_folder` keeps.
     necessary_files: HashSet<PathBuf>,
+    /// How many solutions run at once.
+    workers: usize,
 }
 
 impl CppRunner {
@@ -67,9 +78,9 @@ impl CppRunner {
             build_folder: canonicalize(build_folder)?,
             timer: ProgramHandle(0),
             programs: Vec::new(),
-            tasks: Vec::new(),
             hash_to_handle: HashMap::new(),
             necessary_files: HashSet::new(),
+            workers: default_workers(),
         };
         runner.timer = runner.add_program(include_str!("timer.cpp"))?;
         Ok(runner)
@@ -122,42 +133,88 @@ impl CppRunner {
         Ok(handle)
     }
 
-    /// Queues a run of `program`; `time_limit` is in milliseconds of CPU time.
-    pub fn add_task(&mut self, program: ProgramHandle, input: Arc<str>, time_limit: i32) -> TaskHandle {
-        self.tasks.push(Task {
-            program,
-            input,
-            time_limit,
-            result: None,
-        });
-        TaskHandle(self.tasks.len() - 1)
+    /// Sets how many solutions run at once; at least one does.
+    pub fn set_workers(&mut self, workers: usize) {
+        self.workers = workers.max(1);
     }
 
-    pub fn clear_tasks(&mut self) {
-        self.tasks.clear();
-    }
-
-    /// Hands over a finished task's input, so the runner no longer keeps it alive.
-    pub fn take_input(&mut self, task: TaskHandle) -> Arc<str> {
-        std::mem::take(&mut self.tasks[task.0].input)
-    }
-
-    /// # Panics
-    /// Panics if the task has not run.
-    #[allow(clippy::expect_used)]
-    pub fn get_result(&self, task: TaskHandle) -> RunResult {
-        self.tasks[task.0].result.clone().expect("Task result not available")
+    pub const fn workers(&self) -> usize {
+        self.workers
     }
 
     /// Runs every program on the same input.
-    pub fn check_programs(&mut self, input: &str, programs: &[ProgramHandle], time_limit: i32) -> Result<Vec<RunResult>> {
-        self.clear_tasks();
-        let input: Arc<str> = Arc::from(input);
-        let handles: Vec<_> = programs.iter().map(|&program| self.add_task(program, Arc::clone(&input), time_limit)).collect();
-        self.run_tasks(None)?;
-        let results = handles.into_iter().map(|handle| self.get_result(handle)).collect();
-        self.clear_tasks();
-        Ok(results)
+    pub fn check_programs(&self, input: &str, programs: &[ProgramHandle], limits: Limits) -> Result<Vec<RunResult>> {
+        let jobs: Vec<_> = programs.iter().map(|&program| Job { program, input }).collect();
+        self.run_all(&jobs, limits)
+    }
+
+    /// Runs every job and returns the results in the order of the jobs.
+    pub fn run_all(&self, jobs: &[Job], limits: Limits) -> Result<Vec<RunResult>> {
+        let mut results = vec![None; jobs.len()];
+        self.run_jobs(jobs, limits, &|_job| false, |job, result| results[job] = result)?;
+        results.into_iter().collect::<Option<Vec<_>>>().ok_or_else(|| Error::TimerFailed {
+            details: "a run ended without a result".to_owned(),
+        })
+    }
+
+    /// Runs the jobs on the workers, which take them in order.
+    ///
+    /// `skip` is asked about a job right before it would start, on a worker
+    /// thread. `on_result` is called on this thread as each job ends, with
+    /// `None` for a skipped one, so it can change what `skip` answers.
+    pub fn run_jobs<F: FnMut(usize, Option<RunResult>)>(&self, jobs: &[Job], limits: Limits, skip: &(dyn Fn(usize) -> bool + Sync), mut on_result: F) -> Result<()> {
+        let timer = self.programs[self.timer.0].as_path();
+        let (next_job, stopped) = (AtomicUsize::new(0), AtomicBool::new(false));
+        let (sender, receiver) = mpsc::channel();
+        // Returning on the first error would leave the other workers running.
+        let mut first_error = None;
+
+        std::thread::scope(|scope| {
+            let _stop_on_unwind = StopOnDrop(&stopped);
+            for _ in 0..self.workers.min(jobs.len()) {
+                let (sender, next_job, stopped) = (sender.clone(), &next_job, &stopped);
+                scope.spawn(move || {
+                    // After a failure no new job is started; running ones are waited for.
+                    while !stopped.load(Ordering::Relaxed) {
+                        let idx = next_job.fetch_add(1, Ordering::Relaxed);
+                        let Some(job) = jobs.get(idx) else { break };
+                        let outcome = if skip(idx) {
+                            Ok(None)
+                        } else {
+                            catch_unwind(AssertUnwindSafe(|| run_solution(&self.programs[job.program.0], job.input, limits, timer)))
+                                .unwrap_or_else(|_panic| {
+                                    Err(Error::TimerFailed {
+                                        details: format!("the worker thread for job {idx} panicked"),
+                                    })
+                                })
+                                .map(Some)
+                        };
+                        if outcome.is_err() {
+                            stopped.store(true, Ordering::Relaxed);
+                        }
+                        if sender.send((idx, outcome)).is_err() {
+                            break;
+                        }
+                    }
+                });
+            }
+            // Only the workers hold senders now, so this ends when they are done.
+            drop(sender);
+
+            for (idx, outcome) in receiver {
+                match outcome {
+                    Ok(result) => {
+                        trace!("Job {idx} finished with result: {result:?}");
+                        on_result(idx, result);
+                    }
+                    Err(err) => {
+                        first_error.get_or_insert(err);
+                    }
+                }
+            }
+        });
+
+        first_error.map_or(Ok(()), Err)
     }
 
     /// Deletes the files in the build folder that belong to no added program.
@@ -174,53 +231,5 @@ impl CppRunner {
             }
         }
         Ok(())
-    }
-
-    pub fn run_tasks(&mut self, logger: Option<&MultiProgress>) -> Result<()> {
-        let timer = &self.programs[self.timer.0];
-        let num_threads = std::thread::available_parallelism().map_or(1, std::num::NonZeroUsize::get).min(MAX_CONCURRENT_SOLUTIONS);
-        let progress_bar = logger.map(|logger| ScopedProgressBar::new(logger, self.tasks.len() as u64));
-        let (sender, receiver) = mpsc::channel();
-        let (mut next_task, mut running) = (0, 0);
-        // Returning on the first error would leave running workers detached.
-        let mut first_error = None;
-
-        loop {
-            // After a failure no new task is started; running ones are waited for.
-            while running < num_threads && next_task < self.tasks.len() && first_error.is_none() {
-                let task = &self.tasks[next_task];
-                let (idx, executable, input, time_limit) = (next_task, self.programs[task.program.0].clone(), Arc::clone(&task.input), task.time_limit);
-                let (timer, sender) = (timer.clone(), sender.clone());
-                std::thread::spawn(move || {
-                    let result = catch_unwind(AssertUnwindSafe(|| run_solution(&executable, input, time_limit, &timer))).unwrap_or_else(|_panic| {
-                        Err(Error::TimerFailed {
-                            details: format!("the worker thread for task {idx} panicked"),
-                        })
-                    });
-                    let _ = sender.send((idx, result));
-                });
-                next_task += 1;
-                running += 1;
-            }
-
-            if running == 0 {
-                break;
-            }
-            // Cannot fail: this thread holds a sender.
-            let Ok((idx, result)) = receiver.recv() else { break };
-            running -= 1;
-            match result {
-                Ok(result) => {
-                    trace!("Task {idx} finished with result: {result:?}");
-                    self.tasks[idx].result = Some(result);
-                }
-                Err(err) => first_error = first_error.or(Some(err)),
-            }
-            if let Some(progress_bar) = &progress_bar {
-                progress_bar.inc(1);
-            }
-        }
-
-        first_error.map_or(Ok(()), Err)
     }
 }

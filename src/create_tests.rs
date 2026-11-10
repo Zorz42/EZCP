@@ -1,251 +1,287 @@
+//! A whole run: generating every subtask's tests, verifying them against the
+//! solutions and writing them out.
+
+use crate::archiver::archive_files;
+use crate::generate::GeneratedTest;
+use crate::mode::Mode;
+use crate::parallel::parallel_map;
 use crate::progress::ScopedProgressBar;
 use crate::rng::Rng;
-use crate::runner::cpp_runner::{CppRunner, ProgramHandle};
-use crate::runner::exec_runner::RunResult;
-use crate::stub::stable_hash;
-use crate::whitespace::trim_whitespace_owned;
-use crate::{Error, Result, Subtask, Task, ToOutput};
-use log::{error, info, warn};
+use crate::runner::cpp_runner::CppRunner;
+use crate::stub::{Part, Stub, stable_hash};
+use crate::{Error, Result, Task, ToOutput};
+use console::style;
+use log::{debug, info, warn};
+use std::borrow::Cow;
 use std::collections::HashSet;
-use std::sync::Arc;
+use std::fs;
+use std::panic::resume_unwind;
+use std::path::Path;
 
-/// How many duplicate tests a generator may produce in its initial batch before
-/// it is given up on, since one with a small range may never reach its count.
-const MAX_REPEATED_TESTS: usize = 100;
+/// The name and contents of a test file.
+type TestFile<'test> = (String, Cow<'test, str>);
 
-/// A kept test. `generator` and `seed` rebuild `input`, which is what a stub
-/// records.
-pub struct GeneratedTest {
-    pub generator: usize,
-    pub seed: u64,
-    pub input: Arc<str>,
-    pub output: Arc<str>,
+/// An unreadable directory counts as empty: this only feeds the size report.
+fn dir_size(path: &Path) -> u64 {
+    fs::read_dir(path)
+        .into_iter()
+        .flatten()
+        .flatten()
+        .map(|entry| {
+            if entry.path().is_dir() {
+                dir_size(&entry.path())
+            } else {
+                entry.metadata().map_or(0, |metadata| metadata.len())
+            }
+        })
+        .sum()
 }
 
-/// A solution's index into `Task::solutions`, and its program.
-type IndexedProgram = (usize, ProgramHandle);
+fn format_size(bytes: u64) -> String {
+    let bytes = bytes as f32;
+    if bytes < 1_000_000.0 {
+        format!("{:.1}kB", bytes / 1_000.0)
+    } else {
+        format!("{:.2}MB", bytes / 1_000_000.0)
+    }
+}
+
+/// On Windows an antivirus scanner or the search indexer often holds one of the
+/// old test files open for a moment, which makes a single attempt fail.
+fn remove_dir_all_with_retry(path: &Path) -> Result<()> {
+    for attempt in 1..5 {
+        match fs::remove_dir_all(path) {
+            Ok(()) => return Ok(()),
+            Err(err) => debug!("Could not remove {} (attempt {attempt}): {err}", path.display()),
+        }
+        std::thread::sleep(std::time::Duration::from_millis(50 * attempt));
+    }
+    fs::remove_dir_all(path).map_err(Error::io(path))
+}
+
+/// Where two supposedly identical tests first differ, short enough for an error
+/// message.
+fn describe_difference(first: &str, second: &str) -> String {
+    const EXCERPT_WIDTH: usize = 24;
+
+    fn excerpt(text: &str, offset: usize) -> String {
+        let bytes = text.as_bytes();
+        let end = offset.saturating_add(EXCERPT_WIDTH).min(bytes.len());
+        // The cut can split a multi-byte character.
+        String::from_utf8_lossy(&bytes[offset.min(bytes.len())..end]).into_owned()
+    }
+
+    first.bytes().zip(second.bytes()).position(|(a, b)| a != b).map_or_else(
+        || format!("one is {} bytes long and the other {}", first.len(), second.len()),
+        |offset| {
+            format!(
+                "they first differ at byte {offset}, where the original has {:?} and the rebuilt one has {:?}",
+                excerpt(first, offset),
+                excerpt(second, offset)
+            )
+        },
+    )
+}
+
+/// Every test, in order, with the index of its subtask.
+fn with_subtasks(all_tests: &[Vec<GeneratedTest>]) -> impl Iterator<Item = (usize, &GeneratedTest)> {
+    all_tests.iter().enumerate().flat_map(|(subtask_idx, tests)| tests.iter().map(move |test| (subtask_idx, test)))
+}
 
 impl<T: ToOutput> Task<T> {
-    /// Shared by generation and serving, so a served test matches the file
-    /// byte for byte.
-    pub(crate) fn normalise_input(&self, raw: String) -> String {
-        if self.trim_whitespace { trim_whitespace_owned(raw) } else { raw }
-    }
+    pub(crate) fn create_tests(&self, mode: Mode, seed: u64) -> Result<()> {
+        self.logger.println("").ok();
+        self.print_title(&format!("Creating tests for task \"{}\"", self.name));
 
-    pub(crate) fn normalise_output(&self, raw: &str) -> String {
-        let trimmed = raw.trim().to_owned() + "\n";
-        if self.trim_whitespace { trim_whitespace_owned(trimmed) } else { trimmed }
-    }
-
-    /// # Panics
-    /// Panics if `subtask_idx` or `generator` do not exist.
-    pub(crate) fn generate_input(&self, subtask_idx: usize, generator: usize, seed: u64) -> String {
-        self.normalise_input(self.subtasks[subtask_idx].generate_test(generator, seed).to_output())
-    }
-
-    pub(super) fn create_tests_for_subtask(
-        &self,
-        subtask_idx: usize,
-        subtask: &Subtask<T>,
-        rng: &mut Rng,
-        solution_handles: &[ProgramHandle],
-        solution_handle: ProgramHandle,
-        cpp_runner: &mut CppRunner,
-    ) -> Result<Vec<GeneratedTest>> {
-        let (good, bad): (Vec<IndexedProgram>, Vec<IndexedProgram>) = solution_handles.iter().copied().enumerate().partition(|&(i, _)| !self.solutions[i].should_fail(subtask_idx));
-        let target_failures = if bad.is_empty() {
-            0
-        } else {
-            subtask.min_failures_per_solution.unwrap_or(self.min_failures_per_solution)
-        };
-
-        let mut tried_inputs = HashSet::new();
-        let mut subtask_tests = Vec::new();
-        // Indexed like `self.solutions`.
-        let mut failures = vec![0_usize; self.solutions.len()];
-        // Only these are run: the others can no longer change anything, and bad
-        // solutions are the slow ones, since they often run into the time limit.
-        let still_owed = |failures: &[usize]| -> Vec<IndexedProgram> { bad.iter().copied().filter(|&(i, _)| failures[i] < target_failures).collect() };
-
-        let total_initial: usize = subtask.initial_counts.iter().sum();
-        let found_progress_bar = ScopedProgressBar::new(&self.logger, (total_initial + target_failures) as u64);
-        let tries_progress_bar = ScopedProgressBar::new(&self.logger, self.max_tries as u64);
-
-        for gen_idx in (0..subtask.get_num_generators()).filter(|_| subtask.stress_tests > 0) {
-            info!("Stress testing generator {gen_idx}");
-            let stress_progress_bar = ScopedProgressBar::new(&self.logger, subtask.stress_tests as u64);
-            for _ in 0..subtask.stress_tests {
-                let input = self.generate_input(subtask_idx, gen_idx, rng.next_seed());
-                stress_progress_bar.inc(1);
-                self.run_candidate(&input, solution_handle, &good, &[], cpp_runner, subtask_idx, gen_idx)?;
-            }
+        if self.subtasks.is_empty() {
+            warn!("No subtasks defined.");
+        }
+        self.check_declared_subtasks_exist()?;
+        if self.solution_source.is_empty() {
+            return Err(Error::MissingSolution);
         }
 
-        // The initial tests are kept whatever the bad solutions do, but failures
-        // on them still count towards the target.
-        for (gen_idx, &needed) in subtask.initial_counts.iter().enumerate() {
-            let (mut got, mut repeats) = (0, 0);
-            while got < needed && repeats < MAX_REPEATED_TESTS {
-                let seed = rng.next_seed();
-                let input = self.generate_input(subtask_idx, gen_idx, seed);
-                if !tried_inputs.insert(stable_hash(&input)) {
-                    repeats += 1;
-                    continue;
-                }
+        let mut runner = CppRunner::new(&self.build_folder_path)?;
+        if let Some(jobs) = self.jobs {
+            runner.set_workers(jobs);
+        }
+        let official = runner.add_program(&self.solution_source)?;
+        let partials = self.solutions.iter().map(|solution| runner.add_program(&solution.source)).collect::<Result<Vec<_>>>()?;
+        // Only after every program has been added: anything else is stale.
+        runner.clean_build_folder()?;
 
-                let (output, failed) = self.run_candidate(&input, solution_handle, &good, &still_owed(&failures), cpp_runner, subtask_idx, gen_idx)?;
-                for i in failed {
-                    failures[i] += 1;
-                }
-                subtask_tests.push(GeneratedTest {
-                    generator: gen_idx,
-                    seed,
-                    input: input.into(),
-                    output: output.into(),
+        if self.tests_path.exists() {
+            remove_dir_all_with_retry(&self.tests_path)?;
+        }
+        fs::create_dir_all(&self.tests_path).map_err(Error::io(&self.tests_path))?;
+        fs::write(self.results_file(), "").map_err(Error::io(&self.results_file()))?;
+
+        self.log_result(&format!("Master seed: {}", style(format!("{seed:#018x}")).bold()))?;
+        let mut rng = Rng::from_seed(seed);
+        let mut all_tests = Vec::new();
+        for (subtask_idx, subtask) in self.subtasks.iter().enumerate() {
+            let progress = format!("[{}/{}]", style(subtask_idx + 1).bold(), style(self.subtasks.len()).bold());
+            self.logger
+                .println(format!("{progress} {}", style(format!("Subtask {}: {}", subtask_idx + 1, subtask.name)).cyan().bold()))
+                .ok();
+            all_tests.push(self.create_tests_for_subtask(subtask_idx, &mut rng, &runner, official, &partials)?);
+        }
+
+        self.check_tests_are_reproducible(self.reproducibility_checks(mode), &all_tests, runner.workers())?;
+        let names = self.assign_file_names(&all_tests)?;
+
+        self.log_result("Running official solution:")?;
+        let lines_of_code = |source: &str| source.split('\n').count();
+        let passed_subtasks = self.run_solution_on_tests(&all_tests, &runner, official, lines_of_code(&self.solution_source), &|_subtask_idx| false)?;
+        self.warn_about_unreproduced_passes("The official solution", |_subtask_idx| true, &passed_subtasks, &all_tests);
+
+        for (i, (solution, &program)) in self.solutions.iter().zip(&partials).enumerate() {
+            self.log_result(&format!("Running partial solution {}: {}", i + 1, solution.name))?;
+            let passed_subtasks = self.run_solution_on_tests(&all_tests, &runner, program, lines_of_code(&solution.source), &|subtask_idx| solution.should_fail(subtask_idx))?;
+            // Generation only errors out when it runs out of tries, so this is checked again.
+            if let Some((subtask_idx, subtask)) = self.subtasks.iter().enumerate().find(|&(idx, _)| passed_subtasks.contains(&idx) && solution.should_fail(idx)) {
+                return Err(Error::PartialSolutionPassesExtraSubtask {
+                    subtask_number: subtask_idx + 1,
+                    partial_number: i + 1,
+                    partial_name: solution.name.clone(),
+                    subtask_name: subtask.name.clone(),
                 });
-                found_progress_bar.inc(1);
-                got += 1;
             }
-            if got < needed {
-                warn!(
-                    "Generator {gen_idx} of subtask {} produced only {got} of {needed} tests, because it kept repeating tests it had already generated.",
-                    subtask_idx + 1
-                );
-            }
-        }
-
-        // Supplemental tests, kept only if they break a solution that still owes
-        // failures. The target is per solution: requiring one test to break all
-        // of them at once rarely succeeds.
-        let mut tries = 0;
-        while !still_owed(&failures).is_empty() && tries < self.max_tries {
-            tries += 1;
-            tries_progress_bar.inc(1);
-            let Some(gen_idx) = subtask.pick_generator(rng) else { break };
-            let seed = rng.next_seed();
-            let input = self.generate_input(subtask_idx, gen_idx, seed);
-            if !tried_inputs.insert(stable_hash(&input)) {
-                continue;
-            }
-
-            let (output, failed) = self.run_candidate(&input, solution_handle, &good, &still_owed(&failures), cpp_runner, subtask_idx, gen_idx)?;
-            if failed.is_empty() {
-                continue;
-            }
-            for i in failed {
-                failures[i] += 1;
-            }
-            subtask_tests.push(GeneratedTest {
-                generator: gen_idx,
-                seed,
-                input: input.into(),
-                output: output.into(),
-            });
-            tries = 0;
-            tries_progress_bar.reset();
-            found_progress_bar.inc(1);
-            // The number of extra tests is not known in advance.
-            found_progress_bar.set_length(found_progress_bar.length().unwrap_or(0).max(found_progress_bar.position()));
-        }
-
-        if target_failures > 0 && !subtask_tests.is_empty() {
-            self.report_failures(subtask_idx, subtask, &bad, &failures, target_failures)?;
-        }
-
-        // With the run's rng, so the order is reproducible too.
-        rng.shuffle(&mut subtask_tests);
-        Ok(subtask_tests)
-    }
-
-    /// A bad solution with no failures at all will pass the subtask, so that is
-    /// reported now rather than after all the remaining subtasks. Falling short
-    /// of the target only weakens the tests, so that is just logged.
-    fn report_failures(&self, subtask_idx: usize, subtask: &Subtask<T>, bad: &[IndexedProgram], failures: &[usize], target_failures: usize) -> Result<()> {
-        if let Some(&(i, _)) = bad.iter().find(|&&(i, _)| failures[i] == 0) {
-            return Err(Error::PartialSolutionPassesExtraSubtask {
-                subtask_number: subtask_idx + 1,
-                partial_number: i + 1,
-                partial_name: self.solutions[i].name.clone(),
-                subtask_name: subtask.name.clone(),
-            });
-        }
-
-        for &(i, _) in bad.iter().filter(|&&(i, _)| failures[i] < target_failures) {
-            error!(
-                "Subtask {} ({}) only has {} of the {} tests that partial solution {} ({}) is supposed to fail.",
-                subtask_idx + 1,
-                subtask.name,
-                failures[i],
-                target_failures,
-                i + 1,
-                self.solutions[i].name
+            self.warn_about_unreproduced_passes(
+                &format!("Partial solution {} ({})", i + 1, solution.name),
+                |idx| !solution.should_fail(idx),
+                &passed_subtasks,
+                &all_tests,
             );
+        }
+
+        // Written only once everything is verified, so a failed run leaves no tests.
+        let files = Self::test_files(mode, names, &all_tests);
+        for (name, contents) in &files {
+            let path = self.tests_path.join(name);
+            fs::write(&path, contents.as_bytes()).map_err(Error::io(&path))?;
+        }
+        archive_files(&files, &self.tests_archive_path, runner.workers(), &self.logger)?;
+
+        self.log_result(&format!("Tests size: {}", style(format_size(dir_size(&self.tests_path))).bold()))?;
+        if mode == Mode::Seeds {
+            self.log_result("The test files are seeds: pipe one into the task with --serve to rebuild it")?;
+        }
+        for (i, tests) in all_tests.iter().enumerate() {
+            self.log_result(&format!("Subtask {}: {} tests", i + 1, tests.len()))?;
         }
         Ok(())
     }
 
-    fn write_problem_file(&self, name: &str, contents: &str) -> Result<()> {
-        let path = self.problem_path.join(name);
-        std::fs::write(&path, contents).map_err(Error::io(&path))
+    /// Rebuilds every kept test's input from its seed `times` over. Nothing can
+    /// stop a generator from using randomness other than its `Rng`, so this is
+    /// how such a generator is caught before its seeds are written down.
+    fn check_tests_are_reproducible(&self, times: usize, all_tests: &[Vec<GeneratedTest>], workers: usize) -> Result<()> {
+        let tests: Vec<_> = with_subtasks(all_tests).collect();
+        if times == 0 || tests.is_empty() {
+            return Ok(());
+        }
+
+        info!("Checking that all {} tests can be rebuilt from their seeds ({times} times each)", tests.len());
+        let progress_bar = ScopedProgressBar::new(&self.logger, (tests.len() * times) as u64);
+        let (subtasks, trim_whitespace) = (&self.subtasks, self.trim_whitespace);
+        // For each test, its first rebuild that differs from it.
+        let mismatches = parallel_map(&tests, workers, |&(subtask_idx, test)| {
+            (1..=times).find_map(|attempt| {
+                let rebuilt = subtasks[subtask_idx].generate_input(test.generator, test.seed, trim_whitespace);
+                progress_bar.inc(1);
+                (rebuilt != test.input).then_some((attempt, rebuilt))
+            })
+        });
+
+        for (&(subtask_idx, test), mismatch) in tests.iter().zip(mismatches) {
+            match mismatch {
+                Ok(None) => {}
+                Ok(Some((attempt, rebuilt))) => {
+                    return Err(Error::GeneratorNotReproducible {
+                        subtask_number: subtask_idx + 1,
+                        gen_id: test.generator + 1,
+                        seed: format!("{:#018x}", test.seed),
+                        attempt,
+                        attempts: times,
+                        details: describe_difference(&test.input, &rebuilt),
+                    });
+                }
+                Err(panic) => resume_unwind(panic),
+            }
+        }
+        Ok(())
     }
 
-    /// Runs a candidate through the official solution and the given good and bad
-    /// solutions. A good solution failing is an error. Returns the official
-    /// output and the bad solutions that failed.
-    fn run_candidate(
-        &self,
-        input: &str,
-        main_prog: ProgramHandle,
-        good: &[IndexedProgram],
-        bad: &[IndexedProgram],
-        runner: &mut CppRunner,
-        subtask_idx: usize,
-        gen_idx: usize,
-    ) -> Result<(String, Vec<usize>)> {
-        let programs: Vec<_> = std::iter::once(main_prog).chain(good.iter().chain(bad).map(|&(_, handle)| handle)).collect();
-        let results = runner.check_programs(input, &programs, self.time_limit)?;
-
-        let official_output = match results[0].official_output("generation phase", gen_idx + 1) {
-            Ok(output) => self.normalise_output(output),
-            Err(err) => return self.write_problem_file("failing_test.in", input).and(Err(err)),
-        };
-        if !(self.checker)(input, &official_output, &official_output) {
-            self.write_problem_file("failing_test.in", input)?;
-            return Err(Error::SolutionFailed {
-                test_path: "generation phase".to_owned(),
-                gen_id: gen_idx + 1,
-            });
-        }
-        let accepted = |result: &RunResult| matches!(result, RunResult::Ok(_, output) if (self.checker)(input, &official_output, output));
-
-        for (&(i, _), result) in good.iter().zip(&results[1..]) {
-            if accepted(result) {
-                continue;
-            }
-            self.write_problem_file("failing_test.in", input)?;
-            self.write_problem_file("failing_test_correct_output.out", &official_output)?;
-            let wrong_output = self.problem_path.join("failing_test_wrong_output.out");
-            match result {
-                RunResult::Ok(_, output) => self.write_problem_file("failing_test_wrong_output.out", output)?,
-                _ if wrong_output.is_file() => std::fs::remove_file(&wrong_output).map_err(Error::io(&wrong_output))?,
-                _ => {}
-            }
-            return Err(Error::PartialSolutionFailsSubtask {
-                partial_number: i + 1,
-                subtask_number: subtask_idx + 1,
-                subtask_name: self.subtasks[subtask_idx].name.clone(),
-                partial_name: self.solutions[i].name.clone(),
-                verdict: match result {
-                    RunResult::Ok(..) => "WA",
-                    RunResult::TimedOut => "TLE",
-                    RunResult::Crashed => "RTE",
+    /// The input and output file names of every test, in order.
+    fn assign_file_names(&self, all_tests: &[Vec<GeneratedTest>]) -> Result<Vec<(String, String)>> {
+        let mut names = Vec::new();
+        // The naming closures come from the user and may map two tests to one name.
+        let mut used_names = HashSet::new();
+        for (subtask_idx, subtask_tests) in all_tests.iter().enumerate() {
+            for test_in_subtask in 0..subtask_tests.len() {
+                let files = (
+                    (self.input_file_name)(names.len(), subtask_idx, test_in_subtask),
+                    (self.output_file_name)(names.len(), subtask_idx, test_in_subtask),
+                );
+                if let Some(name) = [&files.0, &files.1].into_iter().find(|&name| !used_names.insert(name.clone())) {
+                    return Err(Error::TestAlreadyExists { path: name.clone() });
                 }
-                .to_owned(),
-                gen_id: gen_idx + 1,
-            });
+                names.push(files);
+            }
         }
+        Ok(names)
+    }
 
-        let failed = bad.iter().zip(&results[1 + good.len()..]).filter(|(_, result)| !accepted(result)).map(|(&(i, _), _)| i).collect();
-        Ok((official_output, failed))
+    /// Every test file: each test's data, or in seed mode the stub that
+    /// rebuilds it.
+    fn test_files(mode: Mode, names: Vec<(String, String)>, all_tests: &[Vec<GeneratedTest>]) -> Vec<TestFile<'_>> {
+        let mut files = Vec::with_capacity(2 * names.len());
+        for ((input_name, output_name), (subtask, test)) in names.into_iter().zip(with_subtasks(all_tests)) {
+            for (name, part, contents) in [(input_name, Part::Input, &test.input), (output_name, Part::Output, &test.output)] {
+                let contents = if mode == Mode::Files {
+                    Cow::Borrowed(contents.as_str())
+                } else {
+                    let stub = Stub {
+                        subtask,
+                        generator: test.generator,
+                        seed: test.seed,
+                        part,
+                        hash: Some(stable_hash(contents)),
+                    };
+                    Cow::Owned(stub.to_line())
+                };
+                files.push((name, contents));
+            }
+        }
+        files
+    }
+
+    /// Otherwise a wrong index (usually 1-based) would silently make the
+    /// solution one that has to fail everywhere.
+    fn check_declared_subtasks_exist(&self) -> Result<()> {
+        for (partial_idx, solution) in self.solutions.iter().enumerate() {
+            // The smallest, so the error does not depend on hash set order.
+            if let Some(&subtask_number) = solution.passes_subtasks.iter().filter(|&&idx| idx >= self.subtasks.len()).min() {
+                return Err(Error::InvalidSubtaskIndex {
+                    partial_number: partial_idx + 1,
+                    partial_name: solution.name.clone(),
+                    subtask_number,
+                    num_subtasks: self.subtasks.len(),
+                });
+            }
+        }
+        Ok(())
+    }
+
+    /// Every test was already checked against these solutions during
+    /// generation, so a failure here means the run is not reproducible, usually
+    /// because a solution is right at the time limit.
+    fn warn_about_unreproduced_passes(&self, solution: &str, meant_to_pass: impl Fn(usize) -> bool, passed_subtasks: &HashSet<usize>, all_tests: &[Vec<GeneratedTest>]) {
+        for (subtask_idx, subtask) in self.subtasks.iter().enumerate() {
+            if meant_to_pass(subtask_idx) && !passed_subtasks.contains(&subtask_idx) && !all_tests[subtask_idx].is_empty() {
+                warn!("{solution} did not pass subtask {} ({}) when it was run on the finished tests.", subtask_idx + 1, subtask.name);
+            }
+        }
     }
 }

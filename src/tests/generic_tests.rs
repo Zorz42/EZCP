@@ -46,7 +46,7 @@ pub mod generic_tests {
 
     #[test]
     fn create_with_custom_names() {
-        let schemes: [fn(i32, i32, i32) -> String; 3] = [
+        let schemes: [fn(usize, usize, usize) -> String; 3] = [
             |test_id, subtask_id, id_in_subtask| format!("{subtask_id}_{id_in_subtask}_{test_id}"),
             |_test_id, subtask_id, id_in_subtask| format!("{subtask_id}_{id_in_subtask}"),
             |test_id, _subtask_id, _id_in_subtask| format!("{test_id}"),
@@ -54,8 +54,8 @@ pub mod generic_tests {
         for name in schemes {
             let (dir, task) = test_task();
             with_three_subtasks(task)
-                .with_get_input_file_name(move |a, b, c| format!("in_{}.txt", name(a, b, c)))
-                .with_get_output_file_name(move |a, b, c| format!("out_{}.txt", name(a, b, c)))
+                .with_input_file_name(move |a, b, c| format!("in_{}.txt", name(a, b, c)))
+                .with_output_file_name(move |a, b, c| format!("out_{}.txt", name(a, b, c)))
                 .run_mode(Mode::Files)
                 .unwrap();
             assert_eq!(std::fs::read_dir(dir.path().join("tests")).unwrap().count(), 16);
@@ -123,8 +123,8 @@ pub mod generic_tests {
         let (_dir, task) = test_task();
         let task = task
             .with_solution_source(RETURN_ZERO)
-            .with_get_input_file_name(|_, _, _| "test.in".to_owned())
-            .with_get_output_file_name(|_, _, _| "test.out".to_owned())
+            .with_input_file_name(|_, _, _| "test.in".to_owned())
+            .with_output_file_name(|_, _, _| "test.out".to_owned())
             .with_subtask(Subtask::new(0, "").with_test(1, |_rng| "1\n".to_owned()).with_test(1, |_rng| "2\n".to_owned()));
         assert!(matches!(task.run_mode(Mode::Files), Err(Error::TestAlreadyExists { .. })));
     }

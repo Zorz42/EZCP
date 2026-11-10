@@ -6,6 +6,7 @@
 //! error instead.
 
 use crate::runner::cpp_runner::{CppRunner, ProgramHandle};
+use crate::runner::exec_runner::RunResult;
 use crate::stub::{Part, Stub, stable_hash};
 use crate::{Error, Result, Task, ToOutput};
 use log::{debug, warn};
@@ -47,9 +48,9 @@ impl<T: ToOutput> Task<T> {
                 details: format!("there is no subtask {}; this task has {}", stub.subtask, self.subtasks.len()),
             });
         };
-        if stub.generator >= subtask.get_num_generators() {
+        if stub.generator >= subtask.num_generators() {
             return Err(Error::InvalidStub {
-                details: format!("there is no generator {} in subtask {}; it has {}", stub.generator, stub.subtask, subtask.get_num_generators()),
+                details: format!("there is no generator {} in subtask {}; it has {}", stub.generator, stub.subtask, subtask.num_generators()),
             });
         }
 
@@ -95,7 +96,7 @@ impl<T: ToOutput> Task<T> {
             let handle = cpp_runner.add_program(&self.solution_source)?;
             official_solution.insert((cpp_runner, handle))
         };
-        let results = cpp_runner.check_programs(input, &[*handle], self.time_limit)?;
-        Ok(self.normalise_output(results[0].official_output("on-demand generation", stub.generator + 1)?))
+        let result = cpp_runner.check_programs(input, &[*handle], self.limits())?.pop().unwrap_or(RunResult::Crashed);
+        Ok(self.normalise_output(result.official_output("on-demand generation", stub.generator + 1)?))
     }
 }

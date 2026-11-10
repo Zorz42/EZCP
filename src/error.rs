@@ -60,6 +60,15 @@ pub enum Error {
         gen_id: usize,
     },
 
+    /// The official solution used more memory than the limit.
+    #[error("Solution exceeded the memory limit on test {test_path} (generator {gen_id})")]
+    SolutionOutOfMemory {
+        /// The test.
+        test_path: String,
+        /// 1-based index of the generator that produced the test.
+        gen_id: usize,
+    },
+
     /// The official solution crashed, exited with a non-zero status or wrote
     /// far too much output.
     #[error("Solution crashed on test {test_path} (generator {gen_id})")]
@@ -103,7 +112,7 @@ pub enum Error {
         partial_name: String,
         /// Name of the subtask.
         subtask_name: String,
-        /// `WA`, `TLE` or `RTE`.
+        /// `WA`, `TLE`, `MLE` or `RTE`.
         verdict: String,
         /// 1-based index of the generator that produced the test.
         gen_id: usize,

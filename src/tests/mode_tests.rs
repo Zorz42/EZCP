@@ -52,6 +52,27 @@ mod mode_tests {
     }
 
     #[test]
+    fn jobs_are_parsed_in_every_spelling() {
+        assert_eq!(CliOptions::parse::<[&str; 0], &str>([]).unwrap().jobs, None);
+        assert_eq!(CliOptions::parse(["--jobs", "3"]).unwrap().jobs, Some(3));
+        assert_eq!(CliOptions::parse(["--jobs=12"]).unwrap().jobs, Some(12));
+    }
+
+    #[test]
+    fn a_bad_number_of_jobs_is_rejected() {
+        for arguments in [["--jobs", "0"].as_slice(), &["--jobs", "many"], &["--jobs", "-2"], &["--jobs"], &["--jobs="]] {
+            let err = CliOptions::parse(arguments).unwrap_err();
+            assert!(err.to_string().contains("jobs"), "{arguments:?} gave {err}");
+        }
+    }
+
+    #[test]
+    fn fail_fast_is_recognised() {
+        assert!(!CliOptions::parse(["--seeds"]).unwrap().fail_fast);
+        assert!(CliOptions::parse(["--fail-fast", "--seeds"]).unwrap().fail_fast);
+    }
+
+    #[test]
     fn help_is_recognised() {
         assert!(CliOptions::parse(["--help"]).unwrap().help);
         assert!(CliOptions::parse(["-h"]).unwrap().help);

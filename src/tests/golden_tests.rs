@@ -76,7 +76,7 @@ mod golden_tests {
                     .with_test(4, |rng| format!("{}\n", rng.random_range(1..=6)))
                     .with_test(3, |rng| format!("{}\n", rng.random_range(1..=3)))
                     .with_test(2, |_rng| "5\n".to_owned())
-                    .do_stress_test(3),
+                    .with_stress_tests(3),
             )
             .with_subtask(
                 Subtask::new(30, "medium")
@@ -108,5 +108,16 @@ mod golden_tests {
         });
         let expected = [(54, 0x66a1_d9c7_de4b_c9f6), (56, 0x8855_1510_2763_4662), (54, 0x1546_cee4_2ff5_2aba), (56, 0xd7d2_d940_d624_7fb7)];
         assert_eq!(got, expected, "\n{got:#018x?}");
+    }
+
+    /// Candidates are drawn and run several at a time, as many as there are
+    /// jobs, but which of them become tests may not depend on that.
+    #[test]
+    fn the_test_set_does_not_depend_on_the_number_of_jobs() {
+        for jobs in [1, 2, 3, 7, 32] {
+            let dir = TempDir::new().unwrap();
+            scenario(dir.path()).with_jobs(jobs).with_fail_fast(jobs % 2 == 1).run_mode(Mode::Files).unwrap();
+            assert_eq!(fingerprint(dir.path()), (54, 0x66a1_d9c7_de4b_c9f6), "with {jobs} jobs");
+        }
     }
 }
