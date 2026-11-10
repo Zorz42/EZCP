@@ -92,7 +92,7 @@ impl CppRunner {
             let mut s = DefaultHasher::new();
             source_code.hash(&mut s);
             // The version stands in for the flags `Gcc::compile` passes.
-            self.gcc.hash(&mut s);
+            self.gcc.path.hash(&mut s);
             env!("CARGO_PKG_VERSION").hash(&mut s);
             s.finish()
         };

@@ -2,6 +2,8 @@ use crate::Error::CompilerNotFound;
 use crate::{Error, Result};
 use log::debug;
 use std::path::{Path, PathBuf};
+use std::process::Command;
+use std::sync::OnceLock;
 
 /// Like [`std::fs::canonicalize`], but without the `\\?\` prefix on Windows. Use
 /// it for every path that is compared, or equal paths can compare unequal.
@@ -55,15 +57,31 @@ fn find_gcc() -> Result<PathBuf> {
     Err(CompilerNotFound)
 }
 
-/// Hashes to the compiler's path, to key cached binaries.
-#[derive(Hash)]
+/// Whether the compiler finds the static versions of the libraries a C++
+/// program is linked with, which not every distribution installs with it.
+fn has_static_libraries(compiler: &Path) -> bool {
+    ["libstdc++.a", "libc.a"].iter().all(|library| {
+        // Answered with the full path of a library the compiler finds, and with
+        // just its name otherwise.
+        let found = Command::new(compiler).arg(format!("-print-file-name={library}")).output();
+        found.is_ok_and(|output| Path::new(String::from_utf8_lossy(&output.stdout).trim()).is_absolute())
+    })
+}
+
 pub struct Gcc {
-    path: PathBuf,
+    /// Also keys cached binaries.
+    pub path: PathBuf,
+    /// Found out by the first compile, so that a run that compiles nothing
+    /// does not have to ask.
+    links_statically: OnceLock<bool>,
 }
 
 impl Gcc {
     pub fn new() -> Result<Self> {
-        Ok(Self { path: find_gcc()? })
+        Ok(Self {
+            path: find_gcc()?,
+            links_statically: OnceLock::new(),
+        })
     }
 
     /// The absolute path of the binary for `source`: next to it, `.exe` on Windows.
@@ -87,7 +105,7 @@ impl Gcc {
     }
 
     pub fn compile(&self, source: &Path, executable: &Path) -> Result<()> {
-        let mut command = std::process::Command::new(&self.path);
+        let mut command = Command::new(&self.path);
         command.args(["-std=c++17", "-O2"]);
 
         #[cfg(windows)]
@@ -105,12 +123,15 @@ impl Gcc {
             command.arg("-Wl,-stack_size,0x20000000");
         }
 
-        #[cfg(target_os = "linux")]
-        {
-            // Leaves out the libraries a program does not use. The timer needs
-            // none of the C++ runtime, and loading it would cost every run most
-            // of a millisecond.
-            command.arg("-Wl,--as-needed");
+        // Not `#[cfg]`, which would leave `links_statically` unused elsewhere.
+        if cfg!(target_os = "linux") {
+            // A statically linked program starts about a millisecond sooner,
+            // which is half of a short run: the loader has no libraries to map
+            // and relocate. Without the static libraries, at least those a
+            // program does not use are left out, which for the timer is all of
+            // the C++ runtime.
+            let links_statically = *self.links_statically.get_or_init(|| has_static_libraries(&self.path));
+            command.arg(if links_statically { "-static" } else { "-Wl,--as-needed" });
         }
 
         command.arg(source).arg("-o").arg(executable);

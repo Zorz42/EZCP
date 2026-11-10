@@ -194,6 +194,9 @@ better than handing out a test that was never verified.
 - `Graph`'s constructors take the generator's `rng`, even the ones with no
   randomness of their own — writing a graph shuffles its edges.
 - Solutions get a 512 MB stack, and time limits are measured in CPU time.
+- On Linux, solutions are linked statically if the compiler has the static
+  libraries (`libc.a` and `libstdc++.a`; on Fedora the packages `glibc-static`
+  and `libstdc++-static`). A short run then takes half the time.
 - A solution is over the memory limit if its peak memory is: resident memory on
   Linux and macOS, committed memory on Windows.
 - The directory the tests are written to is emptied by every run.
