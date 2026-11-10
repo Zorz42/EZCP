@@ -17,6 +17,13 @@
 // runaway one fails instead of exhausting the machine. MLE is reported only for
 // a solution too large to even start under that cap.
 
+#include <stdio.h>
+
+static void report(const char *verdict, long long cpu_time_ms, long long peak_memory_kb) {
+  fprintf(stderr, "\n__EZCP_RESULT__ %s %lld %lld\n", verdict, cpu_time_ms, peak_memory_kb);
+  fflush(stderr);
+}
+
 // Twice the limit plus 1 GiB: nothing that stays within the limit comes close.
 static unsigned long long memory_cap_bytes(long long memory_limit_kb) {
   return (unsigned long long)memory_limit_kb * 1024ULL * 2ULL + (1ULL << 30);
@@ -30,15 +37,9 @@ static unsigned long long memory_cap_bytes(long long memory_limit_kb) {
 
 #include <io.h>
 #include <shellapi.h>
-#include <stdio.h>
 #include <stdlib.h>
 #include <string>
 #include <vector>
-
-static void report(const char *verdict, long long elapsed_ms, long long peak_memory_kb) {
-  fprintf(stderr, "\n__EZCP_RESULT__ %s %lld %lld\n", verdict, elapsed_ms, peak_memory_kb);
-  fflush(stderr);
-}
 
 static long long filetime_to_ms(const FILETIME &ft) {
   ULARGE_INTEGER value;
@@ -206,7 +207,6 @@ int main() {
 #include <errno.h>
 #include <fcntl.h>
 #include <signal.h>
-#include <stdio.h>
 #include <stdlib.h>
 #include <sys/resource.h>
 #include <sys/wait.h>
@@ -216,11 +216,6 @@ int main() {
 #ifdef __linux__
 #include <sys/prctl.h>
 #endif
-
-static void report(const char *verdict, long long elapsed_ms, long long peak_memory_kb) {
-  fprintf(stderr, "\n__EZCP_RESULT__ %s %lld %lld\n", verdict, elapsed_ms, peak_memory_kb);
-  fflush(stderr);
-}
 
 struct Usage {
   long long cpu_time_ms;
