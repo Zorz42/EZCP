@@ -17,7 +17,7 @@ mod subtask_tests {
         let st = Subtask::<String>::new(0, "my subtask");
         assert_eq!(st.name, "my subtask");
         assert_eq!(st.get_num_generators(), 0);
-        assert!(st.initial_counts.is_empty());
+        assert_eq!(st.initial_counts, Vec::<usize>::new());
         assert!(st.pick_generator(&mut Rng::from_seed(0)).is_none());
     }
 

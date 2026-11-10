@@ -179,7 +179,7 @@ impl<T: ToOutput> Task<T> {
     /// Panics if it is called a second time.
     #[must_use]
     pub fn with_solution_source(mut self, source: &str) -> Self {
-        assert!(self.solution_source.is_empty());
+        assert_eq!(self.solution_source, "", "the official solution was set twice");
         self.solution_source = source.to_owned();
         self
     }

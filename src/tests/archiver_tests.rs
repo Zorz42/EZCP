@@ -43,7 +43,7 @@ mod archiver_tests {
         let dir = TempDir::new().unwrap();
         let archive = dir.path().join("empty.zip");
         archive_files(&[], &archive, &MultiProgress::new()).unwrap();
-        assert!(archived(&archive).is_empty());
+        assert_eq!(archived(&archive), []);
     }
 
     #[test]
