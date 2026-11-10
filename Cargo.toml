@@ -1,6 +1,6 @@
 [package]
 name = "ezcp"
-version = "0.5.1"
+version = "0.6.0"
 edition = "2024"
 description = "A simple tool to automatically generate test cases for competitive programming problems."
 # Let chains and `zip` need 1.88.
@@ -26,7 +26,7 @@ workspace = true
 
 [dependencies]
 # The version is what the published crate depends on.
-ezcp_macros = { version = "0.1.0", path = "ezcp_macros" }
+ezcp_macros = { version = "0.2.0", path = "ezcp_macros" }
 serde_json = { version = "1.0", default-features = false, features = ["std"] }
 # Unlike "deflate", this does not pull in zopfli, which is only used at
 # compression levels this crate never asks for.
