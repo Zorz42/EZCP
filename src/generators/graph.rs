@@ -2,6 +2,7 @@ use crate::ToOutput;
 use crate::rng::Rng;
 use std::borrow::Cow;
 use std::collections::HashSet;
+use std::hash::{BuildHasherDefault, Hasher};
 use std::ops::RangeBounds;
 
 /// How a [`Graph`] is written. Nodes are numbered from 1 unless
@@ -22,6 +23,28 @@ pub enum GraphFormat {
     EdgesOnly,
 }
 
+/// Hashes an edge with two multiplications. `SipHash`, the default, takes longer
+/// than everything else that is done to an edge, and what it protects against,
+/// keys chosen to collide, does not happen here.
+#[derive(Default)]
+struct EdgeHasher(u64);
+
+impl Hasher for EdgeHasher {
+    fn finish(&self) -> u64 {
+        self.0
+    }
+
+    fn write(&mut self, bytes: &[u8]) {
+        for &byte in bytes {
+            self.write_usize(usize::from(byte));
+        }
+    }
+
+    fn write_usize(&mut self, value: usize) {
+        self.0 = (self.0.rotate_left(5) ^ value as u64).wrapping_mul(0x517c_c1b7_2722_0a95);
+    }
+}
+
 /// A simple graph: undirected, unless it comes from one of the directed
 /// constructors.
 ///
@@ -39,10 +62,10 @@ pub struct Graph {
     /// The neighbours of every node; in a directed graph, the nodes its edges
     /// lead to.
     adjacency: Vec<Vec<usize>>,
-    /// In insertion order, since iterating `edge_set` would differ between runs.
-    /// An undirected edge has its larger end first.
+    /// In the order they were added. An undirected edge has its larger end first.
     edges: Vec<(usize, usize)>,
-    edge_set: HashSet<(usize, usize)>,
+    /// The same edges, to look one up in.
+    edge_set: HashSet<(usize, usize), BuildHasherDefault<EdgeHasher>>,
     directed: bool,
     /// One per edge, in the order of `edges`.
     weights: Option<Vec<i64>>,
@@ -71,7 +94,7 @@ impl Graph {
         Self {
             adjacency: vec![Vec::new(); n],
             edges: Vec::new(),
-            edge_set: HashSet::new(),
+            edge_set: HashSet::default(),
             directed,
             weights: None,
             format: GraphFormat::EdgeList,
