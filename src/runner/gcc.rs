@@ -105,6 +105,14 @@ impl Gcc {
             command.arg("-Wl,-stack_size,0x20000000");
         }
 
+        #[cfg(target_os = "linux")]
+        {
+            // Leaves out the libraries a program does not use. The timer needs
+            // none of the C++ runtime, and loading it would cost every run most
+            // of a millisecond.
+            command.arg("-Wl,--as-needed");
+        }
+
         command.arg(source).arg("-o").arg(executable);
 
         #[cfg(windows)]
