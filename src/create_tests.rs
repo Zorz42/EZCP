@@ -21,23 +21,7 @@ use std::path::Path;
 /// The name and contents of a test file.
 type TestFile<'test> = (String, Cow<'test, str>);
 
-/// An unreadable directory counts as empty: this only feeds the size report.
-fn dir_size(path: &Path) -> u64 {
-    fs::read_dir(path)
-        .into_iter()
-        .flatten()
-        .flatten()
-        .map(|entry| {
-            if entry.path().is_dir() {
-                dir_size(&entry.path())
-            } else {
-                entry.metadata().map_or(0, |metadata| metadata.len())
-            }
-        })
-        .sum()
-}
-
-fn format_size(bytes: u64) -> String {
+fn format_size(bytes: usize) -> String {
     let bytes = bytes as f32;
     if bytes < 1_000_000.0 {
         format!("{:.1}kB", bytes / 1_000.0)
@@ -158,7 +142,8 @@ impl<T: ToOutput> Task<T> {
         }
         archive_files(&files, &self.tests_archive_path, runner.workers(), &self.logger)?;
 
-        self.log_result(&format!("Tests size: {}", style(format_size(dir_size(&self.tests_path))).bold()))?;
+        let size = files.iter().map(|(_, contents)| contents.len()).sum();
+        self.log_result(&format!("Tests size: {}", style(format_size(size)).bold()))?;
         if mode == Mode::Seeds {
             self.log_result("The test files are seeds: pipe one into the task with --serve to rebuild it")?;
         }
