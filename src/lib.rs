@@ -52,7 +52,7 @@ mod to_output;
 pub use error::{Error, Result};
 pub use generators::{Graph, array_generator, array_generator_custom, array_to_string};
 pub use mode::{CliOptions, Mode, SeedChoice};
-pub use rng::{Rng, SampleUniform};
+pub use rng::{Rng, SampleInteger, SampleUniform};
 pub use solution::Solution;
 pub use stub::{Part, Stub, stable_hash};
 pub use subtask::Subtask;
