@@ -37,9 +37,11 @@ mod partial_solution_tests {
         );
     }
 
+    /// Through a volatile pointer: the compiler may turn a plain null write,
+    /// which is undefined, into anything, such as an endless loop.
     #[test]
     fn test_partial_solution_crash() {
-        run_against_sum("int main() { int* n = nullptr; while (true) { *n = 1; n++; } }", &[]);
+        run_against_sum("int main() { volatile int* n = nullptr; *n = 1; }", &[]);
     }
 
     #[test]
