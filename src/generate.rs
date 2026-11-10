@@ -1,11 +1,11 @@
 //! Generating the tests of one subtask.
 //!
-//! Candidates are drawn and run a wave at a time, so that their inputs can be
-//! built and the solutions run on several threads. The outcome is nevertheless
-//! the one of drawing, building and running them one after another: a wave is
-//! judged in order, and when that order says to stop, the candidates after that
-//! point are forgotten and the [`Rng`] is put back to where it was before them.
-//! The tests therefore do not depend on the number of threads.
+//! Candidates are drawn, built and run a wave at a time, on several threads.
+//! The outcome is nevertheless the one of handling them one after another: a
+//! wave is gone through in order, and when that order says to stop, the
+//! candidates after that point are forgotten and the [`Rng`] is put back to
+//! where it was before them. The tests therefore do not depend on the number
+//! of threads.
 
 use crate::parallel::parallel_map;
 use crate::progress::ScopedProgressBar;
@@ -16,7 +16,6 @@ use crate::stub::stable_hash;
 use crate::whitespace::trim_whitespace_owned;
 use crate::{Error, Result, Subtask, Task, ToOutput};
 use log::{error, info, warn};
-use std::any::Any;
 use std::collections::HashSet;
 use std::panic::resume_unwind;
 
@@ -36,15 +35,31 @@ pub struct GeneratedTest {
 /// A solution's index into `Task::solutions`, and its program.
 type IndexedProgram = (usize, ProgramHandle);
 
-/// What a panicking generator leaves behind.
-type Panic = Box<dyn Any + Send>;
-
-/// A candidate test that has been drawn, but perhaps not built yet.
-struct Draw {
+/// A candidate test that was drawn, built and run ahead of its turn.
+struct Candidate {
     generator: usize,
     seed: u64,
-    /// Where the `Rng` goes back to if this draw should never have happened.
+    /// Where the `Rng` goes back to if the candidate's turn never comes.
     rng_before: Rng,
+    /// `None` if the input was tried before, and so was not run again. An
+    /// error is the panic of the generator.
+    run: std::thread::Result<Option<Run>>,
+}
+
+/// A new input and what the solutions made of it.
+struct Run {
+    input: String,
+    hash: u64,
+    /// Of the official solution, the good solutions and the bad ones that were
+    /// run, in that order.
+    results: Vec<RunResult>,
+}
+
+/// What there is to judge of a candidate whose turn has come. A panic of its
+/// generator is passed on only here, as a candidate before it may already have
+/// ended the run or the search.
+fn reached(run: std::thread::Result<Option<Run>>) -> Option<Run> {
+    run.unwrap_or_else(|panic| resume_unwind(panic))
 }
 
 /// The state of generating one subtask's tests.
@@ -63,20 +78,6 @@ struct Generation<'task, T: ToOutput> {
     failures: Vec<usize>,
     tried_inputs: HashSet<u64>,
     tests: Vec<GeneratedTest>,
-}
-
-/// The candidates before the first whose generator panicked, and that panic.
-/// It has to wait until those before it are judged, as one of them may already
-/// end the run or the search.
-fn until_first_panic(wave: Vec<(Draw, std::thread::Result<String>)>) -> (Vec<(Draw, String)>, Option<(Draw, Panic)>) {
-    let mut built = Vec::with_capacity(wave.len());
-    for (draw, input) in wave {
-        match input {
-            Ok(input) => built.push((draw, input)),
-            Err(panic) => return (built, Some((draw, panic))),
-        }
-    }
-    (built, None)
 }
 
 impl<T: ToOutput> Task<T> {
@@ -131,11 +132,6 @@ impl<T: ToOutput> Task<T> {
 }
 
 impl<T: ToOutput> Generation<'_, T> {
-    /// How many candidates are drawn at a time.
-    const fn wave_size(&self) -> usize {
-        self.runner.workers()
-    }
-
     /// The bad solutions that have not failed enough tests yet. Only these are
     /// run: the others can no longer change anything, and bad solutions are the
     /// slow ones, since they often run into the time limit.
@@ -152,33 +148,48 @@ impl<T: ToOutput> Generation<'_, T> {
         !self.bad.iter().any(|&(i, _)| self.owes(i))
     }
 
-    /// Draws `count` candidates, from the generators `pick` chooses, and builds
-    /// their inputs.
-    fn draw_wave(&self, rng: &mut Rng, count: usize, mut pick: impl FnMut(&mut Rng) -> usize) -> Vec<(Draw, std::thread::Result<String>)> {
-        let draws: Vec<Draw> = (0..count)
+    /// Draws `count` candidates from the generators `pick` chooses, builds
+    /// their inputs and runs the official solution, the good solutions and
+    /// `bad` on those that are new.
+    ///
+    /// The caller goes through them in order. To stop before one of them, it
+    /// puts `rng` back to where it was before that candidate, which is then as
+    /// good as never drawn.
+    fn wave(&self, rng: &mut Rng, count: usize, mut pick: impl FnMut(&mut Rng) -> usize, bad: &[IndexedProgram]) -> Result<Vec<Candidate>> {
+        let draws: Vec<_> = (0..count)
             .map(|_| {
                 let rng_before = rng.clone();
                 let generator = pick(rng);
-                Draw {
-                    generator,
-                    seed: rng.next_seed(),
-                    rng_before,
-                }
+                (generator, rng.next_seed(), rng_before)
             })
             .collect();
         let (subtask, trim_whitespace) = (self.subtask, self.task.trim_whitespace);
-        let inputs = parallel_map(&draws, self.runner.workers(), |draw| subtask.generate_input(draw.generator, draw.seed, trim_whitespace));
-        draws.into_iter().zip(inputs).collect()
-    }
+        let inputs = parallel_map(&draws, self.runner.workers(), |&(generator, seed, _)| {
+            let input = subtask.generate_input(generator, seed, trim_whitespace);
+            (stable_hash(&input), input)
+        });
 
-    /// Runs the official solution, the good solutions and `bad`, in that order,
-    /// on every input.
-    fn run_solutions<'input>(&self, inputs: impl Iterator<Item = &'input str>, bad: &[IndexedProgram]) -> Result<std::vec::IntoIter<Vec<RunResult>>> {
-        let programs: Vec<_> = std::iter::once(self.official).chain(self.good.iter().chain(bad).map(|&(_, handle)| handle)).collect();
-        let jobs: Vec<_> = inputs.flat_map(|input| programs.iter().map(move |&program| Job { program, input })).collect();
+        // New is what neither an earlier test nor an earlier candidate of this wave was.
+        let mut hashes_in_wave = HashSet::new();
+        let mut is_new = |hash: u64| !self.tried_inputs.contains(&hash) && hashes_in_wave.insert(hash);
+        let inputs: Vec<_> = inputs.into_iter().map(|input| input.map(|(hash, input)| is_new(hash).then_some((hash, input)))).collect();
+
+        let programs: Vec<_> = std::iter::once(self.official).chain(self.good.iter().chain(bad).map(|&(_, program)| program)).collect();
+        let new_inputs = inputs.iter().filter_map(|input| input.as_ref().ok()?.as_ref());
+        let jobs: Vec<_> = new_inputs.flat_map(|(_, input)| programs.iter().map(move |&program| Job { program, input })).collect();
         let mut results = self.runner.run_all(&jobs, self.task.limits())?.into_iter();
-        let per_input = (0..jobs.len() / programs.len()).map(|_| results.by_ref().take(programs.len()).collect()).collect::<Vec<_>>();
-        Ok(per_input.into_iter())
+
+        let candidates = draws.into_iter().zip(inputs).map(|((generator, seed, rng_before), input)| Candidate {
+            generator,
+            seed,
+            rng_before,
+            run: input.map(|input| {
+                let (hash, input) = input?;
+                let results = results.by_ref().take(programs.len()).collect();
+                Some(Run { input, hash, results })
+            }),
+        });
+        Ok(candidates.collect())
     }
 
     fn write_problem_file(&self, name: &str, contents: &str) -> Result<()> {
@@ -186,9 +197,9 @@ impl<T: ToOutput> Generation<'_, T> {
         std::fs::write(&path, contents).map_err(Error::io(&path))
     }
 
-    /// Judges what [`Generation::run_solutions`] made of a candidate. The
-    /// official or a good solution failing is an error. Returns the official
-    /// output and those of `bad` that failed.
+    /// Judges the results of [`Generation::wave`] on an input. The official or
+    /// a good solution failing is an error. Returns the official output and
+    /// those of `bad` that failed.
     fn judge(&self, generator: usize, input: &str, results: Vec<RunResult>, bad: &[IndexedProgram]) -> Result<(String, Vec<usize>)> {
         let mut results = results.into_iter();
         let official_output = match results.next().unwrap_or(RunResult::Crashed).official_output("generation phase", generator + 1) {
@@ -236,23 +247,25 @@ impl<T: ToOutput> Generation<'_, T> {
         Ok((official_output, failed))
     }
 
-    /// Counts a test for those of the solutions it broke that still owe
-    /// failures. Returns whether there were any.
-    fn count_failures(&mut self, failed: &[usize]) -> bool {
-        let counted: Vec<usize> = failed.iter().copied().filter(|&i| self.owes(i)).collect();
-        for &i in &counted {
-            self.failures[i] += 1;
+    /// Judges a new input and counts it for those of the solutions it broke
+    /// that still owe failures. Returns the test and whether there were any.
+    fn try_out(&mut self, generator: usize, seed: u64, run: Run, bad: &[IndexedProgram]) -> Result<(GeneratedTest, bool)> {
+        self.tried_inputs.insert(run.hash);
+        let (output, failed) = self.judge(generator, &run.input, run.results, bad)?;
+        let mut counted = false;
+        for i in failed {
+            if self.owes(i) {
+                self.failures[i] += 1;
+                counted = true;
+            }
         }
-        !counted.is_empty()
-    }
-
-    fn keep(&mut self, draw: &Draw, input: String, output: String) {
-        self.tests.push(GeneratedTest {
-            generator: draw.generator,
-            seed: draw.seed,
-            input,
+        let test = GeneratedTest {
+            generator,
+            seed,
+            input: run.input,
             output,
-        });
+        };
+        Ok((test, counted))
     }
 
     /// Runs every generator through the solutions meant to pass, to find the
@@ -263,17 +276,13 @@ impl<T: ToOutput> Generation<'_, T> {
             let progress_bar = ScopedProgressBar::new(&self.task.logger, self.subtask.stress_tests as u64);
             let mut left = self.subtask.stress_tests;
             while left > 0 {
-                let wave = self.draw_wave(rng, left.min(self.wave_size()), |_rng| generator);
+                let wave = self.wave(rng, left.min(self.runner.workers()), |_rng| generator, &[])?;
                 left -= wave.len();
-
-                let (built, panic) = until_first_panic(wave);
-                let results = self.run_solutions(built.iter().map(|(_, input)| input.as_str()), &[])?;
-                for ((_, input), results) in built.iter().zip(results) {
-                    self.judge(generator, input, results, &[])?;
+                for candidate in wave {
+                    if let Some(run) = reached(candidate.run) {
+                        self.judge(generator, &run.input, run.results, &[])?;
+                    }
                     progress_bar.inc(1);
-                }
-                if let Some((_, panic)) = panic {
-                    resume_unwind(panic);
                 }
             }
         }
@@ -286,39 +295,21 @@ impl<T: ToOutput> Generation<'_, T> {
         for (generator, &needed) in self.subtask.initial_counts.iter().enumerate() {
             let (mut got, mut repeats) = (0, 0);
             while got < needed && repeats < MAX_REPEATED_TESTS {
-                let wave = self.draw_wave(rng, (needed - got).min(self.wave_size()), |_rng| generator);
-
-                // The new inputs of the wave, as far as the generator gets.
-                let mut fresh = Vec::with_capacity(wave.len());
-                let mut pending_panic = None;
-                for (draw, input) in wave {
+                let owed = self.still_owed();
+                for candidate in self.wave(rng, (needed - got).min(self.runner.workers()), |_rng| generator, &owed)? {
                     if repeats == MAX_REPEATED_TESTS {
                         // Drawn ahead, but the generator is given up on before it.
-                        *rng = draw.rng_before;
+                        *rng = candidate.rng_before;
                         break;
                     }
-                    match input {
-                        Ok(input) if self.tried_inputs.insert(stable_hash(&input)) => fresh.push((draw, input)),
-                        Ok(_repeated) => repeats += 1,
-                        Err(panic) => {
-                            pending_panic = Some(panic);
-                            break;
-                        }
-                    }
-                }
-
-                let owed = self.still_owed();
-                let results = self.run_solutions(fresh.iter().map(|(_, input)| input.as_str()), &owed)?;
-                for ((draw, input), results) in fresh.into_iter().zip(results) {
-                    let (output, failed) = self.judge(generator, &input, results, &owed)?;
-                    self.count_failures(&failed);
-                    self.keep(&draw, input, output);
+                    let Some(run) = reached(candidate.run) else {
+                        repeats += 1;
+                        continue;
+                    };
+                    let (test, _) = self.try_out(generator, candidate.seed, run, &owed)?;
+                    self.tests.push(test);
                     found_progress_bar.inc(1);
                     got += 1;
-                }
-                // Only now: a test before it may already have ended the run.
-                if let Some(panic) = pending_panic {
-                    resume_unwind(panic);
                 }
             }
             if got < needed {
@@ -335,62 +326,36 @@ impl<T: ToOutput> Generation<'_, T> {
     /// failures. The target is per solution: requiring one test to break all
     /// of them at once rarely succeeds.
     fn hunt_for_failures(&mut self, rng: &mut Rng, found_progress_bar: &ScopedProgressBar, tries_progress_bar: &ScopedProgressBar) -> Result<()> {
-        if self.subtask.num_generators() == 0 {
-            return Ok(());
-        }
-
+        let subtask = self.subtask;
         let mut tries = 0;
         loop {
             let owed = self.still_owed();
-            if owed.is_empty() || tries >= self.task.max_tries {
+            if owed.is_empty() || tries >= self.task.max_tries || subtask.num_generators() == 0 {
                 return Ok(());
             }
 
             // No more than the tries that are left, so that only having found
             // every failure can end the search in the middle of a wave.
-            let subtask = self.subtask;
-            let wave = self.draw_wave(rng, self.wave_size().min(self.task.max_tries - tries), |rng| subtask.pick_generator(rng).unwrap_or_default());
-            let (built, panic) = until_first_panic(wave);
-
-            // `None` for an input that has been tried before, which is not run.
-            let candidates: Vec<_> = built
-                .into_iter()
-                .map(|(draw, input)| {
-                    let is_new = self.tried_inputs.insert(stable_hash(&input));
-                    (draw, is_new.then_some(input))
-                })
-                .collect();
-            let mut results = self.run_solutions(candidates.iter().filter_map(|(_, input)| input.as_deref()), &owed)?;
-
-            for (draw, input) in candidates {
+            let wave_size = self.runner.workers().min(self.task.max_tries - tries);
+            for candidate in self.wave(rng, wave_size, |rng| subtask.pick_generator(rng).unwrap_or_default(), &owed)? {
                 if self.nothing_is_owed() {
                     // Drawn ahead, but the search ends before it.
-                    *rng = draw.rng_before;
+                    *rng = candidate.rng_before;
                     return Ok(());
                 }
                 tries += 1;
                 tries_progress_bar.inc(1);
-                // There is a result for every input that was run.
-                let Some(input) = input else { continue };
-                let Some(results) = results.next() else { continue };
+                let Some(run) = reached(candidate.run) else { continue };
 
-                let (output, failed) = self.judge(draw.generator, &input, results, &owed)?;
-                if self.count_failures(&failed) {
-                    self.keep(&draw, input, output);
+                let (test, broke_a_solution) = self.try_out(candidate.generator, candidate.seed, run, &owed)?;
+                if broke_a_solution {
+                    self.tests.push(test);
                     tries = 0;
                     tries_progress_bar.reset();
                     found_progress_bar.inc(1);
                     // The number of extra tests is not known in advance.
                     found_progress_bar.set_length(found_progress_bar.length().unwrap_or(0).max(found_progress_bar.position()));
                 }
-            }
-
-            if let Some((draw, panic)) = panic {
-                if self.nothing_is_owed() {
-                    *rng = draw.rng_before;
-                    return Ok(());
-                }
-                resume_unwind(panic);
             }
         }
     }
