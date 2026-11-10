@@ -1,4 +1,4 @@
-use ezcp::{Result, Rng, Subtask, Task, ToOutput};
+use ezcp::{Counted, Result, Rng, Subtask, Task, array_generator_custom};
 use std::path::PathBuf;
 
 const SOLUTION: &str = r#"
@@ -33,53 +33,37 @@ int main(){
 }
 "#;
 
-/// Written as `n` on one line and the values on the next.
-#[derive(ToOutput)]
-struct Coupon {
-    n: usize,
-    values: Vec<i32>,
-}
-
-impl Coupon {
-    const fn new(values: Vec<i32>) -> Self {
-        Self { n: values.len(), values }
-    }
-
-    fn generate<F: Fn(&mut Rng) -> i32>(rng: &mut Rng, count: usize, value: F) -> Self {
-        Self::new((0..count).map(|_ignored| value(rng)).collect())
-    }
-}
-
 fn even_value(rng: &mut Rng) -> i32 {
     rng.random_range(0..=500_000_000) * 2
 }
 
+/// `n` copies of one value. `Counted` writes `n` on one line and the values on
+/// the next.
+fn repeated(n: usize, value: i32) -> Counted<i32> {
+    Counted(vec![value; n])
+}
+
 fn main() -> Result<()> {
     // Given an array of even integers, print its sum minus half of its maximum.
-    let task = Task::new("Coupon", &PathBuf::from("task1")).with_solution_source(SOLUTION);
+    let task = Task::new("Coupon", &PathBuf::from("task1")).with_solution_source(SOLUTION).with_memory_limit(256);
 
-    let subtask1 = Subtask::new(10, "n = 1").with_test(5, |rng| Coupon::generate(rng, 1, even_value));
+    let subtask1 = Subtask::new(10, "n = 1").with_test(5, array_generator_custom(1..=1, even_value));
 
     // The repeated value is drawn inside the generator: drawn out here it would
     // not come from the test's seed, so the test could not be rebuilt.
     let subtask2 = Subtask::new(20, "all values are the same")
         .with_test(5, |rng| {
             let n = rng.random_range(1..=200_000);
-            Coupon::new(vec![even_value(rng); n])
+            repeated(n, even_value(rng))
         })
-        .with_test(1, |rng| Coupon::new(vec![even_value(rng); 200_000]))
-        .with_test(3, |rng| {
-            let n = rng.random_range(1..=200_000);
-            Coupon::new(vec![1_000_000_000; n])
-        })
-        .with_test(1, |_rng| Coupon::new(vec![1_000_000_000; 200_000]));
+        .with_test(1, |rng| repeated(200_000, even_value(rng)))
+        .with_test(3, |rng| repeated(rng.random_range(1..=200_000), 1_000_000_000))
+        .with_fixed_test(repeated(200_000, 1_000_000_000));
 
     let subtask3 = Subtask::new(70, "No additional constraints")
-        .with_test(5, |rng| {
-            let n = rng.random_range(1..=200_000);
-            Coupon::generate(rng, n, even_value)
-        })
-        .with_test(5, |rng| Coupon::generate(rng, 200_000, even_value));
+        .with_test(5, array_generator_custom(1..=200_000, even_value))
+        .with_test(5, array_generator_custom(200_000..=200_000, even_value))
+        .with_validator(|Counted(values)| assert!(values.iter().all(|value| value % 2 == 0)));
 
     // The partial solution prints half of the first value, which is only right for n = 1.
     task.with_subtask(subtask1)

@@ -6,21 +6,28 @@
 //!
 //! ```no_run
 //! use std::path::PathBuf;
+//! use ezcp::{Counted, Subtask, Task};
 //!
 //! const SOLUTION: &str = r"
 //! #include <iostream>
-//! int main() { int a, b; std::cin >> a >> b; std::cout << a + b << std::endl; }
+//! int main() { int n; std::cin >> n; long long sum = 0; while (n--) { int a; std::cin >> a; sum += a; } std::cout << sum << std::endl; }
 //! ";
 //!
 //! # fn main() -> ezcp::Result<()> {
-//! ezcp::Task::new("Sum", &PathBuf::from("sum"))
+//! Task::new("Sum", &PathBuf::from("sum"))
 //!     .with_solution_source(SOLUTION)
-//!     .with_subtask(ezcp::Subtask::new(100, "a, b <= 1000").with_test(10, |rng| {
-//!         format!("{} {}\n", rng.random_range(0..=1000), rng.random_range(0..=1000))
+//!     .with_subtask(Subtask::new(100, "n <= 1000").with_test(10, |rng| {
+//!         let n = rng.random_range(1..=1000);
+//!         // Written as `n` on one line and the values on the next.
+//!         Counted(rng.random_vec(n, 0..=1_000_000))
 //!     }))
 //!     .run()
 //! # }
 //! ```
+//!
+//! A generator returns anything that is [`ToOutput`], which there is a derive
+//! for, and builds it with the help of [`Rng`], [`Graph`] and the wrappers
+//! [`Counted`], [`Lines`] and [`CountedLines`].
 //!
 //! A generator must take all of its randomness from the [`Rng`] it is given: a
 //! test is stored as its generator and seed, which have to rebuild the same
@@ -51,6 +58,11 @@ mod task;
 mod tests;
 mod to_output;
 mod whitespace;
+
+/// Compiles the code in the README, so that it cannot go stale.
+#[cfg(doctest)]
+#[doc = include_str!("../README.md")]
+struct ReadmeExamples;
 
 pub use error::{Error, Result};
 pub use generators::{Graph, GraphFormat, array_generator, array_generator_custom, array_to_string};

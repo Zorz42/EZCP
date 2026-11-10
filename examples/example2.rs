@@ -41,9 +41,9 @@ impl Coins {
         Self { n: values.len(), values }
     }
 
-    fn random(rng: &mut Rng, n: RangeInclusive<i32>, x: RangeInclusive<i32>) -> Self {
+    fn random(rng: &mut Rng, n: RangeInclusive<usize>, x: RangeInclusive<i32>) -> Self {
         let count = rng.random_range(n);
-        Self::new((0..count).map(|_ignored| rng.random_range(x.clone())).collect())
+        Self::new(rng.random_vec(count, x))
     }
 }
 
