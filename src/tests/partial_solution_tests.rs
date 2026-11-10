@@ -12,8 +12,8 @@ mod partial_solution_tests {
     fn run_against_sum(partial: &str, passes_subtasks: &[usize]) {
         let (_dir, task) = test_task();
         task.with_solution_source(SUM)
-            .with_subtask(Subtask::new(0, "").with_test(5, array_generator(1, 100, 1, 100)))
-            .with_subtask(Subtask::new(0, "").with_test(5, array_generator(1, 100, 1, 1_000_000_000)))
+            .with_subtask(Subtask::new(0, "").with_test(5, array_generator(1..=100, 1..=100)))
+            .with_subtask(Subtask::new(0, "").with_test(5, array_generator(1..=100, 1..=1_000_000_000)))
             .with_partial_solution("partial", partial, passes_subtasks)
             .run_mode(Mode::Files)
             .unwrap();
