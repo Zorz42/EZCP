@@ -1,343 +1,335 @@
-#[cfg(test)]
-#[allow(clippy::unwrap_used)]
-pub mod cpp_runner_tests {
-    use crate::Error::{CompilerError, TimerFailed};
-    use crate::runner::cpp_runner::{CppRunner, Job};
-    use crate::runner::exec_runner::{Limits, RunResult};
-    use std::path::{Path, PathBuf};
-    use std::time::{Duration, Instant};
-    use tempfile::TempDir;
+use crate::Error::{CompilerError, TimerFailed};
+use crate::runner::cpp_runner::{CppRunner, Job};
+use crate::runner::exec_runner::{Limits, RunResult};
+use std::path::{Path, PathBuf};
+use std::time::{Duration, Instant};
+use tempfile::TempDir;
 
-    const HELLO_WORLD: &str = "#include <iostream>\nint main() { std::cout << \"Hello, World!\" << std::endl; }";
+const HELLO_WORLD: &str = "#include <iostream>\nint main() { std::cout << \"Hello, World!\" << std::endl; }";
 
-    /// Fails the test instead of hanging if `body` does not finish in time.
-    #[allow(clippy::panic)]
-    fn run_within<F: FnOnce() -> T + Send + 'static, T: Send + 'static>(timeout: Duration, what: &str, body: F) -> T {
-        let (sender, receiver) = std::sync::mpsc::channel();
-        std::thread::spawn(move || {
-            let _ = sender.send(body());
-        });
-        receiver.recv_timeout(timeout).unwrap_or_else(|_| panic!("{what} did not finish within {timeout:?}"))
-    }
+/// Fails the test instead of hanging if `body` does not finish in time.
+#[allow(clippy::panic)]
+fn run_within<F: FnOnce() -> T + Send + 'static, T: Send + 'static>(timeout: Duration, what: &str, body: F) -> T {
+    let (sender, receiver) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        let _ = sender.send(body());
+    });
+    receiver.recv_timeout(timeout).unwrap_or_else(|_| panic!("{what} did not finish within {timeout:?}"))
+}
 
-    /// A runner in a fresh build folder, which is deleted with the returned guard.
-    fn runner() -> (TempDir, CppRunner) {
-        let dir = TempDir::new().unwrap();
-        let runner = CppRunner::new(dir.path()).unwrap();
-        (dir, runner)
-    }
+fn runner() -> (TempDir, CppRunner) {
+    let dir = TempDir::new().unwrap();
+    let runner = CppRunner::new(dir.path()).unwrap();
+    (dir, runner)
+}
 
-    /// A time limit in milliseconds, and no memory limit.
-    const fn limits(time_ms: i32) -> Limits {
-        Limits { time_ms, memory_kb: None }
-    }
+const fn limits(time_ms: i32) -> Limits {
+    Limits { time_ms, memory_kb: None }
+}
 
-    /// Compiles `source` and runs it once on `input`.
-    fn run_with(source: &str, input: &str, limits: Limits) -> RunResult {
-        let (_dir, mut runner) = runner();
-        let program = runner.add_program(source).unwrap();
-        runner.check_programs(input, &[program], limits).unwrap().remove(0)
-    }
+fn run_with(source: &str, input: &str, limits: Limits) -> RunResult {
+    let (_dir, mut runner) = runner();
+    let program = runner.add_program(source).unwrap();
+    runner.check_programs(input, &[program], limits).unwrap().remove(0)
+}
 
-    fn run(source: &str, input: &str, time_limit: i32) -> RunResult {
-        run_with(source, input, limits(time_limit))
-    }
+fn run(source: &str, input: &str, time_limit: i32) -> RunResult {
+    run_with(source, input, limits(time_limit))
+}
 
-    fn assert_output(result: &RunResult, expected: &str) {
-        assert!(matches!(result, RunResult::Ok { output, .. } if output.trim() == expected), "expected {expected:?}, got {result:?}");
-    }
+fn assert_output(result: &RunResult, expected: &str) {
+    assert!(matches!(result, RunResult::Ok { output, .. } if output.trim() == expected), "expected {expected:?}, got {result:?}");
+}
 
-    fn build_folder_files(build_folder: &Path) -> Vec<PathBuf> {
-        std::fs::read_dir(build_folder).unwrap().map(|entry| entry.unwrap().path()).collect()
-    }
+fn build_folder_files(build_folder: &Path) -> Vec<PathBuf> {
+    std::fs::read_dir(build_folder).unwrap().map(|entry| entry.unwrap().path()).collect()
+}
 
-    #[test]
-    fn test_runner_run_program() {
-        assert_output(&run(HELLO_WORLD, "", 1000), "Hello, World!");
-    }
+#[test]
+fn test_runner_run_program() {
+    assert_output(&run(HELLO_WORLD, "", 1000), "Hello, World!");
+}
 
-    #[test]
-    fn test_runner_add_faulty_program() {
-        let (_dir, mut runner) = runner();
-        assert!(matches!(runner.add_program("int main() { compile error here }"), Err(CompilerError { .. })));
-    }
+#[test]
+fn test_runner_add_faulty_program() {
+    let (_dir, mut runner) = runner();
+    assert!(matches!(runner.add_program("int main() { compile error here }"), Err(CompilerError { .. })));
+}
 
-    #[test]
-    fn test_runner_run_programs() {
-        let (_dir, mut runner) = runner();
-        let programs: Vec<_> = (0..5)
-            .map(|id| {
-                runner
-                    .add_program(&format!("#include <iostream>\nint main() {{ int n; std::cin >> n; std::cout << {id} << ' ' << n; }}"))
-                    .unwrap()
-            })
-            .collect();
+#[test]
+fn test_runner_run_programs() {
+    let (_dir, mut runner) = runner();
+    let programs: Vec<_> = (0..5)
+        .map(|id| {
+            runner
+                .add_program(&format!("#include <iostream>\nint main() {{ int n; std::cin >> n; std::cout << {id} << ' ' << n; }}"))
+                .unwrap()
+        })
+        .collect();
 
-        for i in 0..20 {
-            for (j, result) in runner.check_programs(&format!("{i}\n"), &programs, limits(1000)).unwrap().iter().enumerate() {
-                assert_output(result, &format!("{j} {i}"));
-            }
+    for i in 0..20 {
+        for (j, result) in runner.check_programs(&format!("{i}\n"), &programs, limits(1000)).unwrap().iter().enumerate() {
+            assert_output(result, &format!("{j} {i}"));
         }
     }
+}
 
-    #[test]
-    fn test_same_program_100_times() {
-        let (_dir, mut runner) = runner();
-        let time = Instant::now();
-        let handles: Vec<_> = (0..100).map(|_| runner.add_program(HELLO_WORLD).unwrap()).collect();
-        assert!(handles.windows(2).all(|pair| pair[0] == pair[1]));
-        assert!(time.elapsed().as_secs() < 10, "Adding the same program 100 times took too long");
-    }
+#[test]
+fn test_same_program_100_times() {
+    let (_dir, mut runner) = runner();
+    let time = Instant::now();
+    let handles: Vec<_> = (0..100).map(|_| runner.add_program(HELLO_WORLD).unwrap()).collect();
+    assert!(handles.windows(2).all(|pair| pair[0] == pair[1]));
+    assert!(time.elapsed().as_secs() < 10, "Adding the same program 100 times took too long");
+}
 
-    #[test]
-    fn test_runner_program_tle() {
-        assert_eq!(run("int main() { while (true) {} }", "", 1000), RunResult::TimedOut);
-    }
+#[test]
+fn test_runner_program_tle() {
+    assert_eq!(run("int main() { while (true) {} }", "", 1000), RunResult::TimedOut);
+}
 
-    #[test]
-    fn test_program_over_a_sub_second_limit_is_a_timeout() {
-        let (_dir, mut runner) = runner();
-        // 400 ms: over the limit, but under the one second the timer rounds up to.
-        let program = runner
-            .add_program("#include <chrono>\nint main() { auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(400); while (std::chrono::steady_clock::now() < deadline) {} }")
-            .unwrap();
+#[test]
+fn test_program_over_a_sub_second_limit_is_a_timeout() {
+    let (_dir, mut runner) = runner();
+    // 400 ms: over the limit, but under the one second the timer rounds up to.
+    let program = runner
+        .add_program("#include <chrono>\nint main() { auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(400); while (std::chrono::steady_clock::now() < deadline) {} }")
+        .unwrap();
 
-        assert_eq!(runner.check_programs("", &[program], limits(100)).unwrap()[0], RunResult::TimedOut);
-        assert!(matches!(runner.check_programs("", &[program], limits(5000)).unwrap()[0], RunResult::Ok { .. }));
-    }
+    assert_eq!(runner.check_programs("", &[program], limits(100)).unwrap()[0], RunResult::TimedOut);
+    assert!(matches!(runner.check_programs("", &[program], limits(5000)).unwrap()[0], RunResult::Ok { .. }));
+}
 
-    #[test]
-    fn test_deep_recursion_has_a_large_stack() {
-        // About 100 MB of stack, far beyond the usual 8 MB default.
-        let source = "#include <iostream>
-            void recurse(int depth) { volatile char frame[1024]; for (int i = 0; i < 1024; ++i) frame[i] = (char)i; if (depth > 0) recurse(depth - 1); if (frame[0] != 0) std::cout << 'x'; }
-            int main() { recurse(100000); std::cout << \"Success\"; }";
-        assert_output(&run(source, "", 2000), "Success");
-    }
+#[test]
+fn test_deep_recursion_has_a_large_stack() {
+    // About 100 MB of stack, far beyond the usual 8 MB default.
+    let source = "#include <iostream>
+        void recurse(int depth) { volatile char frame[1024]; for (int i = 0; i < 1024; ++i) frame[i] = (char)i; if (depth > 0) recurse(depth - 1); if (frame[0] != 0) std::cout << 'x'; }
+        int main() { recurse(100000); std::cout << \"Success\"; }";
+    assert_output(&run(source, "", 2000), "Success");
+}
 
-    #[test]
-    fn test_runner_program_crash() {
-        assert_eq!(run("int main() { volatile int* p = nullptr; *p = 1; }", "", 1000), RunResult::Crashed);
-    }
+#[test]
+fn test_runner_program_crash() {
+    assert_eq!(run("int main() { volatile int* p = nullptr; *p = 1; }", "", 1000), RunResult::Crashed);
+}
 
-    /// Must not leave EZCP blocked writing to a full input pipe.
-    #[test]
-    fn test_solution_that_ignores_most_of_its_input() {
-        // Larger than any platform's pipe buffer.
-        let input = format!("7\n{}", (0..500_000).map(|i| i.to_string()).collect::<Vec<_>>().join(" "));
-        let result = run_within(Duration::from_secs(90), "running a solution that ignores its input", move || {
-            run("#include <iostream>\nint main() { long long n; std::cin >> n; std::cout << n; }", &input, 5000)
-        });
-        assert_output(&result, "7");
-    }
+/// Must not leave EZCP blocked writing to a full input pipe.
+#[test]
+fn test_solution_that_ignores_most_of_its_input() {
+    // Larger than any platform's pipe buffer.
+    let input = format!("7\n{}", (0..500_000).map(|i| i.to_string()).collect::<Vec<_>>().join(" "));
+    let result = run_within(Duration::from_secs(90), "running a solution that ignores its input", move || {
+        run("#include <iostream>\nint main() { long long n; std::cin >> n; std::cout << n; }", &input, 5000)
+    });
+    assert_output(&result, "7");
+}
 
-    #[test]
-    fn test_large_input_and_large_output() {
-        let count = 200_000_usize;
-        let input = (0..count).map(|i| i.to_string()).collect::<Vec<_>>().join("\n");
-        let source = "#include <iostream>
-            int main() { std::ios_base::sync_with_stdio(false); long long sum = 0, x; while (std::cin >> x) { sum += x; std::cout << x << '\\n'; } std::cout << \"sum \" << sum; }";
+#[test]
+fn test_large_input_and_large_output() {
+    let count = 200_000_usize;
+    let input = (0..count).map(|i| i.to_string()).collect::<Vec<_>>().join("\n");
+    let source = "#include <iostream>
+        int main() { std::ios_base::sync_with_stdio(false); long long sum = 0, x; while (std::cin >> x) { sum += x; std::cout << x << '\\n'; } std::cout << \"sum \" << sum; }";
 
-        let result = run_within(Duration::from_secs(90), "running a solution with large input and output", move || run(source, &input, 10000));
+    let result = run_within(Duration::from_secs(90), "running a solution with large input and output", move || run(source, &input, 10000));
 
-        let RunResult::Ok { output, .. } = result else { unreachable!("expected OK, got {result:?}") };
-        let lines: Vec<&str> = output.lines().collect();
-        assert_eq!(lines.len(), count + 1, "output was truncated");
-        assert_eq!(lines[count], format!("sum {}", count * (count - 1) / 2));
-    }
+    let RunResult::Ok { output, .. } = result else { unreachable!("expected OK, got {result:?}") };
+    let lines: Vec<&str> = output.lines().collect();
+    assert_eq!(lines.len(), count + 1, "output was truncated");
+    assert_eq!(lines[count], format!("sum {}", count * (count - 1) / 2));
+}
 
-    #[test]
-    fn test_solution_writing_to_stderr_is_still_measured() {
-        // Includes a fake marker and an unterminated line.
-        let source = "#include <iostream>
-            int main() { std::cerr << \"debug 123\\nnot a number\\n__EZCP_RESULT__ TLE 999\\ntrailing without newline\"; std::cout << 42; }";
-        assert_output(&run(source, "", 1000), "42");
-    }
+#[test]
+fn test_solution_writing_to_stderr_is_still_measured() {
+    // Includes a fake marker and an unterminated line.
+    let source = "#include <iostream>
+        int main() { std::cerr << \"debug 123\\nnot a number\\n__EZCP_RESULT__ TLE 999\\ntrailing without newline\"; std::cout << 42; }";
+    assert_output(&run(source, "", 1000), "42");
+}
 
-    #[test]
-    fn test_solution_writing_a_lot_to_stderr_is_still_measured() {
-        // 16 MB, far more than the tail that is kept.
-        let source = "#include <iostream>\n#include <string>
-            int main() { std::string line(1 << 12, 'd'); for (int i = 0; i < 4096; i++) std::cerr << line << '\\n'; std::cout << 42; }";
-        assert_output(&run(source, "", 5000), "42");
-    }
+#[test]
+fn test_solution_writing_a_lot_to_stderr_is_still_measured() {
+    // 16 MB, far more than the tail that is kept.
+    let source = "#include <iostream>\n#include <string>
+        int main() { std::string line(1 << 12, 'd'); for (int i = 0; i < 4096; i++) std::cerr << line << '\\n'; std::cout << 42; }";
+    assert_output(&run(source, "", 5000), "42");
+}
 
-    #[test]
-    fn test_runaway_output_is_stopped() {
-        // Large writes, so the limit is reached quickly even on a slow machine.
-        let source = "#include <cstdio>\n#include <string>
-            int main() { std::string chunk(1 << 20, 'x'); for (;;) fwrite(chunk.data(), 1, chunk.size(), stdout); }";
-        assert_eq!(
-            run_within(Duration::from_secs(60), "a solution that never stops printing", move || run(source, "", 5000)),
-            RunResult::Crashed
-        );
-    }
+#[test]
+fn test_runaway_output_is_stopped() {
+    // Large writes, so the limit is reached quickly even on a slow machine.
+    let source = "#include <cstdio>\n#include <string>
+        int main() { std::string chunk(1 << 20, 'x'); for (;;) fwrite(chunk.data(), 1, chunk.size(), stdout); }";
+    assert_eq!(
+        run_within(Duration::from_secs(60), "a solution that never stops printing", move || run(source, "", 5000)),
+        RunResult::Crashed
+    );
+}
 
-    /// As when a judge starts many `--serve` processes on a fresh build folder.
-    #[test]
-    fn test_runners_sharing_a_build_folder() {
-        let tempdir = TempDir::new().unwrap();
-        let workers: Vec<_> = (0..8)
-            .map(|_| {
-                let build_folder = tempdir.path().to_path_buf();
-                std::thread::spawn(move || -> crate::Result<RunResult> {
-                    let mut runner = CppRunner::new(&build_folder)?;
-                    let program = runner.add_program(HELLO_WORLD)?;
-                    Ok(runner.check_programs("", &[program], limits(5000))?.remove(0))
-                })
+/// As when a judge starts many `--serve` processes on a fresh build folder.
+#[test]
+fn test_runners_sharing_a_build_folder() {
+    let tempdir = TempDir::new().unwrap();
+    let workers: Vec<_> = (0..8)
+        .map(|_| {
+            let build_folder = tempdir.path().to_path_buf();
+            std::thread::spawn(move || -> crate::Result<RunResult> {
+                let mut runner = CppRunner::new(&build_folder)?;
+                let program = runner.add_program(HELLO_WORLD)?;
+                Ok(runner.check_programs("", &[program], limits(5000))?.remove(0))
             })
-            .collect();
+        })
+        .collect();
 
-        for worker in workers {
-            assert_output(&worker.join().unwrap().unwrap(), "Hello, World!");
-        }
-        // The timer and the program, each a source and a binary; no scratch files.
-        assert_eq!(build_folder_files(tempdir.path()).len(), 4, "{:?}", build_folder_files(tempdir.path()));
+    for worker in workers {
+        assert_output(&worker.join().unwrap().unwrap(), "Hello, World!");
     }
+    // The timer and the program, each a source and a binary; no scratch files.
+    assert_eq!(build_folder_files(tempdir.path()).len(), 4, "{:?}", build_folder_files(tempdir.path()));
+}
 
-    /// A crash would blame the solution, and count as a failure of a partial
-    /// solution that never ran.
-    #[test]
-    fn test_missing_binary_is_not_reported_as_a_crash() {
+/// A crash would blame the solution, and count as a failure of a partial
+/// solution that never ran.
+#[test]
+fn test_missing_binary_is_not_reported_as_a_crash() {
+    let (dir, mut runner) = runner();
+    let binaries = || {
+        build_folder_files(dir.path())
+            .into_iter()
+            .filter(|path| path.extension().is_none_or(|extension| extension != "cpp"))
+            .collect::<Vec<_>>()
+    };
+
+    let timer_only = binaries();
+    let program = runner.add_program(HELLO_WORLD).unwrap();
+    std::fs::remove_file(binaries().into_iter().find(|path| !timer_only.contains(path)).unwrap()).unwrap();
+
+    let result = runner.check_programs("", &[program], limits(1000));
+    assert!(matches!(result, Err(TimerFailed { .. })), "got {result:?}");
+}
+
+#[test]
+#[cfg(not(windows))]
+fn test_run_all_reports_failure_without_hanging() {
+    let result = run_within(Duration::from_secs(60), "running jobs that all fail to start", || {
         let (dir, mut runner) = runner();
-        let binaries = || {
-            build_folder_files(dir.path())
-                .into_iter()
-                .filter(|path| path.extension().is_none_or(|extension| extension != "cpp"))
-                .collect::<Vec<_>>()
-        };
-
-        let timer_only = binaries();
+        // The timer is the only binary so far.
+        let timer: Vec<_> = build_folder_files(dir.path()).into_iter().filter(|path| path.extension().is_none()).collect();
+        assert_eq!(timer.len(), 1, "the timer should be the only binary in a fresh build folder");
         let program = runner.add_program(HELLO_WORLD).unwrap();
-        std::fs::remove_file(binaries().into_iter().find(|path| !timer_only.contains(path)).unwrap()).unwrap();
 
-        let result = runner.check_programs("", &[program], limits(1000));
-        assert!(matches!(result, Err(TimerFailed { .. })), "got {result:?}");
-    }
+        // Every job now fails. More jobs than workers, so some are still queued.
+        std::fs::remove_file(&timer[0]).unwrap();
+        runner.run_all(&[Job { program, input: "" }; 20], limits(1000))
+    });
+    assert!(result.is_err(), "a job that cannot be started must be reported, got {result:?}");
+}
 
-    #[test]
-    #[cfg(not(windows))]
-    fn test_run_all_reports_failure_without_hanging() {
-        let result = run_within(Duration::from_secs(60), "running jobs that all fail to start", || {
-            let (dir, mut runner) = runner();
-            // The timer is the only binary so far.
-            let timer: Vec<_> = build_folder_files(dir.path()).into_iter().filter(|path| path.extension().is_none()).collect();
-            assert_eq!(timer.len(), 1, "the timer should be the only binary in a fresh build folder");
-            let program = runner.add_program(HELLO_WORLD).unwrap();
+#[test]
+fn test_clean_build_folder_keeps_compiled_programs() {
+    let (dir, mut runner) = runner();
+    let program = runner.add_program(HELLO_WORLD).unwrap();
+    let stray = dir.path().join("stray.txt");
+    std::fs::write(&stray, "junk").unwrap();
 
-            // Every job now fails. More jobs than workers, so some are still queued.
-            std::fs::remove_file(&timer[0]).unwrap();
-            runner.run_all(&[Job { program, input: "" }; 20], limits(1000))
-        });
-        assert!(result.is_err(), "a job that cannot be started must be reported, got {result:?}");
-    }
+    runner.clean_build_folder().unwrap();
 
-    #[test]
-    fn test_clean_build_folder_keeps_compiled_programs() {
-        let (dir, mut runner) = runner();
+    assert!(!stray.exists(), "cleanup should have removed the stray file");
+    assert_output(&runner.check_programs("", &[program], limits(1000)).unwrap()[0], "Hello, World!");
+}
+
+#[test]
+#[cfg(not(windows))]
+fn test_runner_pickup_cache() {
+    let tempdir = TempDir::new().unwrap();
+    let run_once = || {
+        let mut runner = CppRunner::new(tempdir.path()).unwrap();
         let program = runner.add_program(HELLO_WORLD).unwrap();
-        let stray = dir.path().join("stray.txt");
-        std::fs::write(&stray, "junk").unwrap();
-
-        runner.clean_build_folder().unwrap();
-
-        assert!(!stray.exists(), "cleanup should have removed the stray file");
         assert_output(&runner.check_programs("", &[program], limits(1000)).unwrap()[0], "Hello, World!");
-    }
+    };
 
-    #[test]
-    #[cfg(not(windows))]
-    fn test_runner_pickup_cache() {
-        let tempdir = TempDir::new().unwrap();
-        let run_once = || {
-            let mut runner = CppRunner::new(tempdir.path()).unwrap();
-            let program = runner.add_program(HELLO_WORLD).unwrap();
-            assert_output(&runner.check_programs("", &[program], limits(1000)).unwrap()[0], "Hello, World!");
-        };
-
+    run_once();
+    let start = Instant::now();
+    for _ in 0..29 {
         run_once();
-        let start = Instant::now();
-        for _ in 0..29 {
-            run_once();
-        }
-        assert!(start.elapsed().as_secs() < 10, "Cache pickup took too long: {:?}", start.elapsed());
     }
+    assert!(start.elapsed().as_secs() < 10, "Cache pickup took too long: {:?}", start.elapsed());
+}
 
-    /// A program that allocates and touches the megabytes it reads.
-    const ALLOCATE: &str = "#include <iostream>\n#include <vector>
-        int main() { size_t megabytes; std::cin >> megabytes; std::vector<char> memory(megabytes << 20, 1); long long sum = 0; for (char byte : memory) sum += byte; std::cout << sum; }";
+const ALLOCATE: &str = "#include <iostream>\n#include <vector>
+    int main() { size_t megabytes; std::cin >> megabytes; std::vector<char> memory(megabytes << 20, 1); long long sum = 0; for (char byte : memory) sum += byte; std::cout << sum; }";
 
-    #[test]
-    fn test_peak_memory_is_reported() {
-        let peak = |megabytes: usize| match run(ALLOCATE, &megabytes.to_string(), 5000) {
-            RunResult::Ok { memory_kb, .. } => memory_kb,
-            other => unreachable!("expected OK, got {other:?}"),
-        };
-        let (small, large) = (peak(1), peak(100));
-        assert!(small > 0, "no memory was reported");
-        assert!(small < 50 << 10, "a program using 1 MB was measured at {small} kB");
-        assert!((100 << 10..200 << 10).contains(&large), "a program using 100 MB was measured at {large} kB");
-    }
+#[test]
+fn test_peak_memory_is_reported() {
+    let peak = |megabytes: usize| match run(ALLOCATE, &megabytes.to_string(), 5000) {
+        RunResult::Ok { memory_kb, .. } => memory_kb,
+        other => unreachable!("expected OK, got {other:?}"),
+    };
+    let (small, large) = (peak(1), peak(100));
+    assert!(small > 0, "no memory was reported");
+    assert!(small < 50 << 10, "a program using 1 MB was measured at {small} kB");
+    assert!((100 << 10..200 << 10).contains(&large), "a program using 100 MB was measured at {large} kB");
+}
 
-    #[test]
-    fn test_memory_limit() {
-        let limited = |megabytes: usize, limit_megabytes: u64| {
-            let limits = Limits {
-                time_ms: 5000,
-                memory_kb: Some(limit_megabytes << 10),
-            };
-            run_with(ALLOCATE, &megabytes.to_string(), limits)
-        };
-        assert_output(&limited(10, 64), &(10 << 20).to_string());
-        assert_eq!(limited(200, 64), RunResult::MemoryLimitExceeded);
-    }
-
-    /// Far more than the limit is refused by the system rather than measured.
-    /// macOS has no way to set that up, so there the solution would get it all.
-    #[test]
-    #[cfg(not(target_os = "macos"))]
-    fn test_runaway_memory_is_stopped() {
+#[test]
+fn test_memory_limit() {
+    let limited = |megabytes: usize, limit_megabytes: u64| {
         let limits = Limits {
             time_ms: 5000,
-            memory_kb: Some(64 << 10),
+            memory_kb: Some(limit_megabytes << 10),
         };
-        let result = run_with(ALLOCATE, "8192", limits);
-        assert!(matches!(result, RunResult::MemoryLimitExceeded | RunResult::Crashed), "got {result:?}");
-    }
+        run_with(ALLOCATE, &megabytes.to_string(), limits)
+    };
+    assert_output(&limited(10, 64), &(10 << 20).to_string());
+    assert_eq!(limited(200, 64), RunResult::MemoryLimitExceeded);
+}
 
-    #[test]
-    fn test_jobs_are_answered_in_order_whatever_the_number_of_workers() {
-        let (_dir, mut runner) = runner();
-        let echo = runner.add_program("#include <iostream>\nint main() { int n; std::cin >> n; std::cout << n; }").unwrap();
-        let inputs: Vec<String> = (0..40).map(|i| i.to_string()).collect();
-        let jobs: Vec<_> = inputs.iter().map(|input| Job { program: echo, input }).collect();
+/// Far more than the limit is refused by the system rather than measured.
+/// macOS has no way to set that up, so there the solution would get it all.
+#[test]
+#[cfg(not(target_os = "macos"))]
+fn test_runaway_memory_is_stopped() {
+    let limits = Limits {
+        time_ms: 5000,
+        memory_kb: Some(64 << 10),
+    };
+    let result = run_with(ALLOCATE, "8192", limits);
+    assert!(matches!(result, RunResult::MemoryLimitExceeded | RunResult::Crashed), "got {result:?}");
+}
 
-        for workers in [1, 3, 16] {
-            runner.set_workers(workers);
-            assert_eq!(runner.workers(), workers);
-            for (result, input) in runner.run_all(&jobs, limits(5000)).unwrap().iter().zip(&inputs) {
-                assert_output(result, input);
-            }
+#[test]
+fn test_jobs_are_answered_in_order_whatever_the_number_of_workers() {
+    let (_dir, mut runner) = runner();
+    let echo = runner.add_program("#include <iostream>\nint main() { int n; std::cin >> n; std::cout << n; }").unwrap();
+    let inputs: Vec<String> = (0..40).map(|i| i.to_string()).collect();
+    let jobs: Vec<_> = inputs.iter().map(|input| Job { program: echo, input }).collect();
+
+    for workers in [1, 3, 16] {
+        runner.set_workers(workers);
+        assert_eq!(runner.workers(), workers);
+        for (result, input) in runner.run_all(&jobs, limits(5000)).unwrap().iter().zip(&inputs) {
+            assert_output(result, input);
         }
-        runner.set_workers(0);
-        assert_eq!(runner.workers(), 1, "at least one job runs at a time");
     }
+    runner.set_workers(0);
+    assert_eq!(runner.workers(), 1, "at least one job runs at a time");
+}
 
-    #[test]
-    fn test_skipped_jobs_are_not_run() {
-        let (_dir, runner) = runner();
-        let mut runner = runner;
-        let program = runner.add_program(HELLO_WORLD).unwrap();
-        let jobs = [Job { program, input: "" }; 10];
+#[test]
+fn test_skipped_jobs_are_not_run() {
+    let (_dir, runner) = runner();
+    let mut runner = runner;
+    let program = runner.add_program(HELLO_WORLD).unwrap();
+    let jobs = [Job { program, input: "" }; 10];
 
-        let mut ran = Vec::new();
-        runner
-            .run_jobs(&jobs, limits(5000), &|job| job % 2 == 1, |job, result| {
-                assert_eq!(result.is_none(), job % 2 == 1, "job {job} got {result:?}");
-                ran.push(job);
-            })
-            .unwrap();
-        ran.sort_unstable();
-        assert_eq!(ran, (0..10).collect::<Vec<_>>(), "every job is answered, skipped or not");
-    }
+    let mut ran = Vec::new();
+    runner
+        .run_jobs(&jobs, limits(5000), &|job| job % 2 == 1, |job, result| {
+            assert_eq!(result.is_none(), job % 2 == 1, "job {job} got {result:?}");
+            ran.push(job);
+        })
+        .unwrap();
+    ran.sort_unstable();
+    assert_eq!(ran, (0..10).collect::<Vec<_>>(), "every job is answered, skipped or not");
 }
