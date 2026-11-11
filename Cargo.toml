@@ -25,19 +25,17 @@ members = ["ezcp_macros"]
 workspace = true
 
 [dependencies]
-# The version is what the published crate depends on.
 ezcp_macros = { version = "0.2.0", path = "ezcp_macros" }
 serde_json = { version = "1.0", default-features = false, features = ["std"] }
-# Unlike "deflate", this does not pull in zopfli, which is only used at
-# compression levels this crate never asks for.
+# Not "deflate", which pulls in zopfli for compression levels never used here.
 zip = { version = "8.4", default-features = false, features = ["deflate-flate2-zlib-rs"] }
 thiserror = { version = "2.0", default-features = false }
 which = { version = "8.0", default-features = false, features = ["real-sys"] }
 console = { version = "0.16", default-features = false, features = ["unicode-width", "ansi-parsing", "std"] }
-indicatif = { version = "0.18", default-features = false, features = [] }
-indicatif-log-bridge = { version = "0.2", default-features = false, features = [] }
-env_logger = { version = "0.11", default-features = false, features = [] }
-log = { version = "0.4", default-features = false, features = [] }
+indicatif = { version = "0.18", default-features = false }
+indicatif-log-bridge = { version = "0.2", default-features = false }
+env_logger = { version = "0.11", default-features = false }
+log = { version = "0.4", default-features = false }
 dunce = { version = "1.0", default-features = false }
 
 [dev-dependencies]
@@ -48,7 +46,7 @@ all = { level = "warn", priority = -1 }
 pedantic = { level = "warn", priority = -1 }
 nursery = { level = "warn", priority = -1 }
 cargo = { level = "warn", priority = -1 }
-# Restriction lints, which no group above enables.
+# Restriction lints, which no group enables.
 assertions_on_result_states = "warn"
 create_dir = "warn"
 decimal_literal_representation = "warn"
