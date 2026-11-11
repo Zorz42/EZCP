@@ -62,6 +62,10 @@ mod whitespace;
 #[doc = include_str!("../README.md")]
 struct ReadmeExamples;
 
+#[cfg(doctest)]
+#[doc = include_str!("../GUIDE.md")]
+struct Guide;
+
 pub use error::{Error, Result};
 pub use generators::{Graph, GraphFormat, array_generator, array_generator_custom};
 pub use mode::Mode;
