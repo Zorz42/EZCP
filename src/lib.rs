@@ -32,7 +32,6 @@
 //! A generator must take all of its randomness from the [`Rng`] it is given: a
 //! test is stored as its generator and seed, which have to rebuild the same
 //! bytes. [Seed mode](Mode::Seeds) checks this by rebuilding every test.
-#![warn(missing_docs)]
 
 // The `ToOutput` derive refers to `::ezcp::ToOutput`, which needs this inside the crate.
 extern crate self as ezcp;

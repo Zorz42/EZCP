@@ -1,5 +1,4 @@
 //! Procedural macros for [EZCP](https://docs.rs/ezcp), which re-exports them.
-#![warn(missing_docs)]
 use proc_macro::TokenStream;
 use quote::quote;
 use syn::{Data, DeriveInput, Index, parse_macro_input};
