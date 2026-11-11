@@ -4,7 +4,6 @@ pub mod cpp_runner_tests {
     use crate::Error::{CompilerError, TimerFailed};
     use crate::runner::cpp_runner::{CppRunner, Job};
     use crate::runner::exec_runner::{Limits, RunResult};
-    use crate::tests::test_shared::initialize_logger;
     use std::path::{Path, PathBuf};
     use std::time::{Duration, Instant};
     use tempfile::TempDir;
@@ -23,7 +22,6 @@ pub mod cpp_runner_tests {
 
     /// A runner in a fresh build folder, which is deleted with the returned guard.
     fn runner() -> (TempDir, CppRunner) {
-        initialize_logger();
         let dir = TempDir::new().unwrap();
         let runner = CppRunner::new(dir.path()).unwrap();
         (dir, runner)
@@ -178,7 +176,6 @@ pub mod cpp_runner_tests {
     /// As when a judge starts many `--serve` processes on a fresh build folder.
     #[test]
     fn test_runners_sharing_a_build_folder() {
-        initialize_logger();
         let tempdir = TempDir::new().unwrap();
         let workers: Vec<_> = (0..8)
             .map(|_| {
@@ -251,7 +248,6 @@ pub mod cpp_runner_tests {
     #[test]
     #[cfg(not(windows))]
     fn test_runner_pickup_cache() {
-        initialize_logger();
         let tempdir = TempDir::new().unwrap();
         let run_once = || {
             let mut runner = CppRunner::new(tempdir.path()).unwrap();

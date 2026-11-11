@@ -22,7 +22,7 @@ pub const DEFAULT_SEED: u64 = 0x455A_4350_5345_4544;
 /// reproduces it.
 pub const DEFAULT_REPRODUCIBILITY_CHECKS: usize = 10;
 
-pub static LOGGER_INIT: Once = Once::new();
+static LOGGER_INIT: Once = Once::new();
 
 /// `(test, subtask, test_in_subtask) -> file name`, all counted from zero.
 type FileNamer = Box<dyn Fn(usize, usize, usize) -> String>;
