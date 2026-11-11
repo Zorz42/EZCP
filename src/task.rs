@@ -95,7 +95,7 @@ impl<T: ToOutput> Task<T> {
             build_folder_path: path.join("build"),
             time_limit: 5000,
             memory_limit: None,
-            seed: SeedChoice::Default,
+            seed: SeedChoice::Fixed(DEFAULT_SEED),
             reproducibility_checks: None,
             input_file_name: Box::new(|test, subtask, _test_in_subtask| format!("test.{:02}.{:03}.in", subtask + 1, test + 1)),
             output_file_name: Box::new(|test, subtask, _test_in_subtask| format!("test.{:02}.{:03}.out", subtask + 1, test + 1)),
@@ -349,7 +349,7 @@ impl<T: ToOutput> Task<T> {
         }
 
         let start_time = std::time::Instant::now();
-        self.create_tests(mode, seed.resolve(DEFAULT_SEED)).inspect_err(log_error)?;
+        self.create_tests(mode, seed.resolve()).inspect_err(log_error)?;
         info!("Elapsed time: {}", style(format!("{:.2}s", start_time.elapsed().as_secs_f32())).bold());
         self.logger.println(style("Success!").green().bright().bold().to_string()).ok();
         Ok(())

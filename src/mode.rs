@@ -16,11 +16,8 @@ pub enum Mode {
 }
 
 /// Where the master seed comes from.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SeedChoice {
-    /// [`DEFAULT_SEED`](crate::DEFAULT_SEED).
-    #[default]
-    Default,
     /// A given seed.
     Fixed(u64),
     /// A new seed on every run.
@@ -28,10 +25,9 @@ pub enum SeedChoice {
 }
 
 impl SeedChoice {
-    /// Returns the seed, `default` for [`SeedChoice::Default`].
-    pub fn resolve(self, default: u64) -> u64 {
+    /// Returns the seed.
+    pub fn resolve(self) -> u64 {
         match self {
-            Self::Default => default,
             Self::Fixed(seed) => seed,
             Self::Random => Rng::from_entropy().next_u64(),
         }

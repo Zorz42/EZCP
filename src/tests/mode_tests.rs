@@ -80,8 +80,7 @@ mod mode_tests {
 
     #[test]
     fn a_fixed_seed_resolves_to_itself() {
-        assert_eq!(SeedChoice::Fixed(7).resolve(1), 7);
-        assert_eq!(SeedChoice::Default.resolve(1), 1);
-        assert_ne!(SeedChoice::Random.resolve(1), SeedChoice::Random.resolve(1));
+        assert_eq!(SeedChoice::Fixed(7).resolve(), 7);
+        assert_ne!(SeedChoice::Random.resolve(), SeedChoice::Random.resolve());
     }
 }
