@@ -13,7 +13,6 @@ mod mode_tests;
 mod partial_solution_tests;
 mod rng_tests;
 mod seed_mode_tests;
-mod solution_tests;
 mod stub_tests;
 mod subtask_tests;
 mod to_output_tests;

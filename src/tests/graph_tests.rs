@@ -1,9 +1,10 @@
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod graph_tests {
+    use crate::ToOutput;
     use crate::generators::{Graph, GraphFormat};
     use crate::rng::Rng;
-    use crate::{ToOutput, stable_hash};
+    use crate::stub::stable_hash;
     use std::sync::atomic::{AtomicU64, Ordering};
 
     /// A different seed on every call.

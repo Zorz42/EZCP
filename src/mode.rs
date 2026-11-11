@@ -7,7 +7,7 @@ pub enum Mode {
     /// Generate the tests, write them to files and archive them.
     #[default]
     Files,
-    /// Like [`Mode::Files`], but each file holds the [stub](crate::Stub) that
+    /// Like [`Mode::Files`], but each file holds the stub that
     /// rebuilds the test instead of the test itself.
     Seeds,
     /// Read stubs from stdin, one per line, and write the raw test data each one
@@ -29,7 +29,6 @@ pub enum SeedChoice {
 
 impl SeedChoice {
     /// Returns the seed, `default` for [`SeedChoice::Default`].
-    #[must_use]
     pub fn resolve(self, default: u64) -> u64 {
         match self {
             Self::Default => default,

@@ -1,7 +1,6 @@
 use crate::logger_format::logger_format;
 use crate::mode::{CliOptions, Mode, SeedChoice, USAGE};
 use crate::runner::exec_runner::Limits;
-use crate::solution::Solution;
 use crate::subtask::Subtask;
 use crate::to_output::ToOutput;
 use crate::{Error, Result};
@@ -9,6 +8,7 @@ use console::style;
 use indicatif::MultiProgress;
 use indicatif_log_bridge::LogWrapper;
 use log::{LevelFilter, error, info};
+use std::collections::HashSet;
 use std::fs::OpenOptions;
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -29,6 +29,19 @@ type FileNamer = Box<dyn Fn(usize, usize, usize) -> String>;
 
 /// `(input, official_output, output) -> accepted`
 type Checker = Box<dyn Fn(&str, &str, &str) -> bool + Send + Sync>;
+
+/// A partial solution.
+pub struct Solution {
+    pub name: String,
+    pub source: String,
+    pub passes_subtasks: HashSet<usize>,
+}
+
+impl Solution {
+    pub fn should_fail(&self, subtask: usize) -> bool {
+        !self.passes_subtasks.contains(&subtask)
+    }
+}
 
 /// A competitive programming task: its solutions, subtasks and generation
 /// settings.
@@ -142,7 +155,11 @@ impl<T: ToOutput> Task<T> {
     /// in `passes_subtasks` (0-based) and fail all others.
     #[must_use]
     pub fn with_partial_solution(mut self, name: &str, source: &str, passes_subtasks: &[usize]) -> Self {
-        self.solutions.push(Solution::new(name.to_owned(), source.to_owned(), passes_subtasks));
+        self.solutions.push(Solution {
+            name: name.to_owned(),
+            source: source.to_owned(),
+            passes_subtasks: passes_subtasks.iter().copied().collect(),
+        });
         self
     }
 
@@ -232,7 +249,7 @@ impl<T: ToOutput> Task<T> {
 
     /// Sets how many times each finished test's input is rebuilt from its seed
     /// and compared, in every mode. By default only seed mode checks,
-    /// [`DEFAULT_REPRODUCIBILITY_CHECKS`] times; zero turns it off.
+    /// 10 times; zero turns it off.
     #[must_use]
     pub const fn with_reproducibility_checks(mut self, times: usize) -> Self {
         self.reproducibility_checks = Some(times);

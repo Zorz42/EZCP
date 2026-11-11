@@ -298,7 +298,7 @@ mod seed_mode_tests {
         };
         assert_eq!(*subtask_number, 1);
         assert_eq!(*gen_id, 1);
-        assert_eq!(*attempts, crate::DEFAULT_REPRODUCIBILITY_CHECKS);
+        assert_eq!(*attempts, crate::task::DEFAULT_REPRODUCIBILITY_CHECKS);
         assert!(details.contains("differ"), "{details}");
         let message = err.to_string();
         for part in ["not reproducible", "Rng it is given", "seed 0x"] {

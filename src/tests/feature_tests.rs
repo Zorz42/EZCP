@@ -5,8 +5,9 @@
 #[allow(clippy::unwrap_used)]
 mod feature_tests {
     use crate::rng::Rng;
+    use crate::task::DEFAULT_SEED;
     use crate::tests::generic_tests::generic_tests::test_task;
-    use crate::{DEFAULT_SEED, Error, Mode, Subtask, Task};
+    use crate::{Error, Mode, Subtask, Task};
     use std::path::Path;
     use std::sync::Arc;
     use std::sync::atomic::{AtomicUsize, Ordering};

@@ -129,7 +129,7 @@ pub enum Error {
         details: String,
     },
 
-    /// A [stub](crate::Stub) could not be parsed or names a test the task does
+    /// A stub could not be parsed or names a test the task does
     /// not have.
     #[error("Invalid test stub: {details}")]
     InvalidStub {

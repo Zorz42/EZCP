@@ -7,7 +7,6 @@ use crate::{Error, Result};
 use serde_json::Value;
 
 /// FNV-1a, a hash that, unlike `DefaultHasher`, never changes between builds.
-#[must_use]
 pub fn stable_hash(data: &str) -> u64 {
     const OFFSET_BASIS: u64 = 0xcbf2_9ce4_8422_2325;
     const PRIME: u64 = 0x0000_0100_0000_01b3;
@@ -31,7 +30,6 @@ pub enum Part {
 
 impl Part {
     /// The name used in a stub.
-    #[must_use]
     pub const fn as_str(self) -> &'static str {
         match self {
             Self::Input => "input",
@@ -79,8 +77,7 @@ fn hex_u64(value: &Value, what: &str) -> Result<u64> {
 
 impl Stub {
     /// Renders the stub as a line of JSON. Nothing in it needs escaping.
-    #[must_use]
-    pub fn to_line(&self) -> String {
+    pub fn to_line(self) -> String {
         let hash = self.hash.map_or_else(String::new, |hash| format!(",\"hash\":\"{hash:016x}\""));
         format!(
             "{{\"subtask\":{},\"generator\":{},\"seed\":\"{:016x}\",\"part\":\"{}\"{hash}}}\n",
