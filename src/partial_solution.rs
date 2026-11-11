@@ -30,22 +30,20 @@ impl Display for Verdict {
     }
 }
 
-/// How a solution did on one test.
 #[derive(Clone, Copy)]
 struct Outcome {
     verdict: Verdict,
-    /// In milliseconds and kilobytes; zero unless the verdict is `Ok`.
+    /// Zero unless `Ok`.
     time_ms: i32,
     memory_kb: u64,
 }
 
-/// How a solution did on the tests of one subtask.
 #[derive(Default)]
 struct SubtaskReport {
     verdicts: BTreeMap<Verdict, usize>,
-    /// Tests that were not run because an earlier one had failed.
+    /// Not run after an earlier failure.
     skipped: usize,
-    /// The largest of the tests; meaningless once one has failed.
+    /// The largest over the tests.
     time_ms: i32,
     memory_kb: u64,
 }
@@ -87,11 +85,8 @@ impl<T: ToOutput> Task<T> {
         }
     }
 
-    /// Runs a solution on every test, logs how it did and returns the subtasks
-    /// it passed.
-    ///
-    /// With [`Task::with_fail_fast`], the tests after the first failed one are
-    /// skipped in the subtasks `expected_to_fail` names.
+    /// Logs how the solution does on every test and returns the subtasks it passed. With fail-fast, the
+    /// subtasks `expected_to_fail` names skip their tests after the first failure.
     pub(crate) fn run_solution_on_tests(
         &self,
         tests: &[Vec<GeneratedTest>],
@@ -100,7 +95,6 @@ impl<T: ToOutput> Task<T> {
         lines_of_code: usize,
         expected_to_fail: &dyn Fn(usize) -> bool,
     ) -> Result<HashSet<usize>> {
-        // `(subtask, test in subtask, test)` of every test, in order.
         let runs: Vec<_> = tests
             .iter()
             .enumerate()
@@ -108,9 +102,8 @@ impl<T: ToOutput> Task<T> {
             .collect();
         let jobs: Vec<_> = runs.iter().map(|&(_, _, test)| Job { program, input: &test.input }).collect();
 
-        // The first failed test of each subtask, and whether the subtask's
-        // later tests are skipped. Everything up to that test is always run, so
-        // what is reported does not depend on the order the runs finish in.
+        // Everything up to a subtask's first failed test is run, so the report does not depend on the
+        // order the runs finish in.
         let first_failure: Vec<_> = tests.iter().map(|_| AtomicUsize::new(usize::MAX)).collect();
         let stops_early: Vec<_> = (0..tests.len()).map(|subtask_idx| self.fail_fast && expected_to_fail(subtask_idx)).collect();
         let is_past_failure = |subtask_idx: usize, test_idx: usize| stops_early[subtask_idx] && test_idx > first_failure[subtask_idx].load(Ordering::Relaxed);
@@ -131,7 +124,7 @@ impl<T: ToOutput> Task<T> {
         let mut reports: Vec<_> = tests.iter().map(|_| SubtaskReport::default()).collect();
         for (&(subtask_idx, test_idx, _), outcome) in runs.iter().zip(outcomes) {
             let report = &mut reports[subtask_idx];
-            // A test past the failure may have run all the same, before the failure was known.
+            // It may have run anyway, before the failure was known.
             match outcome.filter(|_| !is_past_failure(subtask_idx, test_idx)) {
                 Some(outcome) => {
                     *report.verdicts.entry(outcome.verdict).or_insert(0) += 1;

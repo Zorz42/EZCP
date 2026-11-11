@@ -1,11 +1,8 @@
-//! Generating the tests of one subtask.
+//! Generating one subtask's tests.
 //!
-//! Candidates are drawn, built and run a wave at a time, on several threads.
-//! The outcome is nevertheless the one of handling them one after another: a
-//! wave is gone through in order, and when that order says to stop, the
-//! candidates after that point are forgotten and the [`Rng`] is put back to
-//! where it was before them. The tests therefore do not depend on the number
-//! of threads.
+//! Candidates are drawn, built and run a wave at a time on several threads, yet the outcome is that of
+//! taking them one by one: a wave is judged in order, and where that order says to stop, the rest of
+//! it is forgotten and the `Rng` put back to before them. So the tests do not depend on the threads.
 
 use crate::parallel::parallel_map;
 use crate::progress::ScopedProgressBar;
@@ -19,12 +16,10 @@ use log::{error, info, warn};
 use std::collections::HashSet;
 use std::panic::resume_unwind;
 
-/// How many duplicate tests a generator may produce in its initial batch before
-/// it is given up on, since one with a small range may never reach its count.
+/// Repeats a generator may produce in its initial batch before it is given up on; one with a small
+/// range may never reach its count.
 const MAX_REPEATED_TESTS: usize = 100;
 
-/// A kept test. `generator` and `seed` rebuild `input`, which is what a stub
-/// records.
 pub struct GeneratedTest {
     pub generator: usize,
     pub seed: u64,
@@ -32,37 +27,31 @@ pub struct GeneratedTest {
     pub output: String,
 }
 
-/// A solution's index into `Task::solutions`, and its program.
+/// An index into `Task::solutions`, and the program.
 type IndexedProgram = (usize, ProgramHandle);
 
-/// A candidate test that was drawn, built and run ahead of its turn.
 struct Candidate {
     generator: usize,
     seed: u64,
     /// Where the `Rng` goes back to if the candidate's turn never comes.
     rng_before: Rng,
-    /// `None` if the input was tried before, and so was not run again. An
-    /// error is the panic of the generator.
+    /// `None` for an input tried before, which was not run. An error is the generator's panic.
     run: std::thread::Result<Option<Run>>,
 }
 
-/// A new input and what the solutions made of it.
 struct Run {
     input: String,
     hash: u64,
-    /// Of the official solution, the good solutions and the bad ones that were
-    /// run, in that order.
+    /// Of the official solution, the good solutions and the bad ones that were run, in that order.
     results: Vec<RunResult>,
 }
 
-/// What there is to judge of a candidate whose turn has come. A panic of its
-/// generator is passed on only here, as a candidate before it may already have
-/// ended the run or the search.
+/// A generator's panic is passed on only once its candidate's turn comes, since an earlier candidate
+/// may already have ended the run.
 fn reached(run: std::thread::Result<Option<Run>>) -> Option<Run> {
     run.unwrap_or_else(|panic| resume_unwind(panic))
 }
 
-/// The state of generating one subtask's tests.
 struct Generation<'task, T: ToOutput> {
     task: &'task Task<T>,
     runner: &'task CppRunner,
@@ -72,9 +61,8 @@ struct Generation<'task, T: ToOutput> {
     /// The partial solutions meant to pass this subtask, and those meant to fail it.
     good: Vec<IndexedProgram>,
     bad: Vec<IndexedProgram>,
-    /// How many tests each bad solution has to fail.
     target_failures: usize,
-    /// How many it has failed so far, indexed like `Task::solutions`.
+    /// Indexed like `Task::solutions`.
     failures: Vec<usize>,
     tried_inputs: HashSet<u64>,
     tests: Vec<GeneratedTest>,
@@ -85,14 +73,10 @@ impl<T: ToOutput> Task<T> {
         if self.trim_whitespace { trim_whitespace_owned(raw) } else { raw.trim().to_owned() + "\n" }
     }
 
-    /// # Panics
-    /// Panics if `subtask_idx` or `generator` do not exist.
     pub(crate) fn generate_input(&self, subtask_idx: usize, generator: usize, seed: u64) -> String {
         self.subtasks[subtask_idx].generate_input(generator, seed, self.trim_whitespace)
     }
 
-    /// The error for a partial solution that passes a subtask it is declared
-    /// to fail.
     pub(crate) fn passes_extra_subtask(&self, partial: usize, subtask: usize) -> Error {
         Error::PartialSolutionPassesExtraSubtask {
             subtask_number: subtask + 1,
@@ -135,7 +119,6 @@ impl<T: ToOutput> Task<T> {
             generation.report_failures()?;
         }
 
-        // With the run's rng, so the order is reproducible too.
         let mut tests = generation.tests;
         rng.shuffle(&mut tests);
         Ok(tests)
@@ -143,9 +126,8 @@ impl<T: ToOutput> Task<T> {
 }
 
 impl<T: ToOutput> Generation<'_, T> {
-    /// The bad solutions that have not failed enough tests yet. Only these are
-    /// run: the others can no longer change anything, and bad solutions are the
-    /// slow ones, since they often run into the time limit.
+    /// Only these are run: the others can no longer change anything, and bad solutions are the slow
+    /// ones, often running into the time limit.
     fn still_owed(&self) -> Vec<IndexedProgram> {
         self.bad.iter().copied().filter(|&(i, _)| self.owes(i)).collect()
     }
@@ -154,18 +136,13 @@ impl<T: ToOutput> Generation<'_, T> {
         self.failures[solution] < self.target_failures
     }
 
-    /// Whether every bad solution has failed enough tests.
     fn nothing_is_owed(&self) -> bool {
         !self.bad.iter().any(|&(i, _)| self.owes(i))
     }
 
-    /// Draws `count` candidates from the generators `pick` chooses, builds
-    /// their inputs and runs the official solution, the good solutions and
-    /// `bad` on those that are new.
-    ///
-    /// The caller goes through them in order. To stop before one of them, it
-    /// puts `rng` back to where it was before that candidate, which is then as
-    /// good as never drawn.
+    /// Draws `count` candidates from the generators `pick` chooses, and runs the official solution, the
+    /// good solutions and `bad` on the new inputs. To stop before a candidate, the caller puts `rng`
+    /// back to its `rng_before`, and the candidate is as good as never drawn.
     fn wave(&self, rng: &mut Rng, count: usize, mut pick: impl FnMut(&mut Rng) -> usize, bad: &[IndexedProgram]) -> Result<Vec<Candidate>> {
         let draws: Vec<_> = (0..count)
             .map(|_| {
@@ -180,7 +157,7 @@ impl<T: ToOutput> Generation<'_, T> {
             (stable_hash(&input), input)
         });
 
-        // New is what neither an earlier test nor an earlier candidate of this wave was.
+        // New to both the earlier tests and the earlier candidates of this wave.
         let mut hashes_in_wave = HashSet::new();
         let mut is_new = |hash: u64| !self.tried_inputs.contains(&hash) && hashes_in_wave.insert(hash);
         let inputs: Vec<_> = inputs.into_iter().map(|input| input.map(|(hash, input)| is_new(hash).then_some((hash, input)))).collect();
@@ -208,9 +185,8 @@ impl<T: ToOutput> Generation<'_, T> {
         std::fs::write(&path, contents).map_err(Error::io(&path))
     }
 
-    /// Judges the results of [`Generation::wave`] on an input. The official or
-    /// a good solution failing is an error. Returns the official output and
-    /// those of `bad` that failed.
+    /// The official or a good solution failing is an error. Returns the official output and the
+    /// solutions of `bad` that failed.
     fn judge(&self, generator: usize, input: &str, results: Vec<RunResult>, bad: &[IndexedProgram]) -> Result<(String, Vec<usize>)> {
         let mut results = results.into_iter();
         let official_output = match results.next().unwrap_or(RunResult::Crashed).official_output("generation phase", generator + 1) {
@@ -258,8 +234,7 @@ impl<T: ToOutput> Generation<'_, T> {
         Ok((official_output, failed))
     }
 
-    /// Judges a new input and counts it for those of the solutions it broke
-    /// that still owe failures. Returns the test and whether there were any.
+    /// Returns the test, and whether it counted for a solution that still owed failures.
     fn try_out(&mut self, generator: usize, seed: u64, run: Run, bad: &[IndexedProgram]) -> Result<(GeneratedTest, bool)> {
         self.tried_inputs.insert(run.hash);
         let (output, failed) = self.judge(generator, &run.input, run.results, bad)?;
@@ -279,8 +254,6 @@ impl<T: ToOutput> Generation<'_, T> {
         Ok((test, counted))
     }
 
-    /// Runs every generator through the solutions meant to pass, to find the
-    /// ones that hang or break such a solution. The tests are discarded.
     fn stress_test(&self, rng: &mut Rng) -> Result<()> {
         for generator in (0..self.subtask.num_generators()).filter(|_| self.subtask.stress_tests > 0) {
             info!("Stress testing generator {generator}");
@@ -300,8 +273,7 @@ impl<T: ToOutput> Generation<'_, T> {
         Ok(())
     }
 
-    /// The initial tests are kept whatever the bad solutions do, but failures
-    /// on them still count towards the target.
+    /// Kept whatever the bad solutions do, though failures on them count.
     fn generate_initial_tests(&mut self, rng: &mut Rng, found_progress_bar: &ScopedProgressBar) -> Result<()> {
         for (generator, &needed) in self.subtask.initial_counts.iter().enumerate() {
             let (mut got, mut repeats) = (0, 0);
@@ -309,7 +281,6 @@ impl<T: ToOutput> Generation<'_, T> {
                 let owed = self.still_owed();
                 for candidate in self.wave(rng, (needed - got).min(self.runner.workers()), |_rng| generator, &owed)? {
                     if repeats == MAX_REPEATED_TESTS {
-                        // Drawn ahead, but the generator is given up on before it.
                         *rng = candidate.rng_before;
                         break;
                     }
@@ -333,9 +304,8 @@ impl<T: ToOutput> Generation<'_, T> {
         Ok(())
     }
 
-    /// Supplemental tests, kept only if they break a solution that still owes
-    /// failures. The target is per solution: requiring one test to break all
-    /// of them at once rarely succeeds.
+    /// Kept only if they break a solution that still owes failures. The target is per solution, as one
+    /// test rarely breaks all of them.
     fn hunt_for_failures(&mut self, rng: &mut Rng, found_progress_bar: &ScopedProgressBar, tries_progress_bar: &ScopedProgressBar) -> Result<()> {
         let subtask = self.subtask;
         let mut tries = 0;
@@ -345,12 +315,10 @@ impl<T: ToOutput> Generation<'_, T> {
                 return Ok(());
             }
 
-            // No more than the tries that are left, so that only having found
-            // every failure can end the search in the middle of a wave.
+            // No more than the tries left, so only finding every failure can end the hunt mid-wave.
             let wave_size = self.runner.workers().min(self.task.max_tries - tries);
             for candidate in self.wave(rng, wave_size, |rng| subtask.pick_generator(rng).unwrap_or_default(), &owed)? {
                 if self.nothing_is_owed() {
-                    // Drawn ahead, but the search ends before it.
                     *rng = candidate.rng_before;
                     return Ok(());
                 }
@@ -364,16 +332,14 @@ impl<T: ToOutput> Generation<'_, T> {
                     tries = 0;
                     tries_progress_bar.reset();
                     found_progress_bar.inc(1);
-                    // The number of extra tests is not known in advance.
                     found_progress_bar.set_length(found_progress_bar.length().unwrap_or(0).max(found_progress_bar.position()));
                 }
             }
         }
     }
 
-    /// A bad solution with no failures at all will pass the subtask, so that is
-    /// reported now rather than after all the remaining subtasks. Falling short
-    /// of the target only weakens the tests, so that is just logged.
+    /// A bad solution that failed nothing passes the subtask, which is an error now rather than after
+    /// the remaining subtasks. Falling short of the target only weakens the tests, so that is logged.
     fn report_failures(&self) -> Result<()> {
         if let Some(&(i, _)) = self.bad.iter().find(|&&(i, _)| self.failures[i] == 0) {
             return Err(self.task.passes_extra_subtask(i, self.subtask_idx));

@@ -5,27 +5,22 @@ use std::collections::HashSet;
 use std::hash::{BuildHasherDefault, Hasher};
 use std::ops::RangeBounds;
 
-/// How a [`Graph`] is written. Nodes are numbered from 1 unless
-/// [`Graph::zero_based`] is used.
+/// Nodes are written from 1 unless [`Graph::zero_based`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
 pub enum GraphFormat {
-    /// `n m` on the first line, then one edge per line.
+    /// `n m`, then one edge per line.
     #[default]
     EdgeList,
-    /// `n` on the first line, then the `n - 1` edges, one per line. Only for
-    /// trees, and what the tree constructors start out with.
+    /// `n`, then one edge per line. What the tree constructors start with.
     Tree,
-    /// `n` on the first line and the parents of nodes `2..=n` on the second,
-    /// with node `1` as the root. Only for trees.
+    /// `n`, then the parents of nodes `2..=n` on one line, rooted at node 1.
     ParentList,
-    /// One edge per line and nothing else, for when the counts are written
-    /// somewhere else.
+    /// One edge per line.
     EdgesOnly,
 }
 
-/// Hashes an edge with two multiplications. `SipHash`, the default, takes longer
-/// than everything else that is done to an edge, and what it protects against,
-/// keys chosen to collide, does not happen here.
+/// `SipHash` took longer than everything else done to an edge, and guards against crafted collisions,
+/// which cannot happen here.
 #[derive(Default)]
 struct EdgeHasher(u64);
 
@@ -45,36 +40,22 @@ impl Hasher for EdgeHasher {
     }
 }
 
-/// A simple graph: undirected, unless it comes from one of the directed
-/// constructors.
-///
-/// Every constructor takes the generator's [`Rng`], even the deterministic ones,
-/// because writing the graph out shuffles its edges.
-///
-/// ```
-/// use ezcp::{Graph, GraphFormat, Rng, ToOutput};
-///
-/// let mut rng = Rng::from_seed(1);
-/// let tree = Graph::new_random_tree(&mut rng, 4).with_format(GraphFormat::ParentList);
-/// assert_eq!(tree.to_output().lines().count(), 2);
-/// ```
+/// A simple graph, undirected unless built directed; the structural checks ignore directions. Every
+/// constructor takes the `Rng`, as writing the graph shuffles its edges.
 pub struct Graph {
-    /// The neighbours of every node; in a directed graph, the nodes its edges
-    /// lead to.
+    /// In a directed graph, the nodes the edges lead to.
     adjacency: Vec<Vec<usize>>,
-    /// In the order they were added. An undirected edge has its larger end first.
+    /// In the order they were added; an undirected edge has its larger end first.
     edges: Vec<(usize, usize)>,
-    /// The same edges, to look one up in.
     edge_set: HashSet<(usize, usize), BuildHasherDefault<EdgeHasher>>,
     directed: bool,
-    /// One per edge, in the order of `edges`.
     weights: Option<Vec<i64>>,
     format: GraphFormat,
     zero_based: bool,
     output_seed: u64,
 }
 
-/// In 64 bits, since it overflows 32 from n = 65537 on.
+/// 64 bits, as 32 overflow from n = 65537 on.
 const fn max_simple_edges(n: usize) -> u64 {
     let n = n as u64;
     n * n.saturating_sub(1) / 2
@@ -103,19 +84,16 @@ impl Graph {
         }
     }
 
-    /// Creates a graph with `n` nodes and no edges.
     #[must_use]
     pub fn new_empty(rng: &mut Rng, n: usize) -> Self {
         Self::new(rng, n, false)
     }
 
-    /// Creates a directed graph with `n` nodes and no edges.
     #[must_use]
     pub fn new_empty_directed(rng: &mut Rng, n: usize) -> Self {
         Self::new(rng, n, true)
     }
 
-    /// Creates a complete graph with `n` nodes.
     #[must_use]
     pub fn new_full(rng: &mut Rng, n: usize) -> Self {
         let mut result = Self::new_empty(rng, n);
@@ -127,10 +105,6 @@ impl Graph {
         result
     }
 
-    /// Creates a random graph with `n` nodes and `m` edges.
-    ///
-    /// # Panics
-    /// Panics if `m` edges do not fit in a simple graph on `n` nodes.
     #[must_use]
     pub fn new_random(rng: &mut Rng, n: usize, m: usize) -> Self {
         assert_edges_fit(n, m, max_simple_edges(n), "graph");
@@ -139,11 +113,7 @@ impl Graph {
         result
     }
 
-    /// Creates a random directed graph with `n` nodes and `m` edges. Two nodes
-    /// may be joined in both directions.
-    ///
-    /// # Panics
-    /// Panics if `m` edges do not fit in a simple directed graph on `n` nodes.
+    /// Two nodes may be joined in both directions.
     #[must_use]
     pub fn new_random_directed(rng: &mut Rng, n: usize, m: usize) -> Self {
         assert_edges_fit(n, m, 2 * max_simple_edges(n), "directed graph");
@@ -152,30 +122,24 @@ impl Graph {
         result
     }
 
-    /// Creates a random directed acyclic graph with `n` nodes and `m` edges.
     /// The nodes are in no particular topological order.
-    ///
-    /// # Panics
-    /// Panics if `m` edges do not fit in an acyclic graph on `n` nodes.
     #[must_use]
     pub fn new_random_dag(rng: &mut Rng, n: usize, m: usize) -> Self {
         assert_edges_fit(n, m, max_simple_edges(n), "directed acyclic graph");
         let mut result = Self::new_empty_directed(rng, n);
-        // Every edge leads from an earlier node of a random order to a later one.
+        // Edges lead forward in a random order of the nodes.
         let position = rng.shuffled(0..n);
         result.add_random_edges(rng, m, max_simple_edges(n), false, |u, v| if position[u] < position[v] { (u, v) } else { (v, u) });
         result
     }
 
-    /// Adds random edges until there are `m`. `orient` turns two different
-    /// nodes into an edge, `both_ways` says whether the two orders of a pair
-    /// give different edges, and `capacity` is how many edges there can be.
+    /// Adds random edges until there are `m`. `orient` turns two nodes into an edge, `both_ways` says
+    /// whether the two orders of a pair are different edges, `capacity` is how many there can be.
     fn add_random_edges<F: Fn(usize, usize) -> (usize, usize)>(&mut self, rng: &mut Rng, m: usize, capacity: u64, both_ways: bool, orient: F) {
         let n = self.num_nodes();
 
-        // Guessing pairs is cheap while at most half of all edges are taken.
-        // Beyond that the free pairs are enumerated instead, since guessing the
-        // last few would take unboundedly long.
+        // Guessing pairs is cheap while at most half are taken; beyond that the free pairs are listed,
+        // as guessing the last few takes unboundedly long.
         if m as u64 * 2 <= capacity {
             while self.num_edges() < m {
                 let (u, v) = (rng.random_range(0..n), rng.random_range(0..n));
@@ -196,8 +160,7 @@ impl Graph {
         self.add_edges_from(rng, candidates, m);
     }
 
-    /// Adds edges from `candidates`, none of which the graph has, in random
-    /// order until there are `m`.
+    /// `candidates` are edges the graph does not have.
     fn add_edges_from(&mut self, rng: &mut Rng, candidates: Vec<(usize, usize)>, m: usize) {
         let missing = m.saturating_sub(self.num_edges());
         for (u, v) in rng.shuffled(candidates).into_iter().take(missing) {
@@ -205,8 +168,7 @@ impl Graph {
         }
     }
 
-    /// A tree on the nodes in shuffled order, where each node is joined to the
-    /// one `parent` picks from `(rng, shuffled nodes, its position)`.
+    /// Joins each node of a shuffled order to the one `parent` picks from `(rng, order, position)`.
     fn new_shuffled_tree<F: FnMut(&mut Rng, &[usize], usize) -> usize>(rng: &mut Rng, n: usize, mut parent: F) -> Self {
         assert!(n >= 1, "a tree needs at least one node, got {n}");
         let mut result = Self::new_empty(rng, n);
@@ -219,31 +181,18 @@ impl Graph {
         result
     }
 
-    /// Creates a random path, which counts as a tree.
-    ///
-    /// # Panics
-    /// Panics if `n` is zero.
     #[must_use]
     pub fn new_random_path(rng: &mut Rng, n: usize) -> Self {
         Self::new_shuffled_tree(rng, n, |_rng, nodes, i| nodes[i - 1])
     }
 
-    /// Creates a random tree with `n` nodes by joining each node to a random
-    /// earlier one. Such a tree is shallow, about `ln n` deep; see
-    /// [`Graph::new_random_uniform_tree`] and [`Graph::new_random_deep_tree`]
-    /// for others.
-    ///
-    /// # Panics
-    /// Panics if `n` is zero.
+    /// Each node joined to a random earlier one: about `ln n` deep.
     #[must_use]
     pub fn new_random_tree(rng: &mut Rng, n: usize) -> Self {
         Self::new_shuffled_tree(rng, n, |rng, nodes, i| nodes[rng.random_range(0..i)])
     }
 
-    /// Creates a random tree with depth in O(n).
-    ///
-    /// # Panics
-    /// Panics if `n` is zero.
+    /// About `n / 2` deep.
     #[must_use]
     pub fn new_random_deep_tree(rng: &mut Rng, n: usize) -> Self {
         // Half the nodes extend one chain.
@@ -257,11 +206,7 @@ impl Graph {
         })
     }
 
-    /// Creates a tree picked uniformly among all trees on `n` labelled nodes.
-    /// Such a tree is about `sqrt(n)` deep.
-    ///
-    /// # Panics
-    /// Panics if `n` is zero.
+    /// Uniform among all labelled trees: about `sqrt(n)` deep.
     #[must_use]
     pub fn new_random_uniform_tree(rng: &mut Rng, n: usize) -> Self {
         assert!(n >= 1, "a tree needs at least one node, got {n}");
@@ -277,9 +222,8 @@ impl Graph {
         for &node in &code {
             degree[node] += 1;
         }
-        // The smallest leaf is joined to the next node of the code, and then
-        // left out. Leaves below `pointer` have all been used, except for a
-        // node that only just became one.
+        // The smallest leaf is joined to the next node of the code and dropped. Leaves below `pointer`
+        // are all used, except a node that only just became one.
         let mut pointer = 0;
         while degree[pointer] != 1 {
             pointer += 1;
@@ -303,56 +247,35 @@ impl Graph {
         result
     }
 
-    /// Creates a star: a random centre joined to every other node.
-    ///
-    /// # Panics
-    /// Panics if `n` is zero.
     #[must_use]
     pub fn new_star(rng: &mut Rng, n: usize) -> Self {
         Self::new_shuffled_tree(rng, n, |_rng, nodes, _i| nodes[0])
     }
 
-    /// Creates a caterpillar: a path of `spine` nodes, with every other node
-    /// joined to a random node of the path.
-    ///
-    /// # Panics
-    /// Panics if `spine` is zero or more than `n`.
+    /// A path of `spine` nodes, with every other node joined to one of them.
     #[must_use]
     pub fn new_caterpillar(rng: &mut Rng, n: usize, spine: usize) -> Self {
         assert!((1..=n).contains(&spine), "the spine of a caterpillar with {n} nodes cannot have {spine}");
         Self::new_shuffled_tree(rng, n, |rng, nodes, i| if i < spine { nodes[i - 1] } else { nodes[rng.random_range(0..spine)] })
     }
 
-    /// Creates a complete binary tree with randomly numbered nodes, which is
-    /// about `log2(n)` deep.
-    ///
-    /// # Panics
-    /// Panics if `n` is zero.
+    /// Complete, with randomly numbered nodes.
     #[must_use]
     pub fn new_binary_tree(rng: &mut Rng, n: usize) -> Self {
         Self::new_shuffled_tree(rng, n, |_rng, nodes, i| nodes[(i - 1) / 2])
     }
 
-    /// Creates a forest of exactly `trees` random trees on `n` nodes.
-    ///
-    /// # Panics
-    /// Panics if `trees` is zero or more than `n`.
     #[must_use]
     pub fn new_random_forest(rng: &mut Rng, n: usize, trees: usize) -> Self {
         assert!((1..=n).contains(&trees), "a forest with {n} nodes cannot have {trees} trees");
         let mut result = Self::new_empty(rng, n);
         let nodes = rng.shuffled(0..n);
-        // The first `trees` nodes are the roots.
         for i in trees..n {
             result.add_edge(nodes[i], nodes[rng.random_range(0..i)]);
         }
         result
     }
 
-    /// Creates a cycle through all `n` nodes in random order.
-    ///
-    /// # Panics
-    /// Panics if `n` is less than three.
     #[must_use]
     pub fn new_cycle(rng: &mut Rng, n: usize) -> Self {
         assert!(n >= 3, "a cycle needs at least three nodes, got {n}");
@@ -364,9 +287,7 @@ impl Graph {
         result
     }
 
-    /// Creates a grid of `rows` by `columns` nodes, each joined to the ones
-    /// next to it. The node in row `r` and column `c`, both from zero, is
-    /// `r * columns + c`.
+    /// Node `r * columns + c` is in row `r` and column `c`.
     #[must_use]
     pub fn new_grid(rng: &mut Rng, rows: usize, columns: usize) -> Self {
         let mut result = Self::new_empty(rng, rows * columns);
@@ -384,11 +305,7 @@ impl Graph {
         result
     }
 
-    /// Creates a random connected graph with `n` nodes and `max(m, n - 1)` edges.
-    ///
-    /// # Panics
-    /// Panics if `n` is zero, or if `m` edges do not fit in a simple graph on `n`
-    /// nodes.
+    /// `max(m, n - 1)` edges.
     #[must_use]
     pub fn new_random_connected(rng: &mut Rng, n: usize, m: usize) -> Self {
         assert_edges_fit(n, m, max_simple_edges(n), "graph");
@@ -398,11 +315,6 @@ impl Graph {
         result
     }
 
-    /// Creates a random bipartite graph with `n` nodes and `m` edges.
-    ///
-    /// # Panics
-    /// Panics if `n` is less than two, or if `m` edges do not fit in any bipartition
-    /// of `n` nodes.
     #[must_use]
     pub fn new_random_bipartite(rng: &mut Rng, n: usize, m: usize) -> Self {
         assert!(n >= 2, "a bipartite graph needs at least two nodes, got {n}");
@@ -434,32 +346,26 @@ impl Graph {
         result
     }
 
-    /// Sets how the graph is written.
     #[must_use]
     pub const fn with_format(mut self, format: GraphFormat) -> Self {
         self.format = format;
         self
     }
 
-    /// Numbers the nodes from 0 instead of 1 when the graph is written.
     #[must_use]
     pub const fn zero_based(mut self) -> Self {
         self.zero_based = true;
         self
     }
 
-    /// Gives every edge a random weight from `range`, written after the edge.
-    /// Edges added afterwards have none, so add them first.
+    /// Written after each edge. Edges added afterwards have none.
     #[must_use]
     pub fn with_random_weights<R: RangeBounds<i64> + Clone>(self, rng: &mut Rng, range: R) -> Self {
         let weights = rng.random_vec(self.edges.len(), range);
         self.with_weights(weights)
     }
 
-    /// Gives the edges these weights, in the order of [`Graph::edges`].
-    ///
-    /// # Panics
-    /// Panics if there is not one weight per edge.
+    /// In the order of [`Graph::edges`].
     #[must_use]
     pub fn with_weights(mut self, weights: Vec<i64>) -> Self {
         assert_eq!(weights.len(), self.edges.len(), "a graph needs one weight per edge");
@@ -467,8 +373,7 @@ impl Graph {
         self
     }
 
-    /// Renumbers the nodes at random, which hides the structure a constructor
-    /// leaves in the numbers, such as the rows of a grid.
+    /// Hides the structure a constructor leaves in the numbers, such as a grid's rows.
     #[must_use]
     pub fn with_shuffled_labels(mut self, rng: &mut Rng) -> Self {
         let labels = rng.shuffled(0..self.num_nodes());
@@ -480,41 +385,31 @@ impl Graph {
         self
     }
 
-    /// An undirected edge is the same edge whichever end comes first.
     fn key(&self, u: usize, v: usize) -> (usize, usize) {
         if self.directed { (u, v) } else { (usize::max(u, v), usize::min(u, v)) }
     }
 
-    /// Whether `u` and `v` are adjacent; in a directed graph, whether there is
-    /// an edge from `u` to `v`.
     #[must_use]
     pub fn has_edge(&self, u: usize, v: usize) -> bool {
         self.edge_set.contains(&self.key(u, v))
     }
 
-    /// The number of edges.
     #[must_use]
     pub const fn num_edges(&self) -> usize {
         self.edges.len()
     }
 
-    /// The number of nodes.
     #[must_use]
     pub const fn num_nodes(&self) -> usize {
         self.adjacency.len()
     }
 
-    /// Whether the edges have a direction.
     #[must_use]
     pub const fn is_directed(&self) -> bool {
         self.directed
     }
 
-    /// Adds an edge, in a directed graph from `u` to `v`, unless it exists
-    /// already or is a loop.
-    ///
-    /// # Panics
-    /// Panics if `u` or `v` does not exist.
+    /// Ignores loops and edges it has.
     pub fn add_edge(&mut self, u: usize, v: usize) {
         let n = self.num_nodes();
         assert!(u < n && v < n, "cannot join nodes {u} and {v} of a graph with {n} nodes");
@@ -528,40 +423,29 @@ impl Graph {
         }
     }
 
-    /// The edges, in the order they were added. An undirected edge has its
-    /// larger end first; a directed one leads from the first node to the second.
+    /// In the order they were added; an undirected edge has its larger end first.
     #[must_use]
     pub fn edges(&self) -> &[(usize, usize)] {
         &self.edges
     }
 
-    /// The weights of the edges, in the order of [`Graph::edges`], if they were
-    /// given any.
     #[must_use]
     pub fn weights(&self) -> Option<&[i64]> {
         self.weights.as_deref()
     }
 
-    /// The nodes adjacent to `node`; in a directed graph, the nodes its edges
-    /// lead to.
-    ///
-    /// # Panics
-    /// Panics if `node` does not exist.
+    /// In a directed graph, the nodes the edges lead to.
     #[must_use]
     pub fn neighbours(&self, node: usize) -> &[usize] {
         &self.adjacency[node]
     }
 
-    /// The number of edges at `node`; in a directed graph, of those leaving it.
-    ///
-    /// # Panics
-    /// Panics if `node` does not exist.
+    /// In a directed graph, of the edges leaving `node`.
     #[must_use]
     pub fn degree(&self, node: usize) -> usize {
         self.adjacency[node].len()
     }
 
-    /// The neighbours of every node, whatever the direction of the edges.
     fn undirected_adjacency(&self) -> Cow<'_, [Vec<usize>]> {
         if !self.directed {
             return Cow::Borrowed(&self.adjacency);
@@ -573,8 +457,6 @@ impl Graph {
         Cow::Owned(adjacency)
     }
 
-    /// The connected components, as lists of nodes in no particular order. The
-    /// direction of edges does not matter.
     #[must_use]
     pub fn connected_components(&self) -> Vec<Vec<usize>> {
         let adjacency = self.undirected_adjacency();
@@ -600,30 +482,26 @@ impl Graph {
         result
     }
 
-    /// Whether the graph is connected. The direction of edges does not matter.
     #[must_use]
     pub fn is_connected(&self) -> bool {
         self.connected_components().len() == 1
     }
 
-    /// Whether the graph is a tree. The direction of edges does not matter.
     #[must_use]
     pub fn is_tree(&self) -> bool {
         self.num_edges() + 1 == self.num_nodes() && self.is_connected()
     }
 
-    /// Whether the graph has every edge it can have.
     #[must_use]
     pub const fn is_full(&self) -> bool {
         let capacity = max_simple_edges(self.num_nodes()) * if self.directed { 2 } else { 1 };
         self.num_edges() as u64 == capacity
     }
 
-    /// Whether the graph is bipartite. The direction of edges does not matter.
     #[must_use]
     pub fn is_bipartite(&self) -> bool {
         let adjacency = self.undirected_adjacency();
-        // 0 while unvisited, then 1 or -1 for the two sides.
+        // 0 unvisited, else 1 or -1.
         let mut colors = vec![0_i8; adjacency.len()];
         for start in 0..adjacency.len() {
             if colors[start] != 0 {
@@ -645,14 +523,13 @@ impl Graph {
         true
     }
 
-    /// The parent of every node in the tree rooted at node 0, which is its own.
+    /// In the tree rooted at node 0, which is its own parent.
     fn parents(&self) -> Vec<usize> {
         let adjacency = self.undirected_adjacency();
         let mut parents = vec![0; adjacency.len()];
         let mut stack = vec![0];
         while let Some(node) = stack.pop() {
             for &neighbour in &adjacency[node] {
-                // The root is its own parent, and so never taken for a child.
                 if neighbour != parents[node] && neighbour != 0 {
                     parents[neighbour] = node;
                     stack.push(neighbour);
@@ -664,12 +541,7 @@ impl Graph {
 }
 
 impl ToOutput for Graph {
-    /// As its [`GraphFormat`] says. Edges are written in random order, and the
-    /// ends of an undirected edge in random order too.
-    ///
-    /// # Panics
-    /// Panics if the format is one for trees but the graph is not a tree, or if
-    /// edges were added after the weights.
+    /// Edges, and the ends of undirected ones, in random order.
     fn write_output(self, out: &mut String) {
         let is_tree_format = matches!(self.format, GraphFormat::Tree | GraphFormat::ParentList);
         assert!(!is_tree_format || self.is_tree(), "the graph is written as a tree but is not one");
@@ -688,7 +560,7 @@ impl ToOutput for Graph {
             let parents = self.parents();
             parents[1..].iter().map(|parent| parent + first_label).collect::<Vec<_>>().write_output(out);
             if let Some(weights) = &self.weights {
-                // An edge is the one above whichever of its ends is the child.
+                // An edge's weight goes to its child end.
                 let mut above = vec![0; parents.len()];
                 for (&(u, v), &weight) in self.edges.iter().zip(weights) {
                     above[if parents[u] == v { u } else { v }] = weight;
@@ -698,7 +570,6 @@ impl ToOutput for Graph {
             return;
         }
 
-        // Shuffling the positions moves them exactly as it would the edges.
         let mut order: Vec<usize> = (0..self.edges.len()).collect();
         let mut rng = Rng::from_seed(self.output_seed);
         rng.shuffle(&mut order);

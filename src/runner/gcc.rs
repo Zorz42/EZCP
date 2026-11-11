@@ -5,8 +5,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::OnceLock;
 
-/// Like [`std::fs::canonicalize`], but without the `\\?\` prefix on Windows. Use
-/// it for every path that is compared, or equal paths can compare unequal.
+/// Without the `\\?\` prefix on Windows. Use it for every compared path, or equal paths differ.
 pub fn canonicalize(path: &Path) -> Result<PathBuf> {
     dunce::canonicalize(path).map_err(Error::io(path))
 }
@@ -15,7 +14,7 @@ fn find_gcc() -> Result<PathBuf> {
     if let Ok(gcc_path) = std::env::var("GCC_PATH")
         && !gcc_path.is_empty()
     {
-        // Accepts a full path or a program name.
+        // A full path or a program name.
         return which::which(&gcc_path).map_err(|_not_found| CompilerNotFound);
     }
 
@@ -57,12 +56,10 @@ fn find_gcc() -> Result<PathBuf> {
     Err(CompilerNotFound)
 }
 
-/// Whether the compiler finds the static versions of the libraries a C++
-/// program is linked with, which not every distribution installs with it.
+/// Not every distribution installs the static libraries with the compiler.
 fn has_static_libraries(compiler: &Path) -> bool {
     ["libstdc++.a", "libc.a"].iter().all(|library| {
-        // Answered with the full path of a library the compiler finds, and with
-        // just its name otherwise.
+        // The full path of a library the compiler finds, else just its name.
         let found = Command::new(compiler).arg(format!("-print-file-name={library}")).output();
         found.is_ok_and(|output| Path::new(String::from_utf8_lossy(&output.stdout).trim()).is_absolute())
     })
@@ -71,8 +68,7 @@ fn has_static_libraries(compiler: &Path) -> bool {
 pub struct Gcc {
     /// Also keys cached binaries.
     pub path: PathBuf,
-    /// Found out by the first compile, so that a run that compiles nothing
-    /// does not have to ask.
+    /// Found out by the first compile, so a run that compiles nothing does not ask.
     links_statically: OnceLock<bool>,
 }
 
@@ -84,10 +80,10 @@ impl Gcc {
         })
     }
 
-    /// The absolute path of the binary for `source`: next to it, `.exe` on Windows.
+    /// Absolute, next to `source`.
     pub fn executable_path(source: &Path) -> Result<PathBuf> {
         let mut executable = source.with_extension(if cfg!(windows) { "exe" } else { "" });
-        // A source without an extension would otherwise be overwritten by its binary.
+        // Else a source without an extension would be overwritten.
         if executable == source {
             let mut file_name = executable.file_name().unwrap_or_default().to_os_string();
             file_name.push("_bin");
@@ -98,8 +94,7 @@ impl Gcc {
             err: std::io::Error::new(std::io::ErrorKind::InvalidInput, "path has no file name"),
             file: executable.display().to_string(),
         })?;
-        // The binary itself usually does not exist yet, so only its directory can
-        // be canonicalized.
+        // The binary usually does not exist yet, so only its directory can be canonicalized.
         let parent = executable.parent().filter(|parent| !parent.as_os_str().is_empty()).unwrap_or_else(|| Path::new("."));
         Ok(canonicalize(parent)?.join(file_name))
     }
@@ -112,24 +107,20 @@ impl Gcc {
         {
             // No dependency on the MinGW DLLs being on PATH.
             command.arg("-static");
-            // Deep recursion needs more than MinGW's default 2 MB stack. The
-            // timer raises the stack limit on Linux instead.
+            // MinGW's default stack is 2 MB. The timer raises the limit on Linux instead.
             command.arg("-Wl,--stack,536870912");
         }
 
         #[cfg(target_os = "macos")]
         {
-            // 512 MB instead of 8 MB; macOS caps what setrlimit can raise it to.
+            // 512 MB instead of 8: macOS caps what setrlimit can raise it to.
             command.arg("-Wl,-stack_size,0x20000000");
         }
 
         // Not `#[cfg]`, which would leave `links_statically` unused elsewhere.
         if cfg!(target_os = "linux") {
-            // A statically linked program starts about a millisecond sooner,
-            // which is half of a short run: the loader has no libraries to map
-            // and relocate. Without the static libraries, at least those a
-            // program does not use are left out, which for the timer is all of
-            // the C++ runtime.
+            // A static program starts about a millisecond sooner, half of a short run. Without the
+            // static libraries, unused ones are still left out: for the timer, all of the C++ runtime.
             let links_statically = *self.links_statically.get_or_init(|| has_static_libraries(&self.path));
             command.arg(if links_statically { "-static" } else { "-Wl,--as-needed" });
         }
@@ -138,7 +129,7 @@ impl Gcc {
 
         #[cfg(windows)]
         {
-            // For the timer's CommandLineToArgvW. It must come after the source.
+            // For the timer's CommandLineToArgvW; it must come after the source.
             command.arg("-lshell32");
         }
 

@@ -12,7 +12,6 @@ const fn zip_error(err: zip::result::ZipError) -> Error {
     Error::ZipError { err }
 }
 
-/// An archive of `files`, in memory.
 fn compress<N: AsRef<str>, C: AsRef<str>>(files: &[(N, C)], progress_bar: &ScopedProgressBar) -> Result<Vec<u8>> {
     let options = SimpleFileOptions::default().compression_method(zip::CompressionMethod::Deflated);
     let mut zipper = ZipWriter::new(Cursor::new(Vec::new()));
@@ -24,15 +23,10 @@ fn compress<N: AsRef<str>, C: AsRef<str>>(files: &[(N, C)], progress_bar: &Scope
     Ok(zipper.finish().map_err(zip_error)?.into_inner())
 }
 
-/// Writes an archive of `files`, given as names and contents, to `archive_path`.
-///
-/// Compressing is most of the work, so the files are compressed in pieces on
-/// `workers` threads. The pieces are then joined in order, which copies the
-/// compressed data as it is.
+/// Compresses pieces on `workers` threads, then joins them in order, which copies the compressed data.
 pub fn archive_files<N: AsRef<str> + Sync, C: AsRef<str> + Sync>(files: &[(N, C)], archive_path: &Path, workers: usize, logger: &MultiProgress) -> Result<()> {
     let progress_bar = ScopedProgressBar::new(logger, files.len() as u64);
-    // Far more pieces than workers, which take them as they get to them, so
-    // that the pieces with the large files do not leave the other workers idle.
+    // Far more pieces than workers, so large files do not leave the others idle.
     let pieces: Vec<_> = files.chunks(files.len().div_ceil(8 * workers.max(1)).max(1)).collect();
     let pieces = parallel_map(&pieces, workers, |piece| compress(piece, &progress_bar));
 
@@ -41,7 +35,7 @@ pub fn archive_files<N: AsRef<str> + Sync, C: AsRef<str> + Sync>(files: &[(N, C)
         let piece = piece.unwrap_or_else(|panic| resume_unwind(panic))?;
         zipper.merge_archive(ZipArchive::new(Cursor::new(piece)).map_err(zip_error)?).map_err(zip_error)?;
     }
-    // `Drop` would finish it too, but silently ignore a failure such as a full disk.
+    // `Drop` would ignore a failure such as a full disk.
     zipper.finish().map_err(zip_error)?;
     Ok(())
 }

@@ -1,13 +1,8 @@
-//! Running the pure parts of test generation on several threads.
-
 use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::sync::atomic::{AtomicUsize, Ordering};
 
-/// Applies `f` to every item on up to `workers` threads and returns the results
-/// in the order of the items.
-///
-/// A panic in `f` is returned in the place of its item rather than passed on,
-/// so the caller decides whether that item mattered.
+/// The results are in the order of the items. A panic is returned in its item's place, so the caller
+/// decides whether that item mattered.
 pub fn parallel_map<I: Sync, O: Send, F: Fn(&I) -> O + Sync>(items: &[I], workers: usize, f: F) -> Vec<std::thread::Result<O>> {
     let apply = |item| catch_unwind(AssertUnwindSafe(|| f(item)));
     let workers = workers.min(items.len());
@@ -32,12 +27,11 @@ pub fn parallel_map<I: Sync, O: Send, F: Fn(&I) -> O + Sync>(items: &[I], worker
             })
             .collect();
         for handle in handles {
-            // `apply` catches panics, so a worker never ends with one.
+            // `apply` catches panics.
             for (idx, result) in handle.join().unwrap_or_default() {
                 results[idx] = Some(result);
             }
         }
     });
-    // Every index was taken by exactly one worker.
     results.into_iter().flatten().collect()
 }

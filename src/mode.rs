@@ -1,31 +1,24 @@
 use crate::rng::Rng;
 use crate::{Error, Result};
 
-/// What a task run does.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
 pub enum Mode {
-    /// Generate the tests, write them to files and archive them.
+    /// Write the tests and archive them.
     #[default]
     Files,
-    /// Like [`Mode::Files`], but each file holds the stub that
-    /// rebuilds the test instead of the test itself.
+    /// As `Files`, but each file holds the one-line stub that rebuilds it.
     Seeds,
-    /// Read stubs from stdin, one per line, and write the raw test data each one
-    /// stands for to stdout.
+    /// Answer stubs on stdin with the test data they stand for.
     Serve,
 }
 
-/// Where the master seed comes from.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SeedChoice {
-    /// A given seed.
     Fixed(u64),
-    /// A new seed on every run.
     Random,
 }
 
 impl SeedChoice {
-    /// Returns the seed.
     pub fn resolve(self) -> u64 {
         match self {
             Self::Fixed(seed) => seed,
@@ -34,18 +27,12 @@ impl SeedChoice {
     }
 }
 
-/// The parsed command line of a task binary.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
 pub struct CliOptions {
-    /// The mode to run in.
     pub mode: Mode,
-    /// The `--seed` value, if given.
     pub seed: Option<SeedChoice>,
-    /// The `--jobs` value, if given.
     pub jobs: Option<usize>,
-    /// Whether `--fail-fast` was given.
     pub fail_fast: bool,
-    /// Whether `--help` was given.
     pub help: bool,
 }
 
@@ -94,7 +81,7 @@ fn parse_jobs(value: &str) -> Result<usize> {
 }
 
 impl CliOptions {
-    /// Parses arguments, not including the program name.
+    /// Without the program name.
     pub fn parse<I: IntoIterator<Item = S>, S: AsRef<str>>(arguments: I) -> Result<Self> {
         let mut options = Self::default();
         let mut mode_argument: Option<String> = None;
@@ -134,10 +121,8 @@ impl CliOptions {
         Ok(options)
     }
 
-    /// Parses the arguments of the running process.
     pub fn from_env() -> Result<Self> {
-        // A non-UTF-8 argument is never a valid one, and then gets the clearer
-        // "unknown argument" error.
+        // Lossy: a non-UTF-8 argument is never valid, and gets the "unknown argument" error.
         let arguments = std::env::args_os().skip(1).map(|argument| argument.to_string_lossy().into_owned()).collect::<Vec<_>>();
         Self::parse(arguments)
     }

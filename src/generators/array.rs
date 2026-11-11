@@ -2,16 +2,7 @@ use crate::rng::{Rng, SampleUniform};
 use crate::to_output::Counted;
 use std::ops::RangeBounds;
 
-/// Returns a generator of arrays whose length is drawn from `len` and whose
-/// values are drawn by `value`. An array is written as its length on one line
-/// and its values on the next.
-///
-/// ```
-/// use ezcp::{Subtask, array_generator_custom};
-///
-/// // Even numbers only.
-/// let subtask = Subtask::new(100, "n <= 1000").with_test(5, array_generator_custom(1..=1000, |rng| rng.random_range(0..=500) * 2));
-/// ```
+/// Arrays with a length from `len` and values from `value`, written as the length, then the values.
 pub fn array_generator_custom<T, L, F>(len: L, value: F) -> impl Fn(&mut Rng) -> Counted<T> + Send + Sync
 where
     L: RangeBounds<usize> + Clone + Send + Sync,
@@ -23,15 +14,7 @@ where
     }
 }
 
-/// Returns a generator of arrays whose length is drawn from `len` and whose
-/// values are drawn from `values`. An array is written as its length on one
-/// line and its values on the next.
-///
-/// ```
-/// use ezcp::{Subtask, array_generator};
-///
-/// let subtask = Subtask::new(100, "n <= 1000").with_test(5, array_generator(1..=1000, 1..=1_000_000_000_i64));
-/// ```
+/// [`array_generator_custom`] with values from `values`.
 pub fn array_generator<T, L, V>(len: L, values: V) -> impl Fn(&mut Rng) -> Counted<T> + Send + Sync
 where
     T: SampleUniform,

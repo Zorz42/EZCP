@@ -1,12 +1,10 @@
-//! The one-line JSON a test file holds in [seed mode](crate::Mode::Seeds).
-//!
-//! The seed and hash are hexadecimal strings because JSON readers that parse
-//! numbers as doubles would lose their low bits.
+//! The one-line JSON a test file holds in seed mode. Seed and hash are hex strings, since JSON readers
+//! that parse numbers as doubles would lose their low bits.
 
 use crate::{Error, Result};
 use serde_json::Value;
 
-/// FNV-1a, a hash that, unlike `DefaultHasher`, never changes between builds.
+/// FNV-1a: unlike `DefaultHasher`, it never changes between builds.
 pub fn stable_hash(data: &str) -> u64 {
     const OFFSET_BASIS: u64 = 0xcbf2_9ce4_8422_2325;
     const PRIME: u64 = 0x0000_0100_0000_01b3;
@@ -19,38 +17,20 @@ pub fn stable_hash(data: &str) -> u64 {
     hash
 }
 
-/// Which half of a test a stub stands for.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Part {
-    /// The input file.
     Input,
-    /// The output file, which is rebuilt by running the official solution.
+    /// Rebuilt by running the official solution.
     Output,
 }
 
-impl Part {
-    /// The name used in a stub.
-    pub const fn as_str(self) -> &'static str {
-        match self {
-            Self::Input => "input",
-            Self::Output => "output",
-        }
-    }
-}
-
-/// Everything needed to rebuild one file of one test.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Stub {
-    /// 0-based subtask index.
     pub subtask: usize,
-    /// 0-based index of the generator within the subtask.
     pub generator: usize,
-    /// The seed the generator is run with.
     pub seed: u64,
-    /// Which file of the test this is.
     pub part: Part,
-    /// [`stable_hash`] of the file, to detect generators that changed since.
-    /// `None` skips the check.
+    /// [`stable_hash`] of the file, to catch generators that changed since. `None` skips the check.
     pub hash: Option<u64>,
 }
 
@@ -76,19 +56,18 @@ fn hex_u64(value: &Value, what: &str) -> Result<u64> {
 }
 
 impl Stub {
-    /// Renders the stub as a line of JSON. Nothing in it needs escaping.
     pub fn to_line(self) -> String {
         let hash = self.hash.map_or_else(String::new, |hash| format!(",\"hash\":\"{hash:016x}\""));
+        let part = match self.part {
+            Part::Input => "input",
+            Part::Output => "output",
+        };
         format!(
-            "{{\"subtask\":{},\"generator\":{},\"seed\":\"{:016x}\",\"part\":\"{}\"{hash}}}\n",
-            self.subtask,
-            self.generator,
-            self.seed,
-            self.part.as_str()
+            "{{\"subtask\":{},\"generator\":{},\"seed\":\"{:016x}\",\"part\":\"{part}\"{hash}}}\n",
+            self.subtask, self.generator, self.seed
         )
     }
 
-    /// Parses a line written by [`Stub::to_line`], or one written by hand.
     pub fn parse(line: &str) -> Result<Self> {
         let value: Value = serde_json::from_str(line).map_err(|err| invalid(format!("not a JSON object: {err}")))?;
         let part = match value.get("part").and_then(Value::as_str) {

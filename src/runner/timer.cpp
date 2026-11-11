@@ -1,21 +1,13 @@
 // Usage: timer <executable> <time_limit_ms> [memory_limit_kb]
 //
-// Runs the solution on the inherited stdin/stdout/stderr, then appends
+// Runs the solution on the inherited stdio, then appends
+// "\n__EZCP_RESULT__ <OK|TLE|RTE|MLE|ERR> <cpu_time_ms> <peak_memory_kb>\n" to stderr. EZCP reads the
+// last such line, so the solution cannot spoof it; exit codes are not portable. ERR: could not start.
 //
-//     \n__EZCP_RESULT__ <OK|TLE|RTE|MLE|ERR> <cpu_time_ms> <peak_memory_kb>\n
-//
-// to stderr. EZCP reads the last such line, so the solution's own stderr
-// cannot spoof it; exit codes are not used because they are not portable.
-// ERR means the solution could not be started.
-//
-// Limits and times are CPU time, so that load from the solutions EZCP runs in
-// parallel does not change verdicts. A wall-clock deadline catches solutions
-// that block without using CPU.
-//
-// EZCP compares the reported peak with the memory limit itself. Here the limit
-// only sets a far higher cap on what the solution may allocate, so that a
-// runaway one fails instead of exhausting the machine. MLE is reported only for
-// a solution too large to even start under that cap.
+// Times are CPU time, so the solutions running in parallel do not change verdicts; a wall-clock
+// deadline catches ones that block. EZCP compares the peak memory with the limit itself: here the
+// limit only sets a far higher cap, so a runaway solution fails instead of exhausting the machine.
+// MLE means too large to even start under that cap.
 
 #include <stdio.h>
 
@@ -24,7 +16,7 @@ static void report(const char *verdict, long long cpu_time_ms, long long peak_me
   fflush(stderr);
 }
 
-// Twice the limit plus 1 GiB: nothing that stays within the limit comes close.
+// Nothing within the limit comes close.
 static unsigned long long memory_cap_bytes(long long memory_limit_kb) {
   return (unsigned long long)memory_limit_kb * 1024ULL * 2ULL + (1ULL << 30);
 }
@@ -73,10 +65,10 @@ static void make_inheritable(HANDLE handle) {
 }
 
 int main() {
-  // Inherited by the solution: a crash must not open an error dialog and block the run.
+  // Inherited: a crash must not open a dialog and block the run.
   SetErrorMode(SEM_FAILCRITICALERRORS | SEM_NOGPFAULTERRORBOX | SEM_NOOPENFILEERRORBOX);
 
-  // UTF-16, since the narrow argv mangles non-ASCII paths.
+  // The narrow argv mangles non-ASCII paths.
   int argc = 0;
   LPWSTR *argv = CommandLineToArgvW(GetCommandLineW(), &argc);
   if (argv == NULL || argc < 3) {
@@ -113,13 +105,11 @@ int main() {
   PROCESS_INFORMATION process_info;
   ZeroMemory(&process_info, sizeof(process_info));
 
-  // Whole seconds, like RLIMIT_CPU on Unix, so both platforms agree. EZCP
-  // applies the exact limit to the reported time.
+  // Whole seconds, like RLIMIT_CPU on Unix. EZCP applies the exact limit to the reported time.
   const long long cpu_limit_ms = (long long)((time_limit_ms + 999) / 1000) * 1000;
 
-  // The job kills the solution when this timer dies, however it dies, since
-  // Windows does not kill children with their parent. Its CPU limit is a kernel
-  // backstop; the loop below decides the verdict. Never closed by hand.
+  // Kills the solution when this timer dies, however it dies: Windows does not kill children with
+  // their parent. Its CPU limit is a backstop; the loop below decides. Never closed by hand.
   HANDLE job = CreateJobObjectW(NULL, NULL);
   if (job != NULL) {
     JOBOBJECT_EXTENDED_LIMIT_INFORMATION job_limits;
@@ -130,7 +120,7 @@ int main() {
     if (memory_limit_kb > 0) {
       const unsigned long long cap = memory_cap_bytes(memory_limit_kb);
       job_limits.BasicLimitInformation.LimitFlags |= JOB_OBJECT_LIMIT_PROCESS_MEMORY;
-      // SIZE_T is 32 bits wide in a 32-bit build.
+      // SIZE_T is 32 bits in a 32-bit build.
       const SIZE_T largest = ~(SIZE_T)0;
       job_limits.ProcessMemoryLimit = (cap > (unsigned long long)largest) ? largest : (SIZE_T)cap;
     }
@@ -141,7 +131,7 @@ int main() {
   QueryPerformanceFrequency(&frequency);
   QueryPerformanceCounter(&start_counter);
 
-  // Suspended until it is in the job, so nothing it starts escapes the job.
+  // Suspended until it is in the job, so nothing it starts escapes.
   if (!CreateProcessW(executable, command_line.data(), NULL, NULL, TRUE, CREATE_NO_WINDOW | CREATE_SUSPENDED, NULL, NULL, &startup_info, &process_info)) {
     report("ERR", 0, 0);
     return 1;
@@ -271,8 +261,7 @@ int main(int argc, char *argv[]) {
   }
   long long memory_limit_kb = (argc >= 4) ? atoll(argv[3]) : 0;
 
-  // A failed exec writes errno here; a successful one just closes it. Otherwise
-  // a failed exec would look like a solution exiting with 127, i.e. a crash.
+  // A failed exec writes errno here, a successful one closes it; else a failed exec looks like a crash.
   int exec_status[2];
   if (pipe(exec_status) != 0 || fcntl(exec_status[1], F_SETFD, FD_CLOEXEC) != 0) {
     report("ERR", 0, 0);
@@ -293,8 +282,7 @@ int main(int argc, char *argv[]) {
     close(exec_status[0]);
 
 #ifdef __linux__
-    // Kill the solution if the timer dies. The parent may have died already,
-    // before this took effect.
+    // Die with the timer, which may already be gone.
     prctl(PR_SET_PDEATHSIG, SIGKILL);
     if (getppid() != parent_pid) {
       _exit(127);
@@ -309,7 +297,7 @@ int main(int argc, char *argv[]) {
     cpu_limit.rlim_max = (rlim_t)(limit_s + 5); // hard limit -> SIGKILL
     setrlimit(RLIMIT_CPU, &cpu_limit);
 
-    // Solutions often recurse very deeply.
+    // Solutions often recurse deeply.
     struct rlimit stack_limit;
     if (getrlimit(RLIMIT_STACK, &stack_limit) == 0 && stack_limit.rlim_cur != stack_limit.rlim_max) {
       stack_limit.rlim_cur = stack_limit.rlim_max;
@@ -320,7 +308,7 @@ int main(int argc, char *argv[]) {
     if (getrlimit(RLIMIT_AS, &address_space_limit) == 0) {
       rlim_t wanted = address_space_limit.rlim_max;
 #ifdef __linux__
-      // macOS does not enforce this limit, so there it is left alone.
+      // macOS does not enforce it.
       if (memory_limit_kb > 0) {
         const unsigned long long cap = memory_cap_bytes(memory_limit_kb);
         if (wanted == RLIM_INFINITY || (unsigned long long)wanted > cap) {
@@ -352,7 +340,7 @@ int main(int argc, char *argv[]) {
 
   if (exec_report > 0) {
     waitpid(pid, NULL, 0);
-    // Too large to be loaded under the cap, which is far above the limit.
+    // Too large to load under the cap, which is far above the limit.
     report((memory_limit_kb > 0 && exec_error == ENOMEM) ? "MLE" : "ERR", 0, 0);
     return 1;
   }
@@ -371,7 +359,7 @@ int main(int argc, char *argv[]) {
         report(WEXITSTATUS(status) == 0 ? "OK" : "RTE");
       } else if (WIFSIGNALED(status)) {
         int signal_number = WTERMSIG(status);
-        // SIGXCPU and SIGKILL come from the CPU limits or the wall-clock kill.
+        // From the CPU limits or the wall-clock kill.
         report((signal_number == SIGXCPU || signal_number == SIGKILL) ? "TLE" : "RTE");
       } else {
         report("RTE");
@@ -392,8 +380,7 @@ int main(int argc, char *argv[]) {
       return 0;
     }
 
-    // An eighth of the time the solution has run for, so that a short run is
-    // noticed soon after it ends and a long one is not polled needlessly often.
+    // An eighth of the time so far: a short run is noticed soon, a long one not polled needlessly.
     long long pause_us = elapsed_us / 8;
     sleep_us(pause_us < 50 ? 50 : (pause_us > 2000 ? 2000 : pause_us));
   }

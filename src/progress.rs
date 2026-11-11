@@ -1,7 +1,7 @@
 use indicatif::{MultiProgress, ProgressBar};
 use std::ops::Deref;
 
-/// A progress bar that is removed when dropped, including on an early `?` return.
+/// Removed when dropped, also on an early `?` return.
 pub struct ScopedProgressBar<'logger> {
     logger: &'logger MultiProgress,
     bar: ProgressBar,

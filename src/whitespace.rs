@@ -1,7 +1,5 @@
-//! Whitespace normalisation of inputs and outputs.
-
-/// Turns each run of whitespace into one newline if it contains one and one
-/// space otherwise, drops leading whitespace and ends with a single newline.
+/// Each run of whitespace becomes one newline if it holds one and one space otherwise; no leading
+/// whitespace, and a single newline at the end.
 pub fn trim_whitespace(input: &str) -> String {
     let mut result = String::with_capacity(input.len());
     for line in input.lines() {
@@ -21,23 +19,18 @@ pub fn trim_whitespace(input: &str) -> String {
     result
 }
 
-/// Whether [`trim_whitespace`] would return `text` unchanged, which is the usual
-/// case and far cheaper to find out than to rebuild the text.
-///
-/// May say `false` for text that is in fact unchanged, but never `true` for
-/// text that is not.
+/// Whether [`trim_whitespace`] would leave `text` as it is: the usual case, and far cheaper to find out
+/// than to rebuild. May say `false` wrongly, never `true`.
 fn is_trimmed(text: &str) -> bool {
-    // An empty line is only right as the whole text.
     if text == "\n" {
         return true;
     }
-    // At the start, a space or a newline would be leading whitespace.
+    // So that a leading space or newline is caught.
     let mut previous = b'\n';
     for &byte in text.as_bytes() {
         let allowed = match byte {
-            // Neither leading, nor doubled, nor an empty line.
             b' ' | b'\n' => previous != b' ' && previous != b'\n',
-            // The other ASCII whitespace, and anything that might be Unicode whitespace.
+            // Other ASCII whitespace, and whatever might be Unicode whitespace.
             b'\t' | 0x0B | 0x0C | b'\r' | 0x80.. => false,
             _ => true,
         };
@@ -49,7 +42,7 @@ fn is_trimmed(text: &str) -> bool {
     !text.is_empty() && previous == b'\n'
 }
 
-/// [`trim_whitespace`], without copying text that is already trimmed.
+/// Does not copy text that is already trimmed.
 pub fn trim_whitespace_owned(text: String) -> String {
     if is_trimmed(&text) { text } else { trim_whitespace(&text) }
 }

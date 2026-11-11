@@ -33,7 +33,7 @@
 //! test is stored as its generator and seed, which have to rebuild the same
 //! bytes. [Seed mode](Mode::Seeds) checks this by rebuilding every test.
 
-// The `ToOutput` derive refers to `::ezcp::ToOutput`, which needs this inside the crate.
+// The `ToOutput` derive names `::ezcp::ToOutput`, which needs this inside the crate.
 extern crate self as ezcp;
 
 mod archiver;

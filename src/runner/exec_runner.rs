@@ -1,49 +1,41 @@
-use crate::Error;
-use crate::Result;
+use crate::{Error, Result};
 use log::{debug, trace};
 use std::io::{Read, Write};
 use std::path::Path;
 use std::process::{Command, Stdio};
 
-/// See `timer.cpp` for the protocol.
+/// See `timer.cpp`.
 const RESULT_MARKER: &str = "__EZCP_RESULT__";
 
-/// Output is held in memory, and a solution stuck in a printing loop can write
-/// gigabytes within its time limit.
+/// Output is held in memory, and a solution stuck printing can write gigabytes within its time limit.
 const MAX_OUTPUT_BYTES: u64 = 256 << 20;
 
-/// Only the end of stderr is kept: the timer's marker comes after any amount of
-/// the solution's own debug output.
+/// Only the end of stderr is kept: the marker follows any amount of the solution's debug output.
 const STDERR_TAIL_BYTES: usize = 64 << 10;
 
-/// What a solution may use.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct Limits {
-    /// In milliseconds of CPU time.
+    /// CPU time.
     pub time_ms: i32,
-    /// In kilobytes of peak memory. `None` is no limit.
+    /// Peak memory.
     pub memory_kb: Option<u64>,
 }
 
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub enum RunResult {
     Ok {
-        /// CPU time in milliseconds.
         time_ms: i32,
-        /// Peak memory in kilobytes.
         memory_kb: u64,
-        /// Everything written to stdout.
         output: String,
     },
     TimedOut,
     MemoryLimitExceeded,
-    /// Also a non-zero exit code, or more than [`MAX_OUTPUT_BYTES`] of output.
+    /// Also a non-zero exit code or more than [`MAX_OUTPUT_BYTES`] of output.
     Crashed,
 }
 
 impl RunResult {
-    /// The official solution's output, or the error for its failure on the test
-    /// described by `test_path` and `gen_id`.
+    /// The output, or the error for the official solution failing.
     pub fn official_output(self, test_path: &str, gen_id: usize) -> Result<String> {
         let test_path = test_path.to_owned();
         match self {
@@ -55,7 +47,6 @@ impl RunResult {
     }
 }
 
-/// What the timer reported about a run.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct TimerReport<'stderr> {
     pub verdict: &'stderr str,
@@ -63,8 +54,7 @@ pub struct TimerReport<'stderr> {
     pub memory_kb: u64,
 }
 
-/// Reads the last marker, which the timer writes after the solution has exited,
-/// so the solution cannot spoof it.
+/// The last marker, which the timer writes after the solution exits, so the solution cannot spoof it.
 pub fn parse_result_marker(stderr: &str) -> Option<TimerReport<'_>> {
     let after_marker = &stderr[stderr.rfind(RESULT_MARKER)? + RESULT_MARKER.len()..];
     let mut fields = after_marker.lines().next().unwrap_or("").split_whitespace();
@@ -78,15 +68,14 @@ pub fn parse_result_marker(stderr: &str) -> Option<TimerReport<'_>> {
     })
 }
 
-/// Returns `None` past [`MAX_OUTPUT_BYTES`]. The pipe is then closed, which
-/// kills a solution that is still writing with `SIGPIPE`.
+/// `None` past [`MAX_OUTPUT_BYTES`]. Closing the pipe then kills a solution still writing (`SIGPIPE`).
 fn read_output(stdout: impl Read) -> std::io::Result<Option<Vec<u8>>> {
     let mut output = Vec::new();
     stdout.take(MAX_OUTPUT_BYTES + 1).read_to_end(&mut output)?;
     Ok((output.len() as u64 <= MAX_OUTPUT_BYTES).then_some(output))
 }
 
-/// Reads to the end, keeping at least the last [`STDERR_TAIL_BYTES`].
+/// Keeps at least the last [`STDERR_TAIL_BYTES`].
 fn read_tail(mut stderr: impl Read) -> std::io::Result<Vec<u8>> {
     let mut tail = Vec::new();
     let mut chunk = [0_u8; 8192];
@@ -105,7 +94,6 @@ fn read_tail(mut stderr: impl Read) -> std::io::Result<Vec<u8>> {
     }
 }
 
-/// Runs a solution under the timer.
 pub fn run_solution(executable_file: &Path, input_data: &str, limits: Limits, timer_path: &Path) -> Result<RunResult> {
     let mut command = Command::new(timer_path);
     command
@@ -119,12 +107,11 @@ pub fn run_solution(executable_file: &Path, input_data: &str, limits: Limits, ti
     let mut solution_process = command.spawn().map_err(Error::io(timer_path))?;
     let (stdin, stdout, stderr) = (solution_process.stdin.take(), solution_process.stdout.take(), solution_process.stderr.take());
 
-    // stdin, stdout and stderr are all serviced at once: any of them filling up
-    // while nobody services it would deadlock.
+    // All three pipes at once: one filling up unserviced would deadlock.
     let (stdout, stderr, status) = std::thread::scope(|scope| {
         let stdin_writer = stdin.map(|mut stdin| {
             scope.spawn(move || {
-                // Fails when the solution does not read all of its input, which is fine.
+                // Fails if the solution does not read all of its input, which is fine.
                 let _ = stdin.write_all(input_data.as_bytes());
                 let _ = stdin.flush();
             })
@@ -133,7 +120,7 @@ pub fn run_solution(executable_file: &Path, input_data: &str, limits: Limits, ti
         let stderr = stderr.map_or_else(|| Ok(Vec::new()), read_tail);
         let status = solution_process.wait();
 
-        // Both processes have exited, so the writer cannot still be blocked.
+        // Both processes have exited, so the writer is not blocked.
         if let Some(stdin_writer) = stdin_writer {
             drop(stdin_writer.join());
         }
@@ -153,7 +140,7 @@ pub fn run_solution(executable_file: &Path, input_data: &str, limits: Limits, ti
     };
     trace!("Timer reported {report:?}");
 
-    // The timer's verdict is then SIGPIPE's RTE, or on Windows a TLE.
+    // The timer then says RTE (SIGPIPE), or TLE on Windows.
     let Some(stdout) = stdout else {
         debug!("Solution wrote more than {MAX_OUTPUT_BYTES} bytes to stdout and was stopped");
         return Ok(RunResult::Crashed);
@@ -177,7 +164,6 @@ pub fn run_solution(executable_file: &Path, input_data: &str, limits: Limits, ti
                 return Ok(RunResult::TimedOut);
             }
 
-            // Avoids copying the output when it is valid UTF-8.
             let output = String::from_utf8(stdout).unwrap_or_else(|err| String::from_utf8_lossy(err.as_bytes()).into_owned());
             // MinGW writes stdout in text mode.
             #[cfg(windows)]

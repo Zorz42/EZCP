@@ -1,6 +1,3 @@
-//! A whole run: generating every subtask's tests, verifying them against the
-//! solutions and writing them out.
-
 use crate::archiver::archive_files;
 use crate::generate::GeneratedTest;
 use crate::mode::Mode;
@@ -18,7 +15,6 @@ use std::fs;
 use std::panic::resume_unwind;
 use std::path::Path;
 
-/// The name and contents of a test file.
 type TestFile<'test> = (String, Cow<'test, str>);
 
 fn format_size(bytes: usize) -> String {
@@ -30,8 +26,7 @@ fn format_size(bytes: usize) -> String {
     }
 }
 
-/// On Windows an antivirus scanner or the search indexer often holds one of the
-/// old test files open for a moment, which makes a single attempt fail.
+/// On Windows a virus scanner or the indexer often holds an old test file open for a moment.
 fn remove_dir_all_with_retry(path: &Path) -> Result<()> {
     for attempt in 1..5 {
         match fs::remove_dir_all(path) {
@@ -43,15 +38,13 @@ fn remove_dir_all_with_retry(path: &Path) -> Result<()> {
     fs::remove_dir_all(path).map_err(Error::io(path))
 }
 
-/// Where two supposedly identical tests first differ, short enough for an error
-/// message.
 fn describe_difference(first: &str, second: &str) -> String {
     const EXCERPT_WIDTH: usize = 24;
 
     fn excerpt(text: &str, offset: usize) -> String {
         let bytes = text.as_bytes();
         let end = offset.saturating_add(EXCERPT_WIDTH).min(bytes.len());
-        // The cut can split a multi-byte character.
+        // The cut may split a character.
         String::from_utf8_lossy(&bytes[offset.min(bytes.len())..end]).into_owned()
     }
 
@@ -67,7 +60,6 @@ fn describe_difference(first: &str, second: &str) -> String {
     )
 }
 
-/// Every test, in order, with the index of its subtask.
 fn with_subtasks(all_tests: &[Vec<GeneratedTest>]) -> impl Iterator<Item = (usize, &GeneratedTest)> {
     all_tests.iter().enumerate().flat_map(|(subtask_idx, tests)| tests.iter().map(move |test| (subtask_idx, test)))
 }
@@ -91,7 +83,7 @@ impl<T: ToOutput> Task<T> {
         }
         let official = runner.add_program(&self.solution_source)?;
         let partials = self.solutions.iter().map(|solution| runner.add_program(&solution.source)).collect::<Result<Vec<_>>>()?;
-        // Only after every program has been added: anything else is stale.
+        // Only once every program is added: anything else is stale.
         runner.clean_build_folder()?;
 
         if self.tests_path.exists() {
@@ -122,7 +114,7 @@ impl<T: ToOutput> Task<T> {
         for (i, (solution, &program)) in self.solutions.iter().zip(&partials).enumerate() {
             self.log_result(&format!("Running partial solution {}: {}", i + 1, solution.name))?;
             let passed_subtasks = self.run_solution_on_tests(&all_tests, &runner, program, lines_of_code(&solution.source), &|subtask_idx| solution.should_fail(subtask_idx))?;
-            // Generation only errors out when it runs out of tries, so this is checked again.
+            // Generation only catches this when it runs out of tries.
             if let Some(subtask_idx) = (0..self.subtasks.len()).find(|idx| passed_subtasks.contains(idx) && solution.should_fail(*idx)) {
                 return Err(self.passes_extra_subtask(i, subtask_idx));
             }
@@ -134,7 +126,7 @@ impl<T: ToOutput> Task<T> {
             );
         }
 
-        // Written only once everything is verified, so a failed run leaves no tests.
+        // Only now, so a failed run leaves no tests.
         let files = Self::test_files(mode, names, &all_tests);
         for (name, contents) in &files {
             let path = self.tests_path.join(name);
@@ -153,9 +145,8 @@ impl<T: ToOutput> Task<T> {
         Ok(())
     }
 
-    /// Rebuilds every kept test's input from its seed `times` over. Nothing can
-    /// stop a generator from using randomness other than its `Rng`, so this is
-    /// how such a generator is caught before its seeds are written down.
+    /// Nothing stops a generator from using randomness other than its `Rng`; this catches one before
+    /// its seeds are written down.
     fn check_tests_are_reproducible(&self, times: usize, all_tests: &[Vec<GeneratedTest>], workers: usize) -> Result<()> {
         let tests: Vec<_> = with_subtasks(all_tests).collect();
         if times == 0 || tests.is_empty() {
@@ -165,7 +156,6 @@ impl<T: ToOutput> Task<T> {
         info!("Checking that all {} tests can be rebuilt from their seeds ({times} times each)", tests.len());
         let progress_bar = ScopedProgressBar::new(&self.logger, (tests.len() * times) as u64);
         let (subtasks, trim_whitespace) = (&self.subtasks, self.trim_whitespace);
-        // For each test, its first rebuild that differs from it.
         let mismatches = parallel_map(&tests, workers, |&(subtask_idx, test)| {
             (1..=times).find_map(|attempt| {
                 let rebuilt = subtasks[subtask_idx].generate_input(test.generator, test.seed, trim_whitespace);
@@ -193,10 +183,8 @@ impl<T: ToOutput> Task<T> {
         Ok(())
     }
 
-    /// The input and output file names of every test, in order.
     fn assign_file_names(&self, all_tests: &[Vec<GeneratedTest>]) -> Result<Vec<(String, String)>> {
         let mut names = Vec::new();
-        // The naming closures come from the user and may map two tests to one name.
         let mut used_names = HashSet::new();
         for (subtask_idx, subtask_tests) in all_tests.iter().enumerate() {
             for test_in_subtask in 0..subtask_tests.len() {
@@ -213,8 +201,6 @@ impl<T: ToOutput> Task<T> {
         Ok(names)
     }
 
-    /// Every test file: each test's data, or in seed mode the stub that
-    /// rebuilds it.
     fn test_files(mode: Mode, names: Vec<(String, String)>, all_tests: &[Vec<GeneratedTest>]) -> Vec<TestFile<'_>> {
         let mut files = Vec::with_capacity(2 * names.len());
         for ((input_name, output_name), (subtask, test)) in names.into_iter().zip(with_subtasks(all_tests)) {
@@ -237,11 +223,10 @@ impl<T: ToOutput> Task<T> {
         files
     }
 
-    /// Otherwise a wrong index (usually 1-based) would silently make the
-    /// solution one that has to fail everywhere.
+    /// Otherwise a wrong (usually 1-based) index silently makes a solution one that fails everywhere.
     fn check_declared_subtasks_exist(&self) -> Result<()> {
         for (partial_idx, solution) in self.solutions.iter().enumerate() {
-            // The smallest, so the error does not depend on hash set order.
+            // The smallest, so the error does not depend on hash order.
             if let Some(&subtask_number) = solution.passes_subtasks.iter().filter(|&&idx| idx >= self.subtasks.len()).min() {
                 return Err(Error::InvalidSubtaskIndex {
                     partial_number: partial_idx + 1,
@@ -254,9 +239,8 @@ impl<T: ToOutput> Task<T> {
         Ok(())
     }
 
-    /// Every test was already checked against these solutions during
-    /// generation, so a failure here means the run is not reproducible, usually
-    /// because a solution is right at the time limit.
+    /// Every test already passed these solutions during generation, so this means flaky verdicts,
+    /// usually from a solution right at the time limit.
     fn warn_about_unreproduced_passes(&self, solution: &str, meant_to_pass: impl Fn(usize) -> bool, passed_subtasks: &HashSet<usize>, all_tests: &[Vec<GeneratedTest>]) {
         for (subtask_idx, subtask) in self.subtasks.iter().enumerate() {
             if meant_to_pass(subtask_idx) && !passed_subtasks.contains(&subtask_idx) && !all_tests[subtask_idx].is_empty() {

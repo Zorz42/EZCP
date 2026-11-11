@@ -1,9 +1,5 @@
-//! [`Mode::Serve`](crate::Mode::Serve): answers each stub on stdin with the raw
-//! test data it stands for.
-//!
-//! The answers are unframed, so a failure cannot be reported in the stream. A
-//! stub that cannot be answered writes nothing and ends the session with an
-//! error instead.
+//! Serve mode. Answers are unframed, so a stub that cannot be answered writes nothing and ends the
+//! session with an error instead.
 
 use crate::runner::cpp_runner::{CppRunner, ProgramHandle};
 use crate::runner::exec_runner::RunResult;
@@ -22,8 +18,7 @@ impl<T: ToOutput> Task<T> {
     }
 
     pub(crate) fn serve_io<R: Read, W: Write>(&self, input: &mut R, output: &mut W) -> Result<()> {
-        // Compiled on the first request for an output, so serving only inputs
-        // needs no compiler.
+        // Compiled on the first request for an output: serving inputs needs no compiler.
         let mut official_solution = None;
 
         for line in BufReader::new(input).lines() {
@@ -35,7 +30,7 @@ impl<T: ToOutput> Task<T> {
             debug!("Request: {line}");
             let payload = self.rebuild(&Stub::parse(&line)?, &mut official_solution)?;
 
-            // Flushed, since the caller may wait for this answer before sending the next stub.
+            // The caller may wait for this answer before sending the next stub.
             output.write_all(payload.as_bytes()).and_then(|()| output.flush()).map_err(Error::io(Path::new("stdout")))?;
         }
 
