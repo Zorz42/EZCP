@@ -56,9 +56,9 @@ pub struct Task<T: ToOutput> {
     pub(crate) tests_archive_path: PathBuf,
     pub(crate) build_folder_path: PathBuf,
     /// In milliseconds of CPU time.
-    pub(crate) time_limit: i32,
+    pub(crate) time_limit_ms: i32,
     /// In megabytes. `None` is no limit.
-    pub(crate) memory_limit: Option<usize>,
+    pub(crate) memory_limit_mb: Option<usize>,
     pub(crate) seed: SeedChoice,
     /// `None` leaves it to the mode, see [`Task::reproducibility_checks`].
     pub(crate) reproducibility_checks: Option<usize>,
@@ -93,8 +93,8 @@ impl<T: ToOutput> Task<T> {
             tests_path: path.join("tests"),
             tests_archive_path: path.join("tests.zip"),
             build_folder_path: path.join("build"),
-            time_limit: 5000,
-            memory_limit: None,
+            time_limit_ms: 5000,
+            memory_limit_mb: None,
             seed: SeedChoice::Fixed(DEFAULT_SEED),
             reproducibility_checks: None,
             input_file_name: Box::new(|test, subtask, _test_in_subtask| format!("test.{:02}.{:03}.in", subtask + 1, test + 1)),
@@ -203,8 +203,8 @@ impl<T: ToOutput> Task<T> {
 
     /// Sets the time limit, in milliseconds of CPU time.
     #[must_use]
-    pub const fn with_time_limit(mut self, limit: i32) -> Self {
-        self.time_limit = limit;
+    pub const fn with_time_limit(mut self, ms: i32) -> Self {
+        self.time_limit_ms = ms;
         self
     }
 
@@ -213,8 +213,8 @@ impl<T: ToOutput> Task<T> {
     /// A solution is over the limit if its peak memory use is: resident memory
     /// on Linux and macOS, committed memory on Windows.
     #[must_use]
-    pub const fn with_memory_limit(mut self, megabytes: usize) -> Self {
-        self.memory_limit = Some(megabytes);
+    pub const fn with_memory_limit(mut self, mb: usize) -> Self {
+        self.memory_limit_mb = Some(mb);
         self
     }
 
@@ -302,8 +302,8 @@ impl<T: ToOutput> Task<T> {
 
     pub(crate) fn limits(&self) -> Limits {
         Limits {
-            time_ms: self.time_limit,
-            memory_kb: self.memory_limit.map(|megabytes| megabytes as u64 * 1024),
+            time_ms: self.time_limit_ms,
+            memory_kb: self.memory_limit_mb.map(|mb| mb as u64 * 1024),
         }
     }
 

@@ -179,7 +179,7 @@ mod feature_tests {
     fn without_a_memory_limit_nothing_is_over_it() {
         let (_dir, task) = test_task();
         let mut task = megabytes(task, 8, 150).with_solution_source(ALLOCATE);
-        task.memory_limit = None;
+        task.memory_limit_mb = None;
         task.run_mode(Mode::Files).unwrap();
     }
 
