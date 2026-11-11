@@ -670,12 +670,6 @@ impl ToOutput for Graph {
     /// # Panics
     /// Panics if the format is one for trees but the graph is not a tree, or if
     /// edges were added after the weights.
-    fn to_output(self) -> String {
-        let mut out = String::new();
-        self.write_output(&mut out);
-        out
-    }
-
     fn write_output(self, out: &mut String) {
         let is_tree_format = matches!(self.format, GraphFormat::Tree | GraphFormat::ParentList);
         assert!(!is_tree_format || self.is_tree(), "the graph is written as a tree but is not one");

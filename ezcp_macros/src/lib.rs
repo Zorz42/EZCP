@@ -1,10 +1,9 @@
-//! Procedural macros for [EZCP](https://docs.rs/ezcp), which re-exports them.
+//! The `ToOutput` derive of [EZCP](https://docs.rs/ezcp), which re-exports it.
 use proc_macro::TokenStream;
 use quote::quote;
 use syn::{Data, DeriveInput, Index, parse_macro_input};
 
-/// Derives `ToOutput` for a struct: its fields in order, one per line, skipping
-/// fields that render empty.
+/// Writes the fields in order, one per line, skipping those that write nothing.
 #[proc_macro_derive(ToOutput)]
 pub fn to_output_derive(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
@@ -18,16 +17,10 @@ pub fn to_output_derive(input: TokenStream) -> TokenStream {
     });
     let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
 
-    // Full paths, so `#[derive(ezcp::ToOutput)]` works without importing the trait.
+    // Full paths, so the derive works without the trait in scope.
     quote! {
         #[automatically_derived]
         impl #impl_generics ::ezcp::ToOutput for #name #ty_generics #where_clause {
-            fn to_output(self) -> ::std::string::String {
-                let mut out = ::std::string::String::new();
-                ::ezcp::ToOutput::write_output(self, &mut out);
-                out
-            }
-
             #[allow(unused_variables)]
             fn write_output(self, out: &mut ::std::string::String) {
                 #({
