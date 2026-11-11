@@ -18,12 +18,6 @@ pub struct Subtask<T: ToOutput> {
     validator: Option<Validator<T>>,
 }
 
-impl<T: ToOutput> Default for Subtask<T> {
-    fn default() -> Self {
-        Self::new(0, "")
-    }
-}
-
 impl<T: ToOutput> Subtask<T> {
     /// Creates a subtask without generators.
     #[must_use]

@@ -3,7 +3,7 @@
 mod array_tests {
     use crate::rng::Rng;
     use crate::tests::generic_tests::generic_tests::test_task;
-    use crate::{Counted, Mode, Subtask, ToOutput, array_generator, array_generator_custom, array_to_string};
+    use crate::{Counted, Mode, Subtask, ToOutput, array_generator, array_generator_custom};
 
     #[test]
     fn test_array_generator_in_a_task() {
@@ -21,16 +21,6 @@ mod array_tests {
             .with_subtask(Subtask::new(0, "").with_test(5, array_generator(1..=100, 47..=47)).with_test(5, array_generator(1..=1, 47..=47)))
             .run_mode(Mode::Files)
             .unwrap();
-    }
-
-    #[test]
-    fn test_array_to_string_format() {
-        assert_eq!(array_to_string(&[1, 2, 3], true), "3\n1 2 3\n");
-        assert_eq!(array_to_string(&[1, 2, 3], false), "1 2 3\n");
-        assert_eq!(array_to_string(&[7], true), "1\n7\n");
-        assert_eq!(array_to_string::<i32>(&[], true), "0\n\n");
-        assert_eq!(array_to_string::<i32>(&[], false), "\n");
-        assert_eq!(array_to_string(&["a", "b"], false), "a b\n");
     }
 
     #[test]

@@ -63,12 +63,6 @@ impl Rng {
         result
     }
 
-    /// Returns a seed for a separate generator, such as the one a single test
-    /// is generated with.
-    pub const fn next_seed(&mut self) -> u64 {
-        self.next_u64()
-    }
-
     /// Returns a uniform value below `bound`, or any `u64` if `bound` is zero.
     const fn below(&mut self, bound: u64) -> u64 {
         if bound == 0 {

@@ -171,7 +171,7 @@ impl<T: ToOutput> Generation<'_, T> {
             .map(|_| {
                 let rng_before = rng.clone();
                 let generator = pick(rng);
-                (generator, rng.next_seed(), rng_before)
+                (generator, rng.next_u64(), rng_before)
             })
             .collect();
         let (subtask, trim_whitespace) = (self.subtask, self.task.trim_whitespace);

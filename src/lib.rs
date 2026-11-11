@@ -64,7 +64,7 @@ mod whitespace;
 struct ReadmeExamples;
 
 pub use error::{Error, Result};
-pub use generators::{Graph, GraphFormat, array_generator, array_generator_custom, array_to_string};
+pub use generators::{Graph, GraphFormat, array_generator, array_generator_custom};
 pub use mode::{CliOptions, Mode, SeedChoice};
 pub use rng::{Rng, SampleInteger, SampleUniform};
 pub use solution::Solution;

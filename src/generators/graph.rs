@@ -99,7 +99,7 @@ impl Graph {
             weights: None,
             format: GraphFormat::EdgeList,
             zero_based: false,
-            output_seed: rng.next_seed(),
+            output_seed: rng.next_u64(),
         }
     }
 

@@ -263,7 +263,7 @@ mod feature_tests {
         // The first candidate of the hunt: its generator is picked, then its seed drawn.
         let mut master = Rng::from_seed(DEFAULT_SEED);
         master.random_range(0..1_usize);
-        let first = Rng::from_seed(master.next_seed()).random_range(1..=1_000_000_000_i64);
+        let first = Rng::from_seed(master.next_u64()).random_range(1..=1_000_000_000_i64);
 
         for jobs in [1, 4, 16] {
             let (dir, task) = test_task();

@@ -1,14 +1,6 @@
 use crate::rng::{Rng, SampleUniform};
 use crate::to_output::Counted;
-use std::fmt::Display;
 use std::ops::RangeBounds;
-
-/// Formats `[1, 2, 3]` as `"3\n1 2 3\n"`, or as `"1 2 3\n"` without the count.
-#[must_use]
-pub fn array_to_string<T: Display>(array: &[T], include_count: bool) -> String {
-    let values = array.iter().map(T::to_string).collect::<Vec<_>>().join(" ");
-    if include_count { format!("{}\n{values}\n", array.len()) } else { format!("{values}\n") }
-}
 
 /// Returns a generator of arrays whose length is drawn from `len` and whose
 /// values are drawn by `value`. An array is written as its length on one line
