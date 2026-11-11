@@ -110,21 +110,17 @@ impl CppRunner {
         // folder, so each compiles a private copy and renames the finished files
         // into place. Compiling the shared source breaks on Windows, where a rename
         // over a file that is being read succeeds and the reader loses the file.
-        // The source is always rewritten, to repair one truncated by an old version.
-        let scratch_source = self.build_folder.join(scratch_source_name(hash));
-        std::fs::write(&scratch_source, source_code).map_err(Error::io(&scratch_source))?;
-        let compiled = if executable_file.exists() {
-            Ok(())
-        } else {
+        if !executable_file.exists() {
             trace!("Compiling: {}", executable_file.display());
+            let scratch_source = self.build_folder.join(scratch_source_name(hash));
+            std::fs::write(&scratch_source, source_code).map_err(Error::io(&scratch_source))?;
             let scratch_executable = Gcc::executable_path(&scratch_source)?;
             let compiled = self.gcc.compile(&scratch_source, &scratch_executable).and_then(|()| install(&scratch_executable, &executable_file));
             // Only left behind by a failed compile.
             let _ = std::fs::remove_file(&scratch_executable);
-            compiled
-        };
-        install(&scratch_source, &source_file)?;
-        compiled?;
+            install(&scratch_source, &source_file)?;
+            compiled?;
+        }
 
         // Only now, so a failed compile leaves no handle to a missing program.
         let handle = ProgramHandle(self.programs.len());
