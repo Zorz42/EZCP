@@ -108,7 +108,11 @@ impl<T: ToOutput> Task<T> {
         let subtask = &self.subtasks[subtask_idx];
         let (good, bad): (Vec<IndexedProgram>, Vec<IndexedProgram>) = partials.iter().copied().enumerate().partition(|&(i, _)| !self.solutions[i].should_fail(subtask_idx));
         let default_target = subtask.min_failures_per_solution.unwrap_or(self.min_failures_per_solution);
-        let targets = self.solutions.iter().map(|solution| solution.min_failures.get(&subtask_idx).copied().unwrap_or(default_target)).collect();
+        let targets = self
+            .solutions
+            .iter()
+            .map(|solution| solution.min_failures.get(&subtask_idx).copied().unwrap_or(default_target))
+            .collect();
         let progress_target = if bad.is_empty() { 0 } else { default_target };
         let mut generation = Generation {
             task: self,
@@ -247,7 +251,13 @@ impl<T: ToOutput> Generation<'_, T> {
                 gen_id: generator + 1,
             });
         }
-        let failed = |i: usize| run.outcomes.iter().find(|&&(j, _)| j == i).map(|&(_, outcome)| outcome.verdict).filter(|&verdict| verdict != Verdict::Ok);
+        let failed = |i: usize| {
+            run.outcomes
+                .iter()
+                .find(|&&(j, _)| j == i)
+                .map(|&(_, outcome)| outcome.verdict)
+                .filter(|&verdict| verdict != Verdict::Ok)
+        };
         let good_failed = self.good.iter().filter_map(|&(i, _)| Some((i, failed(i)?))).collect();
         let bad_failed = bad.iter().filter(|&&(i, _)| failed(i).is_some()).map(|&(i, _)| i).collect();
         Ok((official_output, good_failed, bad_failed))
@@ -270,7 +280,12 @@ impl<T: ToOutput> Generation<'_, T> {
             expected: excerpt(expected),
             output: output.as_deref().map(excerpt),
         };
-        self.mismatches.push(Mismatch::Fails { solution, subtask: self.subtask_idx, verdict, test });
+        self.mismatches.push(Mismatch::Fails {
+            solution,
+            subtask: self.subtask_idx,
+            verdict,
+            test,
+        });
         if self.task.keep_going {
             return Ok(());
         }
@@ -409,7 +424,10 @@ impl<T: ToOutput> Generation<'_, T> {
     fn report_failures(&mut self) -> Result<()> {
         let passing: Vec<_> = self.bad.iter().map(|&(i, _)| i).filter(|&i| self.targets[i] > 0 && self.failures[i] == 0).collect();
         for i in passing {
-            self.mismatches.push(Mismatch::Passes { solution: i, subtask: self.subtask_idx });
+            self.mismatches.push(Mismatch::Passes {
+                solution: i,
+                subtask: self.subtask_idx,
+            });
             if !self.task.keep_going {
                 return Err(self.task.passes_extra_subtask(i, self.subtask_idx));
             }

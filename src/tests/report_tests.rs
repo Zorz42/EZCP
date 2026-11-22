@@ -30,7 +30,13 @@ fn keep_going_records_every_mismatch_and_writes_no_tests() {
     assert!(matches!(report.error, Some(Error::DeclarationsMismatch { count: 2 })), "got {:?}", report.error);
     // In the order the subtasks are generated.
     assert!(matches!(report.mismatches.first(), Some(Mismatch::Passes { solution: 1, subtask: 0 })), "got {:?}", report.mismatches);
-    let Some(Mismatch::Fails { solution: 0, subtask: 1, verdict: Verdict::WrongAnswer, test }) = report.mismatches.get(1) else {
+    let Some(Mismatch::Fails {
+        solution: 0,
+        subtask: 1,
+        verdict: Verdict::WrongAnswer,
+        test,
+    }) = report.mismatches.get(1)
+    else {
         unreachable!("got {:?}", report.mismatches);
     };
     assert!(test.input.trim().parse::<i64>().unwrap() > 100);
@@ -127,7 +133,10 @@ fn the_compiler_fills_the_build_folder_a_task_uses() {
         .unwrap();
     let modified = || std::fs::metadata(&executable).unwrap().modified().unwrap();
     let before = modified();
-    task.with_solution_source(DOUBLE).with_subtask(Subtask::new(100, "all").with_test(2, number(1..=100))).run_mode(Mode::Files).unwrap();
+    task.with_solution_source(DOUBLE)
+        .with_subtask(Subtask::new(100, "all").with_test(2, number(1..=100)))
+        .run_mode(Mode::Files)
+        .unwrap();
     assert_eq!(modified(), before);
 }
 

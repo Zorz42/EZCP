@@ -206,7 +206,7 @@ mod same_bytes_as_before {
             assert_renders(&[a.clone(), b.clone()], &old_vec(&[a.clone(), b.clone()]));
             assert_renders(&(a.clone(),), &old_tuple(std::slice::from_ref(&a)));
             assert_renders(&(a.clone(), b.clone()), &old_tuple(&[a.clone(), b.clone()]));
-            assert_renders(&(a.clone(), number, c.clone()), &old_tuple(&[a.clone(), number.to_string(), c.clone()]));
+            assert_renders(&(a.clone(), number, c.clone()), &old_tuple(&[a.clone(), number.to_string(), c]));
 
             let nested = vec![list.clone(), other.clone()];
             assert_renders(&nested, &old_vec(&[old_vec(&list), old_vec(&other)]));
@@ -220,7 +220,7 @@ mod same_bytes_as_before {
                 list: list.clone(),
                 pair: (b.clone(), number),
             };
-            let rendered_record = old_struct(&[a.clone(), old_vec(&list), old_tuple(&[b.clone(), number.to_string()])]);
+            let rendered_record = old_struct(&[a, old_vec(&list), old_tuple(&[b, number.to_string()])]);
             assert_renders(&record, &rendered_record);
             assert_renders(&vec![record.clone(), record], &old_vec(&[rendered_record.clone(), rendered_record]));
 

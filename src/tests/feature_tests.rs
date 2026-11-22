@@ -221,7 +221,13 @@ fn a_rejecting_validator_ends_the_run_with_its_own_message() {
             assert!(input.trim().parse::<i64>().unwrap() <= 0, "n is too large");
         }))
         .run_mode(Mode::Files);
-    let Err(Error::ValidatorRejected { subtask_number: 1, gen_id: 1, message, .. }) = &result else {
+    let Err(Error::ValidatorRejected {
+        subtask_number: 1,
+        gen_id: 1,
+        message,
+        ..
+    }) = &result
+    else {
         unreachable!("got {result:?}");
     };
     assert_eq!(message, "n is too large");
@@ -236,7 +242,13 @@ fn a_panicking_generator_ends_the_run_naming_it() {
         .with_subtask(Subtask::new(50, "fine").with_test(2, number(1..=1000)))
         .with_subtask(Subtask::new(50, "broken").with_test(1, number(1..=1000)).with_test(1, |_rng| -> String { panic!("out of ideas") }))
         .run_mode(Mode::Files);
-    let Err(Error::GeneratorPanicked { subtask_number: 2, gen_id: 2, message, .. }) = &result else {
+    let Err(Error::GeneratorPanicked {
+        subtask_number: 2,
+        gen_id: 2,
+        message,
+        ..
+    }) = &result
+    else {
         unreachable!("got {result:?}");
     };
     assert_eq!(message, "out of ideas");

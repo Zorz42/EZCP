@@ -20,8 +20,18 @@ impl Fault {
     pub fn into_error(self, subtask: usize, generator: usize, seed: u64) -> Error {
         let (subtask_number, gen_id, seed) = (subtask + 1, generator + 1, format!("{seed:#018x}"));
         match self {
-            Self::Generator(message) => Error::GeneratorPanicked { subtask_number, gen_id, seed, message },
-            Self::Validator(message) => Error::ValidatorRejected { subtask_number, gen_id, seed, message },
+            Self::Generator(message) => Error::GeneratorPanicked {
+                subtask_number,
+                gen_id,
+                seed,
+                message,
+            },
+            Self::Validator(message) => Error::ValidatorRejected {
+                subtask_number,
+                gen_id,
+                seed,
+                message,
+            },
         }
     }
 }

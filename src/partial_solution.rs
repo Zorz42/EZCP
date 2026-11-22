@@ -39,7 +39,14 @@ impl<T: ToOutput> Task<T> {
             .enumerate()
             .flat_map(|(subtask_idx, subtask_tests)| subtask_tests.iter().enumerate().map(move |(test_idx, test)| (subtask_idx, test_idx, test)))
             .collect();
-        let jobs: Vec<_> = runs.iter().map(|&(_, _, test)| Judged { program, input: &test.input, expected: &test.output }).collect();
+        let jobs: Vec<_> = runs
+            .iter()
+            .map(|&(_, _, test)| Judged {
+                program,
+                input: &test.input,
+                expected: &test.output,
+            })
+            .collect();
 
         // Everything up to a subtask's first failed test is run, so the report does not depend on the
         // order the runs finish in.

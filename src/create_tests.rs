@@ -73,14 +73,25 @@ impl<T: ToOutput> Task<T> {
         self.print_title(&format!("Creating tests for task \"{}\"", self.name));
 
         report.seed = Some(seed);
-        report.subtasks = self.subtasks.iter().map(|subtask| SubtaskInfo { name: subtask.name.clone(), points: subtask.points }).collect();
+        report.subtasks = self
+            .subtasks
+            .iter()
+            .map(|subtask| SubtaskInfo {
+                name: subtask.name.clone(),
+                points: subtask.points,
+            })
+            .collect();
         report.partials = self
             .solutions
             .iter()
             .map(|solution| {
                 let mut declared: Vec<_> = solution.passes_subtasks.iter().copied().collect();
                 declared.sort_unstable();
-                PartialReport { name: solution.name.clone(), declared, results: Vec::new() }
+                PartialReport {
+                    name: solution.name.clone(),
+                    declared,
+                    results: Vec::new(),
+                }
             })
             .collect();
 
@@ -184,7 +195,12 @@ impl<T: ToOutput> Task<T> {
                     return Err(self.passes_extra_subtask(i, subtask_idx));
                 }
             }
-            let failed_already = |idx: usize| report.mismatches.iter().any(|mismatch| matches!(*mismatch, Mismatch::Fails { solution, subtask, .. } if solution == i && subtask == idx));
+            let failed_already = |idx: usize| {
+                report
+                    .mismatches
+                    .iter()
+                    .any(|mismatch| matches!(*mismatch, Mismatch::Fails { solution, subtask, .. } if solution == i && subtask == idx))
+            };
             self.warn_about_unreproduced_passes(
                 &format!("Partial solution {} ({})", i + 1, solution.name),
                 |idx| !solution.should_fail(idx) && !failed_already(idx),
@@ -210,7 +226,9 @@ impl<T: ToOutput> Task<T> {
         let mismatches = parallel_map(&tests, workers, |&(subtask_idx, test)| {
             (1..=times).find_map(|attempt| {
                 // A generator that panics on a seed it built a test from is not reproducible either.
-                let rebuilt = subtasks[subtask_idx].generate_input(test.generator, test.seed, trim_whitespace).unwrap_or_else(|fault| format!("{fault:?}"));
+                let rebuilt = subtasks[subtask_idx]
+                    .generate_input(test.generator, test.seed, trim_whitespace)
+                    .unwrap_or_else(|fault| format!("{fault:?}"));
                 progress_bar.inc(1);
                 (rebuilt != test.input).then_some((attempt, rebuilt))
             })

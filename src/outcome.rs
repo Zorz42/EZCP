@@ -185,7 +185,13 @@ impl<T: ToOutput> Task<T> {
             }
         }
 
-        let runs: Vec<_> = misses.iter().map(|&idx| Job { program: jobs[idx].program, input: jobs[idx].input }).collect();
+        let runs: Vec<_> = misses
+            .iter()
+            .map(|&idx| Job {
+                program: jobs[idx].program,
+                input: jobs[idx].input,
+            })
+            .collect();
         let mut outcomes = vec![None; misses.len()];
         let mut first_error = None;
         runner.run_jobs(&runs, limits, &|run| skip(misses[run]), |run, result| {

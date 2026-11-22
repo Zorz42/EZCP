@@ -85,20 +85,10 @@ pub enum Error {
     },
 
     #[error("Generator {gen_id} of subtask {subtask_number} panicked on seed {seed}: {message}")]
-    GeneratorPanicked {
-        subtask_number: usize,
-        gen_id: usize,
-        seed: String,
-        message: String,
-    },
+    GeneratorPanicked { subtask_number: usize, gen_id: usize, seed: String, message: String },
 
     #[error("The validator of subtask {subtask_number} rejected the test of generator {gen_id} on seed {seed}: {message}")]
-    ValidatorRejected {
-        subtask_number: usize,
-        gen_id: usize,
-        seed: String,
-        message: String,
-    },
+    ValidatorRejected { subtask_number: usize, gen_id: usize, seed: String, message: String },
 
     /// Only with keep-going, which records every mismatch instead of stopping at the first.
     #[error("{count} declarations of partial solutions do not match what they do; the report lists them")]

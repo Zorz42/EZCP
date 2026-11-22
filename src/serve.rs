@@ -49,7 +49,9 @@ impl<T: ToOutput> Task<T> {
         }
 
         // A panicking generator must not take the whole server down.
-        let input = self.generate_input(stub.subtask, stub.generator, stub.seed).map_err(|err| Error::InvalidStub { details: err.to_string() })?;
+        let input = self
+            .generate_input(stub.subtask, stub.generator, stub.seed)
+            .map_err(|err| Error::InvalidStub { details: err.to_string() })?;
 
         let payload = match stub.part {
             Part::Input => input,
