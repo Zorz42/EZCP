@@ -1,5 +1,6 @@
 use crate::logger_format::logger_format;
 use crate::mode::{CliOptions, Mode, SeedChoice, USAGE};
+use crate::report::Report;
 use crate::runner::exec_runner::Limits;
 use crate::subtask::Subtask;
 use crate::to_output::ToOutput;
@@ -8,7 +9,7 @@ use console::style;
 use indicatif::MultiProgress;
 use indicatif_log_bridge::LogWrapper;
 use log::{LevelFilter, error, info};
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::fs::OpenOptions;
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -29,6 +30,8 @@ pub struct Solution {
     pub name: String,
     pub source: String,
     pub passes_subtasks: HashSet<usize>,
+    /// Overrides how many tests of a subtask it has to fail.
+    pub min_failures: HashMap<usize, usize>,
 }
 
 impl Solution {
@@ -58,6 +61,9 @@ pub struct Task<T: ToOutput> {
     pub(crate) checker: Checker,
     pub(crate) trim_whitespace: bool,
     pub(crate) fail_fast: bool,
+    pub(crate) keep_going: bool,
+    pub(crate) outcome_cache: bool,
+    pub(crate) timing_retries: usize,
     pub(crate) jobs: Option<usize>,
     pub(crate) debug_level: LevelFilter,
     pub(crate) logger: MultiProgress,
@@ -91,6 +97,9 @@ impl<T: ToOutput> Task<T> {
             checker: Box::new(diff_checker),
             trim_whitespace: true,
             fail_fast: false,
+            keep_going: false,
+            outcome_cache: false,
+            timing_retries: 0,
             jobs: None,
             debug_level: LevelFilter::Info,
             logger: MultiProgress::new(),
@@ -133,7 +142,22 @@ impl<T: ToOutput> Task<T> {
             name: name.to_owned(),
             source: source.to_owned(),
             passes_subtasks: passes_subtasks.iter().copied().collect(),
+            min_failures: HashMap::new(),
         });
+        self
+    }
+
+    /// How many tests of `subtask` (counted from zero) the partial solution added last has to fail,
+    /// overriding [`with_min_failures`](Self::with_min_failures) there. One is enough where failing
+    /// is certain, as for a solution too slow for the subtask, and saves the time limit on each test
+    /// the hunt would run it on.
+    #[must_use]
+    pub fn with_partial_min_failures(mut self, subtask: usize, n: usize) -> Self {
+        let solution = self.solutions.last_mut();
+        assert!(solution.is_some(), "with_partial_min_failures needs a partial solution added before it");
+        if let Some(solution) = solution {
+            solution.min_failures.insert(subtask, n);
+        }
         self
     }
 
@@ -236,6 +260,34 @@ impl<T: ToOutput> Task<T> {
         self
     }
 
+    /// Record every partial solution that does other than declared, rather than stopping at the
+    /// first: one meant to pass is no longer run on the subtask it failed, and the run ends with
+    /// `DeclarationsMismatch` once every solution has run on the tests, which are not written. The
+    /// report lists the mismatches. `--keep-going` turns it on.
+    #[must_use]
+    pub const fn with_keep_going(mut self, keep_going: bool) -> Self {
+        self.keep_going = keep_going;
+        self
+    }
+
+    /// Keep the outcomes of the solutions' runs in the build folder and reuse them: a run is not
+    /// repeated while the program, the input, the official output and the limits stay the same. The
+    /// checker is assumed not to change; delete `outcomes.cache` there when it does. `--cache` turns
+    /// it on.
+    #[must_use]
+    pub const fn with_outcome_cache(mut self, cache: bool) -> Self {
+        self.outcome_cache = cache;
+        self
+    }
+
+    /// In the final run, a solution that timed out or took over half the time limit on a test runs
+    /// on it `times` more times, and the best of the runs counts (none by default).
+    #[must_use]
+    pub const fn with_timing_retries(mut self, times: usize) -> Self {
+        self.timing_retries = times;
+        self
+    }
+
     /// How many solutions run at once: by default one per CPU core, at most 4, as solutions competing
     /// for the machine get less reliable verdicts. The tests do not depend on it. `--jobs` overrides it.
     #[must_use]
@@ -268,17 +320,35 @@ impl<T: ToOutput> Task<T> {
         }
         self.jobs = options.jobs.or(self.jobs);
         self.fail_fast |= options.fail_fast;
+        self.keep_going |= options.keep_going;
+        self.outcome_cache |= options.cache;
         let seed = options.seed.unwrap_or(self.seed);
-        self.run_with(options.mode, seed)
+        let report = self.report_with(options.mode, seed);
+        if options.json {
+            println!("{}", report.to_json());
+        }
+        report.into_result()
     }
 
     /// Ignores the command line.
     pub fn run_mode(self, mode: Mode) -> Result<()> {
-        let seed = self.seed;
-        self.run_with(mode, seed)
+        self.run_report(mode).into_result()
     }
 
-    fn run_with(self, mode: Mode, seed: SeedChoice) -> Result<()> {
+    /// As [`run_mode`](Self::run_mode), returning what the run found, its error included.
+    #[must_use]
+    pub fn run_report(self, mode: Mode) -> Report {
+        let seed = self.seed;
+        self.report_with(mode, seed)
+    }
+
+    fn report_with(self, mode: Mode, seed: SeedChoice) -> Report {
+        let mut report = Report::default();
+        report.error = self.run_with(mode, seed, &mut report).err();
+        report
+    }
+
+    fn run_with(self, mode: Mode, seed: SeedChoice, report: &mut Report) -> Result<()> {
         LOGGER_INIT.call_once(|| {
             let logger = env_logger::builder().filter(None, self.debug_level).format(logger_format).build();
             LogWrapper::new(self.logger.clone(), logger).try_init().ok();
@@ -291,7 +361,7 @@ impl<T: ToOutput> Task<T> {
         }
 
         let start_time = std::time::Instant::now();
-        self.create_tests(mode, seed.resolve()).inspect_err(log_error)?;
+        self.create_tests(mode, seed.resolve(), report).inspect_err(log_error)?;
         info!("Elapsed time: {}", style(format!("{:.2}s", start_time.elapsed().as_secs_f32())).bold());
         self.logger.println(style("Success!").green().bright().bold().to_string()).ok();
         Ok(())

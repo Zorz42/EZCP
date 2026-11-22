@@ -33,6 +33,9 @@ pub struct CliOptions {
     pub seed: Option<SeedChoice>,
     pub jobs: Option<usize>,
     pub fail_fast: bool,
+    pub keep_going: bool,
+    pub cache: bool,
+    pub json: bool,
     pub help: bool,
 }
 
@@ -56,6 +59,12 @@ Options:
                     CPU cores, but at most 4. The tests do not depend on it.
   --fail-fast       Stop running a partial solution on a subtask it is meant to
                     fail at its first failed test there.
+  --keep-going      Record every partial solution that does other than declared,
+                    rather than stopping at the first, and write no tests if any
+                    does.
+  --cache           Reuse the solutions' earlier outcomes on the same tests, kept
+                    in the build folder.
+  --json            Print what the run found as one JSON object on stdout.
   -h, --help        Print this text.";
 
 const fn invalid(details: String) -> Error {
@@ -105,6 +114,9 @@ impl CliOptions {
                 "--seed" => options.seed = Some(parse_seed(arguments.next().ok_or_else(|| invalid("--seed needs a value".to_owned()))?.as_ref())?),
                 "--jobs" => options.jobs = Some(parse_jobs(arguments.next().ok_or_else(|| invalid("--jobs needs a value".to_owned()))?.as_ref())?),
                 "--fail-fast" => options.fail_fast = true,
+                "--keep-going" => options.keep_going = true,
+                "--cache" => options.cache = true,
+                "--json" => options.json = true,
                 "-h" | "--help" => options.help = true,
                 _ => {
                     if let Some(value) = argument.strip_prefix("--seed=") {

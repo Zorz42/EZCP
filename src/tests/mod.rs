@@ -13,6 +13,7 @@ mod golden_tests;
 mod graph_tests;
 mod mode_tests;
 mod partial_solution_tests;
+mod report_tests;
 mod rng_tests;
 mod seed_mode_tests;
 mod stub_tests;

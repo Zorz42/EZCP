@@ -7,7 +7,6 @@ use crate::stub::{Part, Stub, stable_hash};
 use crate::{Error, Result, Task, ToOutput};
 use log::{debug, warn};
 use std::io::{BufRead, BufReader, Read, Write};
-use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::path::Path;
 
 impl<T: ToOutput> Task<T> {
@@ -50,9 +49,7 @@ impl<T: ToOutput> Task<T> {
         }
 
         // A panicking generator must not take the whole server down.
-        let input = catch_unwind(AssertUnwindSafe(|| self.generate_input(stub.subtask, stub.generator, stub.seed))).map_err(|_panic| Error::InvalidStub {
-            details: format!("generator {} of subtask {} panicked on seed {:#018x}", stub.generator, stub.subtask, stub.seed),
-        })?;
+        let input = self.generate_input(stub.subtask, stub.generator, stub.seed).map_err(|err| Error::InvalidStub { details: err.to_string() })?;
 
         let payload = match stub.part {
             Part::Input => input,

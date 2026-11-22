@@ -224,6 +224,8 @@ match rng.weighted_index(&[3, 2, 2, 1, 1]) {
   pass before generating, which catches a generator that breaks the constraints or the solutions.
 - `with_min_failures(n)` and `with_max_tries(n)`, on the task or a subtask, tune how hard the hunt
   tries (5 and 100).
+- `with_partial_min_failures(subtask, n)`, right after a partial solution, sets its own target there;
+  1 suits a subtask it is far too slow for.
 - Slow partial solutions spend the whole time limit on each test they are meant to fail; `--fail-fast`
   stops them at the first failure of such a subtask in the final run.
 - Several correct answers: `with_checker(|input, official_output, output| ...)`, which must accept the
@@ -240,6 +242,8 @@ match rng.weighted_index(&[3, 2, 2, 1, 1]) {
 | `PartialSolutionPassesExtraSubtask` | No test of a subtask breaks a partial solution meant to fail it. Add a generator aimed at its weakness (count 0 if it should only hunt), raise `with_max_tries`, or fix the subtask list. |
 | `InvalidSubtaskIndex` | A subtask index counted from one. |
 | `GeneratorNotReproducible` | A generator uses randomness other than its `rng`. |
+| `GeneratorPanicked`, `ValidatorRejected` | A generator panicked, or a validator rejected its test: the subtask, generator, seed and message say which. |
+| `DeclarationsMismatch` | With `--keep-going`: partial solutions do other than declared; the report (`--json`) lists each. |
 | `TestAlreadyExists` | Custom file names collide. |
 
 Warnings that do not fail the run but weaken the tests: "only has X of the Y tests that partial

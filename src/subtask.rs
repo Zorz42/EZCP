@@ -1,9 +1,30 @@
+use crate::Error;
+use crate::error::panic_message;
 use crate::rng::Rng;
 use crate::to_output::ToOutput;
 use crate::whitespace::trim_whitespace_owned;
+use std::panic::{AssertUnwindSafe, catch_unwind};
 
 type Generator<T> = Box<dyn Fn(&mut Rng) -> T + Send + Sync>;
 type Validator<T> = Box<dyn Fn(&T) + Send + Sync>;
+
+/// A generator or a validator that panicked, with the panic's message.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Fault {
+    Generator(String),
+    Validator(String),
+}
+
+impl Fault {
+    /// All from zero.
+    pub fn into_error(self, subtask: usize, generator: usize, seed: u64) -> Error {
+        let (subtask_number, gen_id, seed) = (subtask + 1, generator + 1, format!("{seed:#018x}"));
+        match self {
+            Self::Generator(message) => Error::GeneratorPanicked { subtask_number, gen_id, seed, message },
+            Self::Validator(message) => Error::ValidatorRejected { subtask_number, gen_id, seed, message },
+        }
+    }
+}
 
 pub struct Subtask<T: ToOutput> {
     pub(crate) name: String,
@@ -75,18 +96,20 @@ impl<T: ToOutput> Subtask<T> {
         self
     }
 
-    pub(crate) fn generate_test(&self, generator: usize, seed: u64) -> T {
-        let test = self.generators[generator](&mut Rng::from_seed(seed));
+    pub(crate) fn generate_test(&self, generator: usize, seed: u64) -> Result<T, Fault> {
+        let test = catch_unwind(AssertUnwindSafe(|| self.generators[generator](&mut Rng::from_seed(seed)))).map_err(|panic| Fault::Generator(panic_message(&*panic)))?;
         if let Some(validator) = &self.validator {
-            validator(&test);
+            catch_unwind(AssertUnwindSafe(|| validator(&test))).map_err(|panic| Fault::Validator(panic_message(&*panic)))?;
         }
-        test
+        Ok(test)
     }
 
-    /// Shared by generation and serving, so a served test matches its file byte for byte.
-    pub(crate) fn generate_input(&self, generator: usize, seed: u64, trim_whitespace: bool) -> String {
-        let raw = self.generate_test(generator, seed).to_output();
-        if trim_whitespace { trim_whitespace_owned(raw) } else { raw }
+    /// Shared by generation and serving, so a served test matches its file byte for byte. Writing the
+    /// test out counts as the generator's.
+    pub(crate) fn generate_input(&self, generator: usize, seed: u64, trim_whitespace: bool) -> Result<String, Fault> {
+        let test = self.generate_test(generator, seed)?;
+        let raw = catch_unwind(AssertUnwindSafe(|| test.to_output())).map_err(|panic| Fault::Generator(panic_message(&*panic)))?;
+        Ok(if trim_whitespace { trim_whitespace_owned(raw) } else { raw })
     }
 
     pub(crate) fn pick_generator(&self, rng: &mut Rng) -> Option<usize> {

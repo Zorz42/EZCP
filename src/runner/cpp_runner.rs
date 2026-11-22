@@ -30,6 +30,58 @@ fn install(scratch: &Path, destination: &Path) -> Result<()> {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct ProgramHandle(usize);
 
+fn program_hash(gcc: &Gcc, source_code: &str) -> u64 {
+    let mut s = DefaultHasher::new();
+    source_code.hash(&mut s);
+    gcc.path.hash(&mut s);
+    // Stands in for the flags `Gcc::compile` passes.
+    env!("CARGO_PKG_VERSION").hash(&mut s);
+    s.finish()
+}
+
+/// Compiles the source unless its executable is in the build folder already, returning the paths of
+/// both. Processes (such as servers a judge starts) may share the build folder, so each compiles a
+/// private copy and renames the results into place. Compiling the shared source breaks on Windows,
+/// where a rename over a file being read succeeds and the reader loses it.
+fn compile_cached(gcc: &Gcc, build_folder: &Path, hash: u64, source_code: &str) -> Result<(PathBuf, PathBuf)> {
+    let source_file = build_folder.join(format!("p{hash}.cpp"));
+    let executable_file = Gcc::executable_path(&source_file)?;
+    if !executable_file.exists() {
+        trace!("Compiling: {}", executable_file.display());
+        let scratch_source = build_folder.join(scratch_source_name(hash));
+        std::fs::write(&scratch_source, source_code).map_err(Error::io(&scratch_source))?;
+        let scratch_executable = Gcc::executable_path(&scratch_source)?;
+        let compiled = gcc.compile(&scratch_source, &scratch_executable).and_then(|()| install(&scratch_executable, &executable_file));
+        // Only left behind by a failed compile.
+        let _ = std::fs::remove_file(&scratch_executable);
+        install(&scratch_source, &source_file)?;
+        compiled?;
+    }
+    Ok((source_file, executable_file))
+}
+
+/// Compiles C++ as a task does, into a build folder: a task with that build folder then finds the
+/// programs compiled already. It may be used from several threads at once.
+pub struct Compiler {
+    gcc: Gcc,
+    build_folder: PathBuf,
+}
+
+impl Compiler {
+    pub fn new(build_folder: &Path) -> Result<Self> {
+        std::fs::create_dir_all(build_folder).map_err(Error::io(build_folder))?;
+        Ok(Self {
+            gcc: Gcc::new()?,
+            build_folder: canonicalize(build_folder)?,
+        })
+    }
+
+    /// A `CompilerError` holds the compiler's messages.
+    pub fn compile(&self, source_code: &str) -> Result<()> {
+        compile_cached(&self.gcc, &self.build_folder, program_hash(&self.gcc, source_code), source_code).map(drop)
+    }
+}
+
 #[derive(Clone, Copy, Debug)]
 pub struct Job<'input> {
     pub program: ProgramHandle,
@@ -50,8 +102,9 @@ pub struct CppRunner {
     gcc: Gcc,
     build_folder: PathBuf,
     timer: ProgramHandle,
-    /// Executables, indexed by `ProgramHandle`.
+    /// Executables and their hashes, indexed by `ProgramHandle`.
     programs: Vec<PathBuf>,
+    hashes: Vec<u64>,
     hash_to_handle: HashMap<u64, ProgramHandle>,
     /// What `clean_build_folder` keeps.
     necessary_files: HashSet<PathBuf>,
@@ -66,6 +119,7 @@ impl CppRunner {
             build_folder: canonicalize(build_folder)?,
             timer: ProgramHandle(0),
             programs: Vec::new(),
+            hashes: Vec::new(),
             hash_to_handle: HashMap::new(),
             necessary_files: HashSet::new(),
             workers: std::thread::available_parallelism().map_or(1, std::num::NonZeroUsize::get).min(MAX_DEFAULT_WORKERS),
@@ -75,43 +129,29 @@ impl CppRunner {
     }
 
     pub fn add_program(&mut self, source_code: &str) -> Result<ProgramHandle> {
-        let hash = {
-            let mut s = DefaultHasher::new();
-            source_code.hash(&mut s);
-            self.gcc.path.hash(&mut s);
-            // Stands in for the flags `Gcc::compile` passes.
-            env!("CARGO_PKG_VERSION").hash(&mut s);
-            s.finish()
-        };
-
+        let hash = program_hash(&self.gcc, source_code);
         if let Some(&handle) = self.hash_to_handle.get(&hash) {
             return Ok(handle);
         }
 
-        let source_file = self.build_folder.join(format!("p{hash}.cpp"));
-        let executable_file = Gcc::executable_path(&source_file)?;
-        self.necessary_files.insert(source_file.clone());
+        let (source_file, executable_file) = compile_cached(&self.gcc, &self.build_folder, hash, source_code)?;
+        self.necessary_files.insert(source_file);
         self.necessary_files.insert(executable_file.clone());
-
-        // Processes (such as servers a judge starts) may share the build folder, so each compiles a
-        // private copy and renames the results into place. Compiling the shared source breaks on
-        // Windows, where a rename over a file being read succeeds and the reader loses it.
-        if !executable_file.exists() {
-            trace!("Compiling: {}", executable_file.display());
-            let scratch_source = self.build_folder.join(scratch_source_name(hash));
-            std::fs::write(&scratch_source, source_code).map_err(Error::io(&scratch_source))?;
-            let scratch_executable = Gcc::executable_path(&scratch_source)?;
-            let compiled = self.gcc.compile(&scratch_source, &scratch_executable).and_then(|()| install(&scratch_executable, &executable_file));
-            // Only left behind by a failed compile.
-            let _ = std::fs::remove_file(&scratch_executable);
-            install(&scratch_source, &source_file)?;
-            compiled?;
-        }
-
         let handle = ProgramHandle(self.programs.len());
         self.programs.push(executable_file);
+        self.hashes.push(hash);
         self.hash_to_handle.insert(hash, handle);
         Ok(handle)
+    }
+
+    /// Stable across runs while the source, the compiler and EZCP stay the same.
+    pub fn program_hash(&self, program: ProgramHandle) -> u64 {
+        self.hashes[program.0]
+    }
+
+    /// Kept by `clean_build_folder`.
+    pub fn keep(&mut self, file: PathBuf) {
+        self.necessary_files.insert(file);
     }
 
     pub fn set_workers(&mut self, workers: usize) {

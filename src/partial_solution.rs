@@ -1,60 +1,13 @@
 use crate::generate::GeneratedTest;
+use crate::outcome::{Judged, OutcomeCache, Verdict};
 use crate::progress::ScopedProgressBar;
-use crate::runner::cpp_runner::{CppRunner, Job, ProgramHandle};
-use crate::runner::exec_runner::RunResult;
+use crate::report::SubtaskResult;
+use crate::runner::cpp_runner::{CppRunner, ProgramHandle};
 use crate::{Result, Task, ToOutput};
-use console::style;
-use std::collections::{BTreeMap, HashSet};
 use std::fmt::{Display, Write as _};
 use std::sync::atomic::{AtomicUsize, Ordering};
 
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-enum Verdict {
-    Ok,
-    TimedOut,
-    MemoryLimitExceeded,
-    Crashed,
-    WrongAnswer,
-}
-
-impl Display for Verdict {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let text = match self {
-            Self::Ok => return write!(f, "{}", style("OK").green().bright().bold()),
-            Self::TimedOut => "TLE",
-            Self::MemoryLimitExceeded => "MLE",
-            Self::Crashed => "RTE",
-            Self::WrongAnswer => "WA",
-        };
-        write!(f, "{}", style(text).red().bright().bold())
-    }
-}
-
-#[derive(Clone, Copy)]
-struct Outcome {
-    verdict: Verdict,
-    /// Zero unless `Ok`.
-    time_ms: i32,
-    memory_kb: u64,
-}
-
-#[derive(Default)]
-struct SubtaskReport {
-    verdicts: BTreeMap<Verdict, usize>,
-    /// Not run after an earlier failure.
-    skipped: usize,
-    /// The largest over the tests.
-    time_ms: i32,
-    memory_kb: u64,
-}
-
-impl SubtaskReport {
-    fn passed(&self) -> bool {
-        self.skipped == 0 && self.verdicts.keys().eq([&Verdict::Ok])
-    }
-}
-
-impl Display for SubtaskReport {
+impl Display for SubtaskResult {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         for (verdict, count) in &self.verdicts {
             write!(f, "{verdict} ({count}) ")?;
@@ -70,37 +23,23 @@ impl Display for SubtaskReport {
 }
 
 impl<T: ToOutput> Task<T> {
-    fn outcome(&self, result: RunResult, test: &GeneratedTest) -> Outcome {
-        let failed = |verdict| Outcome { verdict, time_ms: 0, memory_kb: 0 };
-        match result {
-            RunResult::Ok { time_ms, memory_kb, output } if (self.checker)(&test.input, &test.output, &output) => Outcome {
-                verdict: Verdict::Ok,
-                time_ms,
-                memory_kb,
-            },
-            RunResult::Ok { .. } => failed(Verdict::WrongAnswer),
-            RunResult::TimedOut => failed(Verdict::TimedOut),
-            RunResult::MemoryLimitExceeded => failed(Verdict::MemoryLimitExceeded),
-            RunResult::Crashed => failed(Verdict::Crashed),
-        }
-    }
-
-    /// Logs how the solution does on every test and returns the subtasks it passed. With fail-fast, the
-    /// subtasks `expected_to_fail` names skip their tests after the first failure.
+    /// Logs how the solution does on every test and returns how it did on each subtask. With
+    /// fail-fast, the subtasks `expected_to_fail` names skip their tests after the first failure.
     pub(crate) fn run_solution_on_tests(
         &self,
         tests: &[Vec<GeneratedTest>],
         runner: &CppRunner,
+        cache: Option<&OutcomeCache>,
         program: ProgramHandle,
         lines_of_code: usize,
         expected_to_fail: &dyn Fn(usize) -> bool,
-    ) -> Result<HashSet<usize>> {
+    ) -> Result<Vec<SubtaskResult>> {
         let runs: Vec<_> = tests
             .iter()
             .enumerate()
             .flat_map(|(subtask_idx, subtask_tests)| subtask_tests.iter().enumerate().map(move |(test_idx, test)| (subtask_idx, test_idx, test)))
             .collect();
-        let jobs: Vec<_> = runs.iter().map(|&(_, _, test)| Job { program, input: &test.input }).collect();
+        let jobs: Vec<_> = runs.iter().map(|&(_, _, test)| Judged { program, input: &test.input, expected: &test.output }).collect();
 
         // Everything up to a subtask's first failed test is run, so the report does not depend on the
         // order the runs finish in.
@@ -110,10 +49,9 @@ impl<T: ToOutput> Task<T> {
 
         let mut outcomes = vec![None; runs.len()];
         let progress_bar = ScopedProgressBar::new(&self.logger, runs.len() as u64);
-        runner.run_jobs(&jobs, self.limits(), &|run| is_past_failure(runs[run].0, runs[run].1), |run, result| {
+        self.judge_runs(runner, cache, &jobs, self.timing_retries, &|run| is_past_failure(runs[run].0, runs[run].1), |run, outcome| {
             progress_bar.inc(1);
-            let (subtask_idx, test_idx, test) = runs[run];
-            let outcome = result.map(|result| self.outcome(result, test));
+            let (subtask_idx, test_idx, _) = runs[run];
             if outcome.is_some_and(|outcome| outcome.verdict != Verdict::Ok) {
                 first_failure[subtask_idx].fetch_min(test_idx, Ordering::Relaxed);
             }
@@ -121,31 +59,32 @@ impl<T: ToOutput> Task<T> {
         })?;
         drop(progress_bar);
 
-        let mut reports: Vec<_> = tests.iter().map(|_| SubtaskReport::default()).collect();
+        let mut results: Vec<_> = tests.iter().map(|_| SubtaskResult::default()).collect();
         for (&(subtask_idx, test_idx, _), outcome) in runs.iter().zip(outcomes) {
-            let report = &mut reports[subtask_idx];
+            let result = &mut results[subtask_idx];
             // It may have run anyway, before the failure was known.
             match outcome.filter(|_| !is_past_failure(subtask_idx, test_idx)) {
                 Some(outcome) => {
-                    *report.verdicts.entry(outcome.verdict).or_insert(0) += 1;
-                    report.time_ms = report.time_ms.max(outcome.time_ms);
-                    report.memory_kb = report.memory_kb.max(outcome.memory_kb);
+                    *result.verdicts.entry(outcome.verdict).or_insert(0) += 1;
+                    result.time_ms = result.time_ms.max(outcome.time_ms);
+                    result.memory_kb = result.memory_kb.max(outcome.memory_kb);
                 }
-                None => report.skipped += 1,
+                None => result.skipped += 1,
             }
         }
-
-        let passed_subtasks: HashSet<usize> = reports.iter().enumerate().filter(|(_, report)| report.passed()).map(|(subtask_idx, _)| subtask_idx).collect();
-        let mut results_text = String::new();
-        for (subtask_idx, report) in reports.iter().enumerate() {
-            write!(results_text, "\n- Subtask {}: {report}", subtask_idx + 1).ok();
+        for (result, first) in results.iter_mut().zip(&first_failure) {
+            result.first_failure = Some(first.load(Ordering::Relaxed)).filter(|&first| first != usize::MAX);
         }
 
-        let got_points: i32 = passed_subtasks.iter().map(|&idx| self.subtasks[idx].points).sum();
+        let got_points: i32 = results.iter().zip(&self.subtasks).filter(|(result, _)| result.passed()).map(|(_, subtask)| subtask.points).sum();
         let total_points: i32 = self.subtasks.iter().map(|subtask| subtask.points).sum();
+        let mut results_text = String::new();
+        for (subtask_idx, result) in results.iter().enumerate() {
+            write!(results_text, "\n- Subtask {}: {result}", subtask_idx + 1).ok();
+        }
         self.log_result(&format!("Points {got_points}/{total_points}"))?;
         self.log_result(&format!("Lines of code: {lines_of_code}"))?;
         self.log_result(&format!("Results: {results_text}"))?;
-        Ok(passed_subtasks)
+        Ok(results)
     }
 }

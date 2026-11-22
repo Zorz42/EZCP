@@ -1,10 +1,12 @@
 use crate::archiver::archive_files;
 use crate::generate::GeneratedTest;
 use crate::mode::Mode;
+use crate::outcome::OutcomeCache;
 use crate::parallel::parallel_map;
 use crate::progress::ScopedProgressBar;
+use crate::report::{Mismatch, PartialReport, Report, SubtaskInfo, SubtaskResult, TestInfo};
 use crate::rng::Rng;
-use crate::runner::cpp_runner::CppRunner;
+use crate::runner::cpp_runner::{CppRunner, ProgramHandle};
 use crate::stub::{Part, Stub, stable_hash};
 use crate::{Error, Result, Task, ToOutput};
 use console::style;
@@ -65,9 +67,22 @@ fn with_subtasks(all_tests: &[Vec<GeneratedTest>]) -> impl Iterator<Item = (usiz
 }
 
 impl<T: ToOutput> Task<T> {
-    pub(crate) fn create_tests(&self, mode: Mode, seed: u64) -> Result<()> {
+    /// Fills in `report` as it goes.
+    pub(crate) fn create_tests(&self, mode: Mode, seed: u64, report: &mut Report) -> Result<()> {
         self.logger.println("").ok();
         self.print_title(&format!("Creating tests for task \"{}\"", self.name));
+
+        report.seed = Some(seed);
+        report.subtasks = self.subtasks.iter().map(|subtask| SubtaskInfo { name: subtask.name.clone(), points: subtask.points }).collect();
+        report.partials = self
+            .solutions
+            .iter()
+            .map(|solution| {
+                let mut declared: Vec<_> = solution.passes_subtasks.iter().copied().collect();
+                declared.sort_unstable();
+                PartialReport { name: solution.name.clone(), declared, results: Vec::new() }
+            })
+            .collect();
 
         if self.subtasks.is_empty() {
             warn!("No subtasks defined.");
@@ -83,6 +98,13 @@ impl<T: ToOutput> Task<T> {
         }
         let official = runner.add_program(&self.solution_source)?;
         let partials = self.solutions.iter().map(|solution| runner.add_program(&solution.source)).collect::<Result<Vec<_>>>()?;
+        let cache = if self.outcome_cache {
+            let path = OutcomeCache::path(&self.build_folder_path);
+            runner.keep(crate::runner::gcc::canonicalize(&self.build_folder_path)?.join(crate::outcome::CACHE_FILE));
+            Some(OutcomeCache::open(&path)?)
+        } else {
+            None
+        };
         // Only once every program is added: anything else is stale.
         runner.clean_build_folder()?;
 
@@ -100,30 +122,31 @@ impl<T: ToOutput> Task<T> {
             self.logger
                 .println(format!("{progress} {}", style(format!("Subtask {}: {}", subtask_idx + 1, subtask.name)).cyan().bold()))
                 .ok();
-            all_tests.push(self.create_tests_for_subtask(subtask_idx, &mut rng, &runner, official, &partials)?);
+            all_tests.push(self.create_tests_for_subtask(subtask_idx, &mut rng, &runner, cache.as_ref(), official, &partials, &mut report.mismatches)?);
         }
 
         self.check_tests_are_reproducible(self.reproducibility_checks(mode), &all_tests, runner.workers())?;
         let names = self.assign_file_names(&all_tests)?;
+        report.tests = names
+            .iter()
+            .zip(with_subtasks(&all_tests))
+            .map(|((input_file, output_file), (subtask, test))| TestInfo {
+                subtask,
+                generator: test.generator,
+                seed: test.seed,
+                input_file: input_file.clone(),
+                output_file: output_file.clone(),
+            })
+            .collect();
 
         self.log_result("Running official solution:")?;
         let lines_of_code = |source: &str| source.split('\n').count();
-        let passed_subtasks = self.run_solution_on_tests(&all_tests, &runner, official, lines_of_code(&self.solution_source), &|_subtask_idx| false)?;
-        self.warn_about_unreproduced_passes("The official solution", |_subtask_idx| true, &passed_subtasks, &all_tests);
+        report.official = self.run_solution_on_tests(&all_tests, &runner, cache.as_ref(), official, lines_of_code(&self.solution_source), &|_subtask_idx| false)?;
+        self.warn_about_unreproduced_passes("The official solution", |_subtask_idx| true, &report.official, &all_tests);
 
-        for (i, (solution, &program)) in self.solutions.iter().zip(&partials).enumerate() {
-            self.log_result(&format!("Running partial solution {}: {}", i + 1, solution.name))?;
-            let passed_subtasks = self.run_solution_on_tests(&all_tests, &runner, program, lines_of_code(&solution.source), &|subtask_idx| solution.should_fail(subtask_idx))?;
-            // Generation only catches this when it runs out of tries.
-            if let Some(subtask_idx) = (0..self.subtasks.len()).find(|idx| passed_subtasks.contains(idx) && solution.should_fail(*idx)) {
-                return Err(self.passes_extra_subtask(i, subtask_idx));
-            }
-            self.warn_about_unreproduced_passes(
-                &format!("Partial solution {} ({})", i + 1, solution.name),
-                |idx| !solution.should_fail(idx),
-                &passed_subtasks,
-                &all_tests,
-            );
+        self.run_partial_solutions(&all_tests, &runner, cache.as_ref(), &partials, report)?;
+        if !report.mismatches.is_empty() {
+            return Err(Error::DeclarationsMismatch { count: report.mismatches.len() });
         }
 
         // Only now, so a failed run leaves no tests.
@@ -145,6 +168,34 @@ impl<T: ToOutput> Task<T> {
         Ok(())
     }
 
+    /// Runs each partial solution on the finished tests. Generation only finds one passing a subtask
+    /// it should fail when it runs out of tries, so this records the rest.
+    fn run_partial_solutions(&self, all_tests: &[Vec<GeneratedTest>], runner: &CppRunner, cache: Option<&OutcomeCache>, partials: &[ProgramHandle], report: &mut Report) -> Result<()> {
+        let lines_of_code = |source: &str| source.split('\n').count();
+        for (i, (solution, &program)) in self.solutions.iter().zip(partials).enumerate() {
+            self.log_result(&format!("Running partial solution {}: {}", i + 1, solution.name))?;
+            let results = self.run_solution_on_tests(all_tests, runner, cache, program, lines_of_code(&solution.source), &|subtask_idx| solution.should_fail(subtask_idx))?;
+            for subtask_idx in (0..self.subtasks.len()).filter(|&idx| results[idx].passed() && solution.should_fail(idx)) {
+                let recorded = |mismatch: &Mismatch| matches!(*mismatch, Mismatch::Passes { solution, subtask } if solution == i && subtask == subtask_idx);
+                if !report.mismatches.iter().any(recorded) {
+                    report.mismatches.push(Mismatch::Passes { solution: i, subtask: subtask_idx });
+                }
+                if !self.keep_going {
+                    return Err(self.passes_extra_subtask(i, subtask_idx));
+                }
+            }
+            let failed_already = |idx: usize| report.mismatches.iter().any(|mismatch| matches!(*mismatch, Mismatch::Fails { solution, subtask, .. } if solution == i && subtask == idx));
+            self.warn_about_unreproduced_passes(
+                &format!("Partial solution {} ({})", i + 1, solution.name),
+                |idx| !solution.should_fail(idx) && !failed_already(idx),
+                &results,
+                all_tests,
+            );
+            report.partials[i].results = results;
+        }
+        Ok(())
+    }
+
     /// Nothing stops a generator from using randomness other than its `Rng`; this catches one before
     /// its seeds are written down.
     fn check_tests_are_reproducible(&self, times: usize, all_tests: &[Vec<GeneratedTest>], workers: usize) -> Result<()> {
@@ -158,7 +209,8 @@ impl<T: ToOutput> Task<T> {
         let (subtasks, trim_whitespace) = (&self.subtasks, self.trim_whitespace);
         let mismatches = parallel_map(&tests, workers, |&(subtask_idx, test)| {
             (1..=times).find_map(|attempt| {
-                let rebuilt = subtasks[subtask_idx].generate_input(test.generator, test.seed, trim_whitespace);
+                // A generator that panics on a seed it built a test from is not reproducible either.
+                let rebuilt = subtasks[subtask_idx].generate_input(test.generator, test.seed, trim_whitespace).unwrap_or_else(|fault| format!("{fault:?}"));
                 progress_bar.inc(1);
                 (rebuilt != test.input).then_some((attempt, rebuilt))
             })
@@ -241,9 +293,9 @@ impl<T: ToOutput> Task<T> {
 
     /// Every test already passed these solutions during generation, so this means flaky verdicts,
     /// usually from a solution right at the time limit.
-    fn warn_about_unreproduced_passes(&self, solution: &str, meant_to_pass: impl Fn(usize) -> bool, passed_subtasks: &HashSet<usize>, all_tests: &[Vec<GeneratedTest>]) {
+    fn warn_about_unreproduced_passes(&self, solution: &str, meant_to_pass: impl Fn(usize) -> bool, results: &[SubtaskResult], all_tests: &[Vec<GeneratedTest>]) {
         for (subtask_idx, subtask) in self.subtasks.iter().enumerate() {
-            if meant_to_pass(subtask_idx) && !passed_subtasks.contains(&subtask_idx) && !all_tests[subtask_idx].is_empty() {
+            if meant_to_pass(subtask_idx) && !results[subtask_idx].passed() && !all_tests[subtask_idx].is_empty() {
                 warn!("{solution} did not pass subtask {} ({}) when it was run on the finished tests.", subtask_idx + 1, subtask.name);
             }
         }

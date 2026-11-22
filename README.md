@@ -143,8 +143,28 @@ list each solution's slowest time and largest memory on every subtask.
 | `--seed <value>` | Master seed: a number, `0x`-prefixed hex, or `random`. |
 | `--jobs <count>` | Solutions run at once: one per CPU core, at most 4. The tests do not depend on it. |
 | `--fail-fast` | In the final run, stop a partial solution on a subtask it should fail at its first failure there, instead of spending the time limit on every test. |
+| `--keep-going` | Record every partial solution that does other than declared instead of stopping at the first; no tests are written if one does. |
+| `--cache` | Keep the solutions' outcomes in the build folder and reuse them while the program, input, official output and limits stay the same. |
+| `--json` | Print what the run found as one JSON object on stdout. |
 
-`with_seed`, `with_jobs` and `with_fail_fast` set the same in code.
+`with_seed`, `with_jobs`, `with_fail_fast`, `with_keep_going` and `with_outcome_cache` set the same in
+code.
+
+## For programs
+
+`Task::run_report(mode)` runs like `run_mode` and returns a `Report`: each solution's verdicts, time
+and memory on every subtask, the mismatches between what partial solutions are declared to pass and
+what they do (with the failing test cut to 1 kB), the tests with their generators and seeds, and the
+error, if any, with its kind. `to_json` gives what `--json` prints; in it everything counts from zero.
+
+- `with_partial_min_failures(subtask, n)` after a partial solution sets how many tests of that subtask
+  it has to fail. One is enough where failing is certain, and spares the hunt's time limits.
+- `with_timing_retries(n)` runs a solution again where it timed out or took over half the limit in the
+  final run, and keeps the best.
+- `Compiler::new(build_folder).compile(source)` compiles as a task does, into a build folder whose
+  programs a task then reuses; a `CompilerError` has the compiler's messages.
+- A generator that panics ends the run with `GeneratorPanicked`, a validator with `ValidatorRejected`,
+  each with the subtask, generator, seed and message.
 
 With `--seeds`, everything is generated and verified as usual, and the file names and archive are the
 same; only the data is left out, so `examples/example2` takes 12 kB instead of 22 MB. Each kept test is

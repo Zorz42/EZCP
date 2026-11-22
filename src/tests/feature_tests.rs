@@ -213,15 +213,33 @@ fn zero_jobs_are_rejected() {
 }
 
 #[test]
-#[should_panic(expected = "n is too large")]
-fn a_panicking_generator_ends_the_run_with_its_own_message() {
+fn a_rejecting_validator_ends_the_run_with_its_own_message() {
     let (_dir, task) = test_task();
-    let _ = task
+    let result = task
         .with_solution_source(DOUBLE)
         .with_subtask(Subtask::new(100, "all").with_test(8, number(1..=1000)).with_validator(|input: &String| {
             assert!(input.trim().parse::<i64>().unwrap() <= 0, "n is too large");
         }))
         .run_mode(Mode::Files);
+    let Err(Error::ValidatorRejected { subtask_number: 1, gen_id: 1, message, .. }) = &result else {
+        unreachable!("got {result:?}");
+    };
+    assert_eq!(message, "n is too large");
+}
+
+#[test]
+#[allow(clippy::panic)]
+fn a_panicking_generator_ends_the_run_naming_it() {
+    let (_dir, task) = test_task();
+    let result = task
+        .with_solution_source(DOUBLE)
+        .with_subtask(Subtask::new(50, "fine").with_test(2, number(1..=1000)))
+        .with_subtask(Subtask::new(50, "broken").with_test(1, number(1..=1000)).with_test(1, |_rng| -> String { panic!("out of ideas") }))
+        .run_mode(Mode::Files);
+    let Err(Error::GeneratorPanicked { subtask_number: 2, gen_id: 2, message, .. }) = &result else {
+        unreachable!("got {result:?}");
+    };
+    assert_eq!(message, "out of ideas");
 }
 
 #[test]

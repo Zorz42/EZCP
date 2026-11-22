@@ -84,6 +84,26 @@ pub enum Error {
         details: String,
     },
 
+    #[error("Generator {gen_id} of subtask {subtask_number} panicked on seed {seed}: {message}")]
+    GeneratorPanicked {
+        subtask_number: usize,
+        gen_id: usize,
+        seed: String,
+        message: String,
+    },
+
+    #[error("The validator of subtask {subtask_number} rejected the test of generator {gen_id} on seed {seed}: {message}")]
+    ValidatorRejected {
+        subtask_number: usize,
+        gen_id: usize,
+        seed: String,
+        message: String,
+    },
+
+    /// Only with keep-going, which records every mismatch instead of stopping at the first.
+    #[error("{count} declarations of partial solutions do not match what they do; the report lists them")]
+    DeclarationsMismatch { count: usize },
+
     /// `subtask_number` is the 0-based index the solution named.
     #[error("Partial solution {partial_number} ({partial_name}) is declared to pass subtask index {subtask_number}, but the task only has {num_subtasks} subtasks (subtask indices are 0-based).")]
     InvalidSubtaskIndex {
@@ -95,6 +115,34 @@ pub enum Error {
 }
 
 impl Error {
+    /// The variant's name, for machine-readable reports.
+    #[must_use]
+    pub const fn kind(&self) -> &'static str {
+        match self {
+            Self::IOError { .. } => "IOError",
+            Self::ZipError { .. } => "ZipError",
+            Self::TestAlreadyExists { .. } => "TestAlreadyExists",
+            Self::CompilerNotFound => "CompilerNotFound",
+            Self::CompilerError { .. } => "CompilerError",
+            Self::TimerFailed { .. } => "TimerFailed",
+            Self::SolutionTimedOut { .. } => "SolutionTimedOut",
+            Self::SolutionOutOfMemory { .. } => "SolutionOutOfMemory",
+            Self::SolutionCrash { .. } => "SolutionCrash",
+            Self::SolutionFailed { .. } => "SolutionFailed",
+            Self::PartialSolutionPassesExtraSubtask { .. } => "PartialSolutionPassesExtraSubtask",
+            Self::PartialSolutionFailsSubtask { .. } => "PartialSolutionFailsSubtask",
+            Self::MissingSolution => "MissingSolution",
+            Self::InvalidArguments { .. } => "InvalidArguments",
+            Self::InvalidStub { .. } => "InvalidStub",
+            Self::StubMismatch { .. } => "StubMismatch",
+            Self::GeneratorNotReproducible { .. } => "GeneratorNotReproducible",
+            Self::GeneratorPanicked { .. } => "GeneratorPanicked",
+            Self::ValidatorRejected { .. } => "ValidatorRejected",
+            Self::DeclarationsMismatch { .. } => "DeclarationsMismatch",
+            Self::InvalidSubtaskIndex { .. } => "InvalidSubtaskIndex",
+        }
+    }
+
     pub(crate) fn io(file: &std::path::Path) -> impl FnOnce(std::io::Error) -> Self + '_ {
         |err| Self::IOError {
             err,
@@ -104,3 +152,12 @@ impl Error {
 }
 
 pub type Result<T, E = Error> = std::result::Result<T, E>;
+
+/// A panic's message, if it has one.
+pub fn panic_message(payload: &(dyn std::any::Any + Send)) -> String {
+    payload
+        .downcast_ref::<String>()
+        .cloned()
+        .or_else(|| payload.downcast_ref::<&str>().map(|message| (*message).to_owned()))
+        .unwrap_or_else(|| "a panic without a message".to_owned())
+}

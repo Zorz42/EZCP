@@ -9,6 +9,13 @@ fn no_arguments_means_files_mode() {
 }
 
 #[test]
+fn report_options_are_recognised() {
+    let options = CliOptions::parse(["--keep-going", "--cache", "--json"]).unwrap();
+    assert!(options.keep_going && options.cache && options.json);
+    assert!(!CliOptions::parse(["--fail-fast"]).unwrap().keep_going);
+}
+
+#[test]
 fn modes_are_recognised() {
     assert_eq!(CliOptions::parse(["--seeds"]).unwrap().mode, Mode::Seeds);
     assert_eq!(CliOptions::parse(["--serve"]).unwrap().mode, Mode::Serve);

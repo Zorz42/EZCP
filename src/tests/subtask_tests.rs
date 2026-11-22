@@ -1,5 +1,6 @@
 use crate::Subtask;
 use crate::rng::Rng;
+use crate::subtask::Fault;
 use std::collections::HashSet;
 
 fn three_generators() -> Subtask<String> {
@@ -29,7 +30,7 @@ fn test_subtask_with_test_adds_generators() {
 fn test_pick_generator_uses_every_generator() {
     let st = three_generators();
     let mut rng = Rng::from_seed(2);
-    let seen: HashSet<_> = (0..200).map(|_| st.generate_test(st.pick_generator(&mut rng).expect("should return Some"), 0)).collect();
+    let seen: HashSet<_> = (0..200).map(|_| st.generate_test(st.pick_generator(&mut rng).expect("should return Some"), 0).unwrap()).collect();
     assert_eq!(seen.len(), 3, "expected all generators to be used");
 }
 
@@ -56,19 +57,25 @@ fn a_seed_decides_the_test() {
 }
 
 #[test]
-#[should_panic(expected = "too large")]
 fn a_validator_rejects_a_test_outside_the_constraints() {
     let st = Subtask::new(0, "t").with_test(1, |_rng| "1000000\n".to_owned()).with_validator(|test: &String| {
         assert!(test.trim().parse::<i64>().unwrap_or(0) <= 10, "too large");
     });
-    let _ = st.generate_test(0, 0);
+    assert_eq!(st.generate_test(0, 0), Err(Fault::Validator("too large".to_owned())));
+}
+
+#[test]
+#[allow(clippy::panic)]
+fn a_panicking_generator_is_a_fault_of_its_own() {
+    let st = Subtask::new(0, "t").with_test(1, |_rng| -> String { panic!("no test today") });
+    assert_eq!(st.generate_test(0, 0), Err(Fault::Generator("no test today".to_owned())));
 }
 
 #[test]
 fn a_validator_may_capture_its_bound() {
     let bound = 10_i64;
     let st = Subtask::new(0, "t").with_test(1, |_rng| 7_i64).with_validator(move |&test| assert!(test <= bound));
-    assert_eq!(st.generate_test(0, 0), 7);
+    assert_eq!(st.generate_test(0, 0), Ok(7));
 }
 
 #[test]
@@ -76,12 +83,12 @@ fn a_fixed_test_is_its_own_generator() {
     let st = Subtask::new(0, "t").with_fixed_test("1 2\n".to_owned()).with_fixed_test("3 4\n".to_owned());
     assert_eq!(st.num_generators(), 2);
     assert_eq!(st.initial_counts, [1, 1]);
-    assert_eq!((st.generate_test(0, 5), st.generate_test(1, 6)), ("1 2\n".to_owned(), "3 4\n".to_owned()));
+    assert_eq!((st.generate_test(0, 5), st.generate_test(1, 6)), (Ok("1 2\n".to_owned()), Ok("3 4\n".to_owned())));
 }
 
 #[test]
 fn input_generation_normalises_whitespace_only_when_asked() {
     let st = Subtask::new(0, "t").with_fixed_test(" 1  2 ".to_owned());
-    assert_eq!(st.generate_input(0, 0, true), "1 2\n");
-    assert_eq!(st.generate_input(0, 0, false), " 1  2 ");
+    assert_eq!(st.generate_input(0, 0, true).unwrap(), "1 2\n");
+    assert_eq!(st.generate_input(0, 0, false).unwrap(), " 1  2 ");
 }
