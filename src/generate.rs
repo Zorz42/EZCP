@@ -271,7 +271,7 @@ impl<'task, T: ToOutput> Generation<'task, T> {
         let Some(&(_, program)) = self.good.iter().find(|&&(i, _)| i == solution) else { return Ok(()) };
         self.good.retain(|&(i, _)| i != solution);
         // Outputs are not kept, so it is run again for its own.
-        let output = match self.runner.run(program, input, self.task.limits())? {
+        let output = match self.runner.spawn(program, input, self.task.limits())?.wait()? {
             RunResult::Ok { output, .. } => Some(output),
             _ => None,
         };

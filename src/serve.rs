@@ -90,7 +90,7 @@ impl<T: ToOutput> Task<T> {
             runner.set_result_cache(self.outcome_cache);
             official_solution.insert(runner)
         };
-        let result = runner.run(&self.solution_source, input, self.limits())?;
+        let result = runner.spawn(&self.solution_source, input, self.limits())?.wait()?;
         Ok(self.normalise_output(official_output(result, "on-demand generation", stub.generator + 1)?))
     }
 }
