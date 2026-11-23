@@ -56,7 +56,7 @@ dependencies = [
 [[package]]
 name = "cpprunner"
 version = "0.1.0"
-source = "git+https://github.com/Zorz42/CppRunner#4eec11eb8051c28e0a8aed46ff48720882c8ae5e"
+source = "git+https://github.com/Zorz42/CppRunner#8c6622a7cb1157a4e975af3e460566f573c9854f"
 dependencies = [
  "dunce",
  "libc",

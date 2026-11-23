@@ -57,19 +57,19 @@ pub struct Judged<'test> {
     pub expected: &'test str,
 }
 
-impl From<cpprunner::Verdict> for Outcome {
-    fn from(verdict: cpprunner::Verdict) -> Self {
+impl From<RunResult<bool>> for Outcome {
+    fn from(result: RunResult<bool>) -> Self {
         let failed = |verdict| Self { verdict, time_ms: 0, memory_kb: 0 };
-        match verdict {
-            cpprunner::Verdict::Accepted { time_ms, memory_kb } => Self {
+        match result {
+            RunResult::Ok { time_ms, memory_kb, output: true } => Self {
                 verdict: Verdict::Ok,
                 time_ms: i32::try_from(time_ms).unwrap_or(i32::MAX),
                 memory_kb,
             },
-            cpprunner::Verdict::WrongAnswer => failed(Verdict::WrongAnswer),
-            cpprunner::Verdict::TimedOut => failed(Verdict::TimedOut),
-            cpprunner::Verdict::MemoryLimitExceeded => failed(Verdict::MemoryLimitExceeded),
-            cpprunner::Verdict::Crashed(_) => failed(Verdict::Crashed),
+            RunResult::Ok { output: false, .. } => failed(Verdict::WrongAnswer),
+            RunResult::TimedOut => failed(Verdict::TimedOut),
+            RunResult::MemoryLimitExceeded => failed(Verdict::MemoryLimitExceeded),
+            RunResult::ExitCode(_) | RunResult::Signal(_) | RunResult::OutputLimitExceeded => failed(Verdict::Crashed),
         }
     }
 }
@@ -99,7 +99,7 @@ impl<T: ToOutput> Task<T> {
             .iter()
             .enumerate()
             .map(|(idx, job)| (!skip(idx)).then(|| runner.spawn_checked(job.program, job.input, job.expected, &self.checker, limits)).transpose())
-            .collect::<cpprunner::Result<Vec<Option<RunHandle<cpprunner::Verdict>>>>>()?;
+            .collect::<cpprunner::Result<Vec<Option<RunHandle<RunResult<bool>>>>>>()?;
         let mut near_the_limit = Vec::new();
         for idx in 0..jobs.len() {
             let Some(handle) = handles[idx].take() else {
@@ -153,6 +153,6 @@ pub fn official_output(result: RunResult, test_path: &str, gen_id: usize) -> Res
         RunResult::Ok { output, .. } => Ok(output),
         RunResult::TimedOut => Err(Error::SolutionTimedOut { test_path, gen_id }),
         RunResult::MemoryLimitExceeded => Err(Error::SolutionOutOfMemory { test_path, gen_id }),
-        RunResult::Crashed(_) => Err(Error::SolutionCrash { test_path, gen_id }),
+        RunResult::ExitCode(_) | RunResult::Signal(_) | RunResult::OutputLimitExceeded => Err(Error::SolutionCrash { test_path, gen_id }),
     }
 }
