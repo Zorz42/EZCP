@@ -88,6 +88,8 @@ fn the_outcome_cache_spares_runs_it_has_seen() {
             .with_subtask(Subtask::new(100, "all").with_test(5, number(1..=1_000_000_000)))
             .with_partial_solution("counting", &counting, &[0])
             .with_outcome_cache(true)
+            // Appends from runs at once can overwrite each other on Windows.
+            .with_jobs(1)
     };
     let runs = || std::fs::read_to_string(&log).unwrap().lines().count();
 
@@ -173,6 +175,8 @@ fn runs_near_the_time_limit_are_measured_again() {
         .with_subtask(Subtask::new(100, "all").with_test(2, number(1..=1_000_000_000)))
         .with_partial_solution("slow", &slow, &[0])
         .with_timing_retries(2)
+        // Appends from runs at once can overwrite each other on Windows.
+        .with_jobs(1)
         .run_mode(Mode::Files)
         .unwrap();
     // Once each while generating, then three times each for the report.
