@@ -2,8 +2,8 @@ use crate::generate::GeneratedTest;
 use crate::outcome::{Judged, OutcomeCache, Verdict};
 use crate::progress::ScopedProgressBar;
 use crate::report::SubtaskResult;
-use crate::runner::cpp_runner::{CppRunner, ProgramHandle};
 use crate::{Result, Task, ToOutput};
+use cpprunner::Runner;
 use std::fmt::{Display, Write as _};
 use std::sync::atomic::{AtomicUsize, Ordering};
 
@@ -28,9 +28,9 @@ impl<T: ToOutput> Task<T> {
     pub(crate) fn run_solution_on_tests(
         &self,
         tests: &[Vec<GeneratedTest>],
-        runner: &CppRunner,
+        runner: &Runner,
         cache: Option<&OutcomeCache>,
-        program: ProgramHandle,
+        program: &str,
         lines_of_code: usize,
         expected_to_fail: &dyn Fn(usize) -> bool,
     ) -> Result<Vec<SubtaskResult>> {

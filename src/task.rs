@@ -1,11 +1,11 @@
 use crate::logger_format::logger_format;
 use crate::mode::{CliOptions, Mode, SeedChoice, USAGE};
 use crate::report::Report;
-use crate::runner::exec_runner::Limits;
 use crate::subtask::Subtask;
 use crate::to_output::ToOutput;
 use crate::{Error, Result};
 use console::style;
+use cpprunner::Limits;
 use indicatif::MultiProgress;
 use indicatif_log_bridge::LogWrapper;
 use log::{LevelFilter, error, info};
@@ -304,10 +304,8 @@ impl<T: ToOutput> Task<T> {
     }
 
     pub(crate) fn limits(&self) -> Limits {
-        Limits {
-            time_ms: self.time_limit_ms,
-            memory_kb: self.memory_limit_mb.map(|mb| mb as u64 * 1024),
-        }
+        let time_ms = u64::try_from(self.time_limit_ms).ok().filter(|&time_ms| time_ms > 0).unwrap_or(cpprunner::DEFAULT_TIME_MS);
+        Limits::new().with_time_ms(time_ms).with_memory_kb(self.memory_limit_mb.map(|mb| mb as u64 * 1024))
     }
 
     /// Runs in the mode the command line gives (`--help` lists it).

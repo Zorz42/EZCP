@@ -3,11 +3,10 @@
 //! A cached outcome is keyed by the program, the input, the output the checker compares against and
 //! the limits, so it holds as long as the checker does not change.
 
-use crate::runner::cpp_runner::{CppRunner, Job, ProgramHandle};
-use crate::runner::exec_runner::RunResult;
 use crate::stub::stable_hash;
 use crate::{Error, Result, Task, ToOutput};
 use console::style;
+use cpprunner::{RunHandle, RunResult, Runner};
 use std::collections::HashMap;
 use std::fmt::Display;
 use std::fs::{File, OpenOptions};
@@ -70,7 +69,7 @@ pub struct Outcome {
 /// A program's run on an input, judged against `expected`.
 #[derive(Clone, Copy)]
 pub struct Judged<'test> {
-    pub program: ProgramHandle,
+    pub program: &'test str,
     pub input: &'test str,
     pub expected: &'test str,
 }
@@ -151,13 +150,13 @@ impl<T: ToOutput> Task<T> {
         match result {
             RunResult::Ok { time_ms, memory_kb, output } if (self.checker)(input, expected, &output) => Outcome {
                 verdict: Verdict::Ok,
-                time_ms,
+                time_ms: time_ms.min(i32::MAX as u64) as i32,
                 memory_kb,
             },
             RunResult::Ok { .. } => failed(Verdict::WrongAnswer),
             RunResult::TimedOut => failed(Verdict::TimedOut),
             RunResult::MemoryLimitExceeded => failed(Verdict::MemoryLimitExceeded),
-            RunResult::Crashed => failed(Verdict::Crashed),
+            RunResult::Crashed(_) => failed(Verdict::Crashed),
         }
     }
 
@@ -167,21 +166,21 @@ impl<T: ToOutput> Task<T> {
     }
 
     /// Runs and judges the jobs the cache does not know. `skip` is asked right before a job would
-    /// start, `on_outcome` told each outcome (`None` if skipped) as it is known, cached ones first. A
-    /// fresh run near the time limit is repeated `retries` times and the best of them kept.
+    /// start, `on_outcome` told each outcome (`None` if skipped) in the order of the jobs, cached ones
+    /// first. A fresh run near the time limit is repeated `retries` times and the best of them kept.
     pub(crate) fn judge_runs(
         &self,
-        runner: &CppRunner,
+        runner: &Runner,
         cache: Option<&OutcomeCache>,
         jobs: &[Judged],
         retries: usize,
-        skip: &(dyn Fn(usize) -> bool + Sync),
+        skip: &dyn Fn(usize) -> bool,
         mut on_outcome: impl FnMut(usize, Option<Outcome>),
     ) -> Result<()> {
         let limits = self.limits();
         let key = |job: &Judged| {
             let program = runner.program_hash(job.program);
-            (program, stable_hash(job.input), stable_hash(job.expected), limits.time_ms, limits.memory_kb.unwrap_or(0))
+            (program, stable_hash(job.input), stable_hash(job.expected), self.time_limit_ms, limits.memory_kb.unwrap_or(0))
         };
         let mut misses = Vec::new();
         for (idx, job) in jobs.iter().enumerate() {
@@ -191,49 +190,74 @@ impl<T: ToOutput> Task<T> {
             }
         }
 
-        let runs: Vec<_> = misses
+        let mut handles = misses
             .iter()
-            .map(|&idx| Job {
-                program: jobs[idx].program,
-                input: jobs[idx].input,
-            })
-            .collect();
-        let mut outcomes = vec![None; misses.len()];
-        let mut first_error = None;
-        runner.run_jobs(&runs, limits, &|run| skip(misses[run]), |run, result| {
-            let job = &jobs[misses[run]];
-            let outcome = result.map(|result| self.outcome(result, job.input, job.expected));
+            .map(|&idx| (!skip(idx)).then(|| runner.spawn(jobs[idx].program, jobs[idx].input, limits)).transpose())
+            .collect::<cpprunner::Result<Vec<Option<RunHandle>>>>()?;
+        let mut near_the_limit = vec![None; misses.len()];
+        for run in 0..misses.len() {
+            let (idx, job) = (misses[run], &jobs[misses[run]]);
+            let result = match handles[run].take() {
+                Some(handle) if skip(idx) => {
+                    handle.cancel();
+                    handle.wait()
+                }
+                Some(handle) => handle.wait(),
+                None => Err(cpprunner::Error::Cancelled),
+            };
+            let outcome = match result {
+                Ok(result) => Some(self.outcome(result, job.input, job.expected)),
+                Err(cpprunner::Error::Cancelled) => None,
+                Err(err) => return Err(err.into()),
+            };
             match outcome {
                 // Told once it has been measured again.
-                Some(outcome) if retries > 0 && self.near_the_limit(outcome) => outcomes[run] = Some(outcome),
+                Some(outcome) if retries > 0 && self.near_the_limit(outcome) => near_the_limit[run] = Some(outcome),
                 _ => {
-                    if let (Some(cache), Some(outcome)) = (cache, outcome)
-                        && let Err(err) = cache.insert(key(job), outcome)
-                    {
-                        first_error.get_or_insert(err);
+                    if let (Some(cache), Some(outcome)) = (cache, outcome) {
+                        cache.insert(key(job), outcome)?;
                     }
-                    on_outcome(misses[run], outcome);
+                    on_outcome(idx, outcome);
                 }
             }
-        })?;
-        first_error.map_or(Ok(()), Err)?;
-
-        let again: Vec<_> = outcomes.iter().enumerate().filter_map(|(run, outcome)| Some((run, (*outcome)?))).collect();
-        let mut best: Vec<_> = again.iter().map(|&(_, outcome)| outcome).collect();
-        let repeated: Vec<_> = again.iter().map(|&(run, _)| runs[run]).collect();
-        for _ in 0..if repeated.is_empty() { 0 } else { retries } {
-            for ((best, &(run, _)), result) in best.iter_mut().zip(&again).zip(runner.run_all(&repeated, limits)?) {
-                let job = &jobs[misses[run]];
-                *best = better(*best, self.outcome(result, job.input, job.expected));
+            for (later, handle) in handles.iter().enumerate().skip(run + 1) {
+                if let Some(handle) = handle
+                    && skip(misses[later])
+                {
+                    handle.cancel();
+                }
             }
         }
-        for (&(run, _), outcome) in again.iter().zip(best) {
-            let job = &jobs[misses[run]];
-            if let Some(cache) = cache {
-                cache.insert(key(job), outcome)?;
+
+        let again: Vec<_> = near_the_limit.iter().enumerate().filter_map(|(run, outcome)| Some((misses[run], (*outcome)?))).collect();
+        let mut best: Vec<_> = again.iter().map(|&(_, outcome)| outcome).collect();
+        for _ in 0..if again.is_empty() { 0 } else { retries } {
+            let handles = again
+                .iter()
+                .map(|&(idx, _)| runner.spawn_fresh(jobs[idx].program, jobs[idx].input, limits))
+                .collect::<cpprunner::Result<Vec<_>>>()?;
+            for ((best, &(idx, _)), handle) in best.iter_mut().zip(&again).zip(handles) {
+                let job = &jobs[idx];
+                *best = better(*best, self.outcome(handle.wait()?, job.input, job.expected));
             }
-            on_outcome(misses[run], Some(outcome));
+        }
+        for (&(idx, _), outcome) in again.iter().zip(best) {
+            if let Some(cache) = cache {
+                cache.insert(key(&jobs[idx]), outcome)?;
+            }
+            on_outcome(idx, Some(outcome));
         }
         Ok(())
+    }
+}
+
+/// The output, or the error for the official solution failing.
+pub fn official_output(result: RunResult, test_path: &str, gen_id: usize) -> Result<String> {
+    let test_path = test_path.to_owned();
+    match result {
+        RunResult::Ok { output, .. } => Ok(output),
+        RunResult::TimedOut => Err(Error::SolutionTimedOut { test_path, gen_id }),
+        RunResult::MemoryLimitExceeded => Err(Error::SolutionOutOfMemory { test_path, gen_id }),
+        RunResult::Crashed(_) => Err(Error::SolutionCrash { test_path, gen_id }),
     }
 }

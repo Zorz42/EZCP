@@ -25,32 +25,21 @@ members = ["ezcp_macros"]
 workspace = true
 
 [dependencies]
+cpprunner = { git = "https://github.com/Zorz42/CppRunner" }
 ezcp_macros = { version = "0.2.0", path = "ezcp_macros" }
 serde = { version = "1.0", default-features = false, features = ["std", "derive"] }
 serde_json = { version = "1.0", default-features = false, features = ["std"] }
 # Not "deflate", which pulls in zopfli for compression levels never used here.
 zip = { version = "8.4", default-features = false, features = ["deflate-flate2-zlib-rs"] }
 thiserror = { version = "2.0", default-features = false }
-which = { version = "8.0", default-features = false, features = ["real-sys"] }
 console = { version = "0.16", default-features = false, features = ["unicode-width", "ansi-parsing", "std"] }
 indicatif = { version = "0.18", default-features = false }
 indicatif-log-bridge = { version = "0.2", default-features = false }
 env_logger = { version = "0.11", default-features = false }
 log = { version = "0.4", default-features = false }
-dunce = { version = "1.0", default-features = false }
+
+[dev-dependencies]
 tempfile = { version = "3.20", default-features = false }
-
-[target.'cfg(unix)'.dependencies]
-libc = { version = "0.2", default-features = false }
-
-[target.'cfg(windows)'.dependencies]
-windows-sys = { version = "0.61", default-features = false, features = [
-    "Win32_Foundation",
-    "Win32_Security",
-    "Win32_System_Diagnostics_Debug",
-    "Win32_System_JobObjects",
-    "Win32_System_Threading",
-] }
 
 [workspace.lints.clippy]
 all = { level = "warn", priority = -1 }

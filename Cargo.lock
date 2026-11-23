@@ -48,6 +48,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "cpprunner"
+version = "0.1.0"
+source = "git+https://github.com/Zorz42/CppRunner#968e752950e386c359de61f6bd22374d73ecb76a"
+dependencies = [
+ "dunce",
+ "libc",
+ "log",
+ "tempfile",
+ "thiserror",
+ "which",
+ "windows-sys",
+]
+
+[[package]]
 name = "crc32fast"
 version = "1.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -109,19 +123,16 @@ name = "ezcp"
 version = "0.6.0"
 dependencies = [
  "console",
- "dunce",
+ "cpprunner",
  "env_logger",
  "ezcp_macros",
  "indicatif",
  "indicatif-log-bridge",
- "libc",
  "log",
  "serde",
  "serde_json",
  "tempfile",
  "thiserror",
- "which",
- "windows-sys",
  "zip",
 ]
 

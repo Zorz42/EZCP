@@ -1,10 +1,10 @@
 //! Serve mode. Answers are unframed, so a stub that cannot be answered writes nothing and ends the
 //! session with an error instead.
 
-use crate::runner::cpp_runner::{CppRunner, ProgramHandle};
-use crate::runner::exec_runner::RunResult;
+use crate::outcome::official_output;
 use crate::stub::{Part, Stub, stable_hash};
 use crate::{Error, Result, Task, ToOutput};
+use cpprunner::Runner;
 use log::{debug, warn};
 use std::io::{BufRead, BufReader, Read, Write};
 use std::path::Path;
@@ -36,7 +36,7 @@ impl<T: ToOutput> Task<T> {
         Ok(())
     }
 
-    fn rebuild(&self, stub: &Stub, official_solution: &mut Option<(CppRunner, ProgramHandle)>) -> Result<String> {
+    fn rebuild(&self, stub: &Stub, official_solution: &mut Option<Runner>) -> Result<String> {
         let Some(subtask) = self.subtasks.get(stub.subtask) else {
             return Err(Error::InvalidStub {
                 details: format!("there is no subtask {}; this task has {}", stub.subtask, self.subtasks.len()),
@@ -82,15 +82,15 @@ impl<T: ToOutput> Task<T> {
         Ok(payload)
     }
 
-    fn run_official_solution(&self, stub: &Stub, input: &str, official_solution: &mut Option<(CppRunner, ProgramHandle)>) -> Result<String> {
-        let (cpp_runner, handle) = if let Some(compiled) = official_solution {
-            compiled
+    fn run_official_solution(&self, stub: &Stub, input: &str, official_solution: &mut Option<Runner>) -> Result<String> {
+        let runner = if let Some(runner) = official_solution {
+            runner
         } else {
-            let mut cpp_runner = CppRunner::new(&self.build_folder_path)?;
-            let handle = cpp_runner.add_program(&self.solution_source)?;
-            official_solution.insert((cpp_runner, handle))
+            let runner = Runner::new(&self.build_folder_path)?;
+            runner.set_result_cache(self.outcome_cache);
+            official_solution.insert(runner)
         };
-        let result = cpp_runner.check_programs(input, &[*handle], self.limits())?.pop().unwrap_or(RunResult::Crashed);
-        Ok(self.normalise_output(result.official_output("on-demand generation", stub.generator + 1)?))
+        let result = runner.run(&self.solution_source, input, self.limits())?;
+        Ok(self.normalise_output(official_output(result, "on-demand generation", stub.generator + 1)?))
     }
 }

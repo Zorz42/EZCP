@@ -4,6 +4,7 @@
 extern crate self as ezcp;
 
 mod archiver;
+mod compiler;
 mod create_tests;
 mod error;
 mod generate;
@@ -16,7 +17,6 @@ mod partial_solution;
 mod progress;
 pub mod report;
 mod rng;
-mod runner;
 mod serve;
 mod stub;
 mod subtask;
@@ -30,12 +30,12 @@ mod whitespace;
 #[doc = include_str!("../GUIDE.md")]
 struct Guide;
 
+pub use compiler::Compiler;
 pub use error::{Error, Result};
 pub use generators::{Graph, GraphFormat, array_generator, array_generator_custom};
 pub use mode::Mode;
 pub use report::Report;
 pub use rng::{Rng, SampleInteger, SampleUniform};
-pub use runner::cpp_runner::Compiler;
 pub use subtask::Subtask;
 pub use task::Task;
 pub use to_output::{Counted, CountedLines, Lines, ToOutput};

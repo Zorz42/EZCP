@@ -6,7 +6,6 @@ use crate::parallel::parallel_map;
 use crate::progress::ScopedProgressBar;
 use crate::report::{Mismatch, PartialReport, Report, SubtaskInfo, SubtaskResult, TestInfo};
 use crate::rng::Rng;
-use crate::runner::cpp_runner::{CppRunner, ProgramHandle};
 use crate::stub::{Part, Stub, stable_hash};
 use crate::{Error, Result, Task, ToOutput};
 use console::style;
@@ -103,15 +102,19 @@ impl<T: ToOutput> Task<T> {
             return Err(Error::MissingSolution);
         }
 
-        let mut runner = CppRunner::new(&self.build_folder_path)?;
+        let runner = cpprunner::Runner::new(&self.build_folder_path)?;
         if let Some(jobs) = self.jobs {
             runner.set_workers(jobs);
         }
-        let official = runner.add_program(&self.solution_source)?;
-        let partials = self.solutions.iter().map(|solution| runner.add_program(&solution.source)).collect::<Result<Vec<_>>>()?;
+        runner.set_result_cache(self.outcome_cache);
+        let official = self.solution_source.as_str();
+        let partials: Vec<&str> = self.solutions.iter().map(|solution| solution.source.as_str()).collect();
+        for source in std::iter::once(official).chain(partials.iter().copied()) {
+            runner.compile(source)?;
+        }
         let cache = if self.outcome_cache {
             let path = OutcomeCache::path(&self.build_folder_path);
-            runner.keep(crate::runner::gcc::canonicalize(&self.build_folder_path)?.join(crate::outcome::CACHE_FILE));
+            runner.keep(runner.build_folder().join(crate::outcome::CACHE_FILE));
             Some(OutcomeCache::open(&path)?)
         } else {
             None
@@ -181,7 +184,7 @@ impl<T: ToOutput> Task<T> {
 
     /// Runs each partial solution on the finished tests. Generation only finds one passing a subtask
     /// it should fail when it runs out of tries, so this records the rest.
-    fn run_partial_solutions(&self, all_tests: &[Vec<GeneratedTest>], runner: &CppRunner, cache: Option<&OutcomeCache>, partials: &[ProgramHandle], report: &mut Report) -> Result<()> {
+    fn run_partial_solutions(&self, all_tests: &[Vec<GeneratedTest>], runner: &cpprunner::Runner, cache: Option<&OutcomeCache>, partials: &[&str], report: &mut Report) -> Result<()> {
         let lines_of_code = |source: &str| source.split('\n').count();
         for (i, (solution, &program)) in self.solutions.iter().zip(partials).enumerate() {
             self.log_result(&format!("Running partial solution {}: {}", i + 1, solution.name))?;

@@ -141,6 +141,21 @@ impl Error {
     }
 }
 
+impl From<cpprunner::Error> for Error {
+    fn from(err: cpprunner::Error) -> Self {
+        match err {
+            cpprunner::Error::Io { source, path } => Self::IOError {
+                err: source,
+                file: path.display().to_string(),
+            },
+            cpprunner::Error::CompilerNotFound => Self::CompilerNotFound,
+            cpprunner::Error::CompilerError { stderr, stdout } => Self::CompilerError { stderr, stdout },
+            cpprunner::Error::RunFailed { details } => Self::TimerFailed { details },
+            other => Self::TimerFailed { details: other.to_string() },
+        }
+    }
+}
+
 pub type Result<T, E = Error> = std::result::Result<T, E>;
 
 /// A panic's message, if it has one.

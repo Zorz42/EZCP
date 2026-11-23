@@ -148,3 +148,22 @@ fn a_retry_keeps_the_best_run() {
     assert_eq!(better(run(Verdict::Ok, 900), run(Verdict::Ok, 700)), run(Verdict::Ok, 700));
     assert_eq!(better(run(Verdict::Ok, 700), run(Verdict::TimedOut, 0)), run(Verdict::Ok, 700));
 }
+
+#[test]
+fn runs_near_the_time_limit_are_measured_again() {
+    let (dir, task) = test_task();
+    let log = dir.path().join("runs.log");
+    let slow = format!(
+        "#include <cstdio>\n#include <ctime>\nint main() {{ long long n; if (scanf(\"%lld\", &n) != 1) return 1; while (std::clock() < 300 * (CLOCKS_PER_SEC / 1000)) {{}} FILE* f = fopen({:?}, \"a\"); fputs(\"x\\n\", f); fclose(f); printf(\"%lld\\n\", 2 * n); }}",
+        log.display().to_string()
+    );
+    task.with_solution_source(DOUBLE)
+        .with_time_limit(500)
+        .with_subtask(Subtask::new(100, "all").with_test(2, number(1..=1_000_000_000)))
+        .with_partial_solution("slow", &slow, &[0])
+        .with_timing_retries(2)
+        .run_mode(Mode::Files)
+        .unwrap();
+    // Once each while generating, then three times each for the report.
+    assert_eq!(std::fs::read_to_string(&log).unwrap().lines().count(), 2 + 2 * 3);
+}

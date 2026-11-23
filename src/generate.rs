@@ -5,17 +5,16 @@
 //! it is forgotten and the `Rng` put back to before them. So the tests do not depend on the threads.
 
 use crate::error::panic_message;
-use crate::outcome::{Judged, Outcome, OutcomeCache, Verdict};
+use crate::outcome::{Judged, Outcome, OutcomeCache, Verdict, official_output};
 use crate::parallel::parallel_map;
 use crate::progress::ScopedProgressBar;
 use crate::report::{FailedTest, Mismatch, excerpt};
 use crate::rng::Rng;
-use crate::runner::cpp_runner::{CppRunner, Job, ProgramHandle};
-use crate::runner::exec_runner::RunResult;
 use crate::stub::stable_hash;
 use crate::subtask::Fault;
 use crate::whitespace::trim_whitespace_owned;
 use crate::{Error, Result, Subtask, Task, ToOutput};
+use cpprunner::{RunHandle, RunResult, Runner};
 use log::{error, info, warn};
 use std::collections::HashSet;
 
@@ -30,8 +29,8 @@ pub struct GeneratedTest {
     pub output: String,
 }
 
-/// An index into `Task::solutions`, and the program.
-type IndexedProgram = (usize, ProgramHandle);
+/// An index into `Task::solutions`, and the program's source.
+type IndexedProgram<'task> = (usize, &'task str);
 
 struct Candidate {
     generator: usize,
@@ -54,15 +53,15 @@ struct Run {
 
 struct Generation<'task, T: ToOutput> {
     task: &'task Task<T>,
-    runner: &'task CppRunner,
+    runner: &'task Runner,
     cache: Option<&'task OutcomeCache>,
     subtask_idx: usize,
     subtask: &'task Subtask<T>,
-    official: ProgramHandle,
+    official: &'task str,
     /// The partial solutions meant to pass this subtask and not yet seen failing it, and those meant
     /// to fail it.
-    good: Vec<IndexedProgram>,
-    bad: Vec<IndexedProgram>,
+    good: Vec<IndexedProgram<'task>>,
+    bad: Vec<IndexedProgram<'task>>,
     /// How many tests each solution meant to fail has to fail; indexed like `Task::solutions`.
     targets: Vec<usize>,
     failures: Vec<usize>,
@@ -99,10 +98,10 @@ impl<T: ToOutput> Task<T> {
         &self,
         subtask_idx: usize,
         rng: &mut Rng,
-        runner: &CppRunner,
+        runner: &Runner,
         cache: Option<&OutcomeCache>,
-        official: ProgramHandle,
-        partials: &[ProgramHandle],
+        official: &str,
+        partials: &[&str],
         mismatches: &mut Vec<Mismatch>,
     ) -> Result<Vec<GeneratedTest>> {
         let subtask = &self.subtasks[subtask_idx];
@@ -147,10 +146,10 @@ impl<T: ToOutput> Task<T> {
     }
 }
 
-impl<T: ToOutput> Generation<'_, T> {
+impl<'task, T: ToOutput> Generation<'task, T> {
     /// Only these are run: the others can no longer change anything, and bad solutions are the slow
     /// ones, often running into the time limit.
-    fn still_owed(&self) -> Vec<IndexedProgram> {
+    fn still_owed(&self) -> Vec<IndexedProgram<'task>> {
         self.bad.iter().copied().filter(|&(i, _)| self.owes(i)).collect()
     }
 
@@ -192,8 +191,11 @@ impl<T: ToOutput> Generation<'_, T> {
             .collect();
 
         let new_inputs: Vec<&str> = inputs.iter().filter_map(|input| Some(input.as_ref().ok()?.as_ref()?.1.as_str())).collect();
-        let official_jobs: Vec<_> = new_inputs.iter().map(|&input| Job { program: self.official, input }).collect();
-        let official = self.runner.run_all(&official_jobs, self.task.limits())?;
+        let official_runs = new_inputs
+            .iter()
+            .map(|&input| self.runner.spawn(self.official, input, self.task.limits()))
+            .collect::<cpprunner::Result<Vec<_>>>()?;
+        let official = official_runs.into_iter().map(RunHandle::wait).collect::<cpprunner::Result<Vec<_>>>()?;
         let expected: Vec<_> = official
             .iter()
             .map(|result| match result {
@@ -240,7 +242,7 @@ impl<T: ToOutput> Generation<'_, T> {
 
     /// The official solution failing is an error.
     fn judge(&self, generator: usize, run: &Run, bad: &[IndexedProgram]) -> Result<Judgement> {
-        let official_output = match run.official.clone().official_output("generation phase", generator + 1) {
+        let official_output = match official_output(run.official.clone(), "generation phase", generator + 1) {
             Ok(output) => self.task.normalise_output(output),
             Err(err) => return self.write_problem_file("failing_test.in", &run.input).and(Err(err)),
         };
@@ -269,8 +271,8 @@ impl<T: ToOutput> Generation<'_, T> {
         let Some(&(_, program)) = self.good.iter().find(|&&(i, _)| i == solution) else { return Ok(()) };
         self.good.retain(|&(i, _)| i != solution);
         // Outputs are not kept, so it is run again for its own.
-        let output = match self.runner.check_programs(input, &[program], self.task.limits())?.pop() {
-            Some(RunResult::Ok { output, .. }) => Some(output),
+        let output = match self.runner.run(program, input, self.task.limits())? {
+            RunResult::Ok { output, .. } => Some(output),
             _ => None,
         };
         let test = FailedTest {
