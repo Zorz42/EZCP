@@ -299,7 +299,7 @@ impl<T: ToOutput> Task<T> {
     }
 
     pub(crate) fn limits(&self) -> Limits {
-        let time_ms = u64::try_from(self.time_limit_ms).ok().filter(|&time_ms| time_ms > 0).unwrap_or(cpprunner::DEFAULT_TIME_MS);
+        let time_ms = u64::try_from(self.time_limit_ms).ok().filter(|&time_ms| time_ms > 0).unwrap_or(Limits::new().time_ms);
         Limits::new().with_time_ms(time_ms).with_memory_kb(self.memory_limit_mb.map(|mb| mb as u64 * 1024))
     }
 
