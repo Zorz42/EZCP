@@ -3,7 +3,8 @@
 
 use crate::Error;
 pub use crate::outcome::{Outcome, Verdict};
-use serde_json::{Value, json};
+use serde::Serialize;
+use serde::ser::{SerializeStruct, Serializer};
 use std::collections::BTreeMap;
 
 /// Inputs and outputs in a report are cut to this many bytes.
@@ -22,13 +23,13 @@ pub struct Report {
     pub error: Option<Error>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct SubtaskInfo {
     pub name: String,
     pub points: i32,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct PartialReport {
     pub name: String,
     /// The subtasks it is declared to pass, sorted.
@@ -58,7 +59,8 @@ impl SubtaskResult {
 }
 
 /// A partial solution doing other than declared.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
+#[serde(tag = "kind", rename_all = "lowercase")]
 pub enum Mismatch {
     /// It failed a test of a subtask it is declared to pass.
     Fails { solution: usize, subtask: usize, verdict: Verdict, test: FailedTest },
@@ -66,9 +68,10 @@ pub enum Mismatch {
     Passes { solution: usize, subtask: usize },
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct FailedTest {
     pub generator: usize,
+    #[serde(serialize_with = "hex_seed")]
     pub seed: u64,
     pub input: String,
     pub expected: String,
@@ -76,10 +79,11 @@ pub struct FailedTest {
     pub output: Option<String>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct TestInfo {
     pub subtask: usize,
     pub generator: usize,
+    #[serde(serialize_with = "hex_seed")]
     pub seed: u64,
     pub input_file: String,
     pub output_file: String,
@@ -99,38 +103,46 @@ fn seed(seed: u64) -> String {
     format!("{seed:#018x}")
 }
 
-impl SubtaskResult {
-    fn to_json(&self) -> Value {
-        let verdicts: serde_json::Map<_, _> = self.verdicts.iter().map(|(verdict, &count)| (verdict.code().to_owned(), json!(count))).collect();
-        json!({
-            "passed": self.passed(),
-            "verdicts": verdicts,
-            "skipped": self.skipped,
-            "time_ms": self.time_ms,
-            "memory_kb": self.memory_kb,
-            "first_failure": self.first_failure,
-        })
+#[allow(clippy::trivially_copy_pass_by_ref, reason = "serde's signature")]
+fn hex_seed<S: Serializer>(value: &u64, serializer: S) -> Result<S::Ok, S::Error> {
+    serializer.serialize_str(&seed(*value))
+}
+
+impl Serialize for SubtaskResult {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        let mut json = serializer.serialize_struct("SubtaskResult", 6)?;
+        json.serialize_field("passed", &self.passed())?;
+        json.serialize_field("verdicts", &self.verdicts)?;
+        json.serialize_field("skipped", &self.skipped)?;
+        json.serialize_field("time_ms", &self.time_ms)?;
+        json.serialize_field("memory_kb", &self.memory_kb)?;
+        json.serialize_field("first_failure", &self.first_failure)?;
+        json.end()
     }
 }
 
-impl Mismatch {
-    fn to_json(&self) -> Value {
-        match self {
-            Self::Fails { solution, subtask, verdict, test } => json!({
-                "kind": "fails",
-                "solution": solution,
-                "subtask": subtask,
-                "verdict": verdict.code(),
-                "test": {
-                    "generator": test.generator,
-                    "seed": seed(test.seed),
-                    "input": test.input,
-                    "expected": test.expected,
-                    "output": test.output,
-                },
-            }),
-            Self::Passes { solution, subtask } => json!({ "kind": "passes", "solution": solution, "subtask": subtask }),
-        }
+#[derive(Serialize)]
+struct ErrorJson {
+    kind: &'static str,
+    message: String,
+}
+
+impl Serialize for Report {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        let error = self.error.as_ref().map(|err| ErrorJson {
+            kind: err.kind(),
+            message: err.to_string(),
+        });
+        let mut json = serializer.serialize_struct("Report", 8)?;
+        json.serialize_field("passed", &self.error.is_none())?;
+        json.serialize_field("error", &error)?;
+        json.serialize_field("seed", &self.seed.map(seed))?;
+        json.serialize_field("subtasks", &self.subtasks)?;
+        json.serialize_field("official", &self.official)?;
+        json.serialize_field("partials", &self.partials)?;
+        json.serialize_field("mismatches", &self.mismatches)?;
+        json.serialize_field("tests", &self.tests)?;
+        json.end()
     }
 }
 
@@ -142,33 +154,7 @@ impl Report {
 
     #[must_use]
     pub fn to_json(&self) -> String {
-        let results = |results: &[SubtaskResult]| results.iter().map(SubtaskResult::to_json).collect::<Vec<_>>();
-        let report = json!({
-            "passed": self.error.is_none(),
-            "error": self.error.as_ref().map(|err| json!({ "kind": err.kind(), "message": err.to_string() })),
-            "seed": self.seed.map(seed),
-            "subtasks": self.subtasks.iter().map(|subtask| json!({ "name": subtask.name, "points": subtask.points })).collect::<Vec<_>>(),
-            "official": results(&self.official),
-            "partials": self
-                .partials
-                .iter()
-                .map(|partial| json!({ "name": partial.name, "declared": partial.declared, "results": results(&partial.results) }))
-                .collect::<Vec<_>>(),
-            "mismatches": self.mismatches.iter().map(Mismatch::to_json).collect::<Vec<_>>(),
-            "tests": self
-                .tests
-                .iter()
-                .map(|test| {
-                    json!({
-                        "subtask": test.subtask,
-                        "generator": test.generator,
-                        "seed": seed(test.seed),
-                        "input_file": test.input_file,
-                        "output_file": test.output_file,
-                    })
-                })
-                .collect::<Vec<_>>(),
-        });
-        report.to_string()
+        // Verdicts, the only map keys, serialize as strings, so this cannot fail.
+        serde_json::to_string(self).unwrap_or_default()
     }
 }

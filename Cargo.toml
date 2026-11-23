@@ -26,6 +26,7 @@ workspace = true
 
 [dependencies]
 ezcp_macros = { version = "0.2.0", path = "ezcp_macros" }
+serde = { version = "1.0", default-features = false, features = ["std", "derive"] }
 serde_json = { version = "1.0", default-features = false, features = ["std"] }
 # Not "deflate", which pulls in zopfli for compression levels never used here.
 zip = { version = "8.4", default-features = false, features = ["deflate-flate2-zlib-rs"] }

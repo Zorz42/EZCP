@@ -16,6 +16,15 @@ fn a_stub_survives_a_round_trip() {
     assert_eq!(Stub::parse(&stub.to_line()).unwrap(), stub);
 }
 
+/// Test files written in seed mode hold this line.
+#[test]
+fn the_line_format_never_changes() {
+    assert_eq!(
+        sample().to_line(),
+        "{\"subtask\":2,\"generator\":1,\"seed\":\"ffffffffffffffff\",\"part\":\"output\",\"hash\":\"0000000000001234\"}\n"
+    );
+}
+
 #[test]
 fn a_stub_is_a_single_line() {
     let line = sample().to_line();

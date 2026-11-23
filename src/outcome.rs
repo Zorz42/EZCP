@@ -46,6 +46,12 @@ impl Verdict {
     }
 }
 
+impl serde::Serialize for Verdict {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(self.code())
+    }
+}
+
 impl Display for Verdict {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let code = style(self.code()).bright().bold();

@@ -1,8 +1,9 @@
 //! The one-line JSON a test file holds in seed mode. Seed and hash are hex strings, since JSON readers
 //! that parse numbers as doubles would lose their low bits.
 
-use crate::{Error, Result};
-use serde_json::Value;
+use crate::Error;
+use serde::de::Error as _;
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 /// FNV-1a: unlike `DefaultHasher`, it never changes between builds.
 pub fn stable_hash(data: &str) -> u64 {
@@ -17,73 +18,62 @@ pub fn stable_hash(data: &str) -> u64 {
     hash
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
 pub enum Part {
     Input,
     /// Rebuilt by running the official solution.
     Output,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Stub {
     pub subtask: usize,
     pub generator: usize,
+    #[serde(serialize_with = "to_hex", deserialize_with = "from_hex")]
     pub seed: u64,
     pub part: Part,
     /// [`stable_hash`] of the file, to catch generators that changed since. `None` skips the check.
+    #[serde(default, skip_serializing_if = "Option::is_none", serialize_with = "to_hex_option", deserialize_with = "from_hex_option")]
     pub hash: Option<u64>,
 }
 
-const fn invalid(details: String) -> Error {
-    Error::InvalidStub { details }
+#[allow(clippy::trivially_copy_pass_by_ref, reason = "serde's signature")]
+fn to_hex<S: Serializer>(value: &u64, serializer: S) -> Result<S::Ok, S::Error> {
+    serializer.serialize_str(&format!("{value:016x}"))
 }
 
-fn index(object: &Value, key: &str) -> Result<usize> {
-    object
-        .get(key)
-        .and_then(Value::as_u64)
-        .and_then(|value| usize::try_from(value).ok())
-        .ok_or_else(|| invalid(format!("\"{key}\" is missing or is not a non-negative integer")))
+#[allow(clippy::ref_option, reason = "serde's signature")]
+fn to_hex_option<S: Serializer>(value: &Option<u64>, serializer: S) -> Result<S::Ok, S::Error> {
+    value.map(|value| format!("{value:016x}")).serialize(serializer)
 }
 
 /// Also accepts a plain number, for stubs written by hand.
-fn hex_u64(value: &Value, what: &str) -> Result<u64> {
-    match value {
-        Value::String(text) => u64::from_str_radix(text.trim_start_matches("0x"), 16).map_err(|_ignored| invalid(format!("{what} is not a 64-bit hexadecimal number: \"{text}\""))),
-        Value::Number(number) => number.as_u64().ok_or_else(|| invalid(format!("{what} is not a non-negative integer"))),
-        _ => Err(invalid(format!("{what} is neither a string nor a number"))),
+fn from_hex<'de, D: Deserializer<'de>>(deserializer: D) -> Result<u64, D::Error> {
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum HexOrNumber {
+        Hex(String),
+        Number(u64),
     }
+
+    match HexOrNumber::deserialize(deserializer)? {
+        HexOrNumber::Number(number) => Ok(number),
+        HexOrNumber::Hex(text) => u64::from_str_radix(text.trim_start_matches("0x"), 16).map_err(|_ignored| D::Error::custom(format!("\"{text}\" is not a 64-bit hexadecimal number"))),
+    }
+}
+
+fn from_hex_option<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Option<u64>, D::Error> {
+    from_hex(deserializer).map(Some)
 }
 
 impl Stub {
     pub fn to_line(self) -> String {
-        let hash = self.hash.map_or_else(String::new, |hash| format!(",\"hash\":\"{hash:016x}\""));
-        let part = match self.part {
-            Part::Input => "input",
-            Part::Output => "output",
-        };
-        format!(
-            "{{\"subtask\":{},\"generator\":{},\"seed\":\"{:016x}\",\"part\":\"{part}\"{hash}}}\n",
-            self.subtask, self.generator, self.seed
-        )
+        // Only numbers and hex strings, which always serialize.
+        serde_json::to_string(&self).unwrap_or_default() + "\n"
     }
 
-    pub fn parse(line: &str) -> Result<Self> {
-        let value: Value = serde_json::from_str(line).map_err(|err| invalid(format!("not a JSON object: {err}")))?;
-        let part = match value.get("part").and_then(Value::as_str) {
-            Some("input") => Part::Input,
-            Some("output") => Part::Output,
-            Some(other) => return Err(invalid(format!("\"part\" is \"{other}\"; it has to be \"input\" or \"output\""))),
-            None => return Err(invalid("\"part\" is missing; a stub stands for either the \"input\" or the \"output\" of a test".to_owned())),
-        };
-        let seed = value.get("seed").ok_or_else(|| invalid("\"seed\" is missing".to_owned()))?;
-
-        Ok(Self {
-            subtask: index(&value, "subtask")?,
-            generator: index(&value, "generator")?,
-            seed: hex_u64(seed, "\"seed\"")?,
-            part,
-            hash: value.get("hash").map(|hash| hex_u64(hash, "\"hash\"")).transpose()?,
-        })
+    pub fn parse(line: &str) -> crate::Result<Self> {
+        serde_json::from_str(line).map_err(|err| Error::InvalidStub { details: err.to_string() })
     }
 }
