@@ -25,7 +25,7 @@ members = ["ezcp_macros"]
 workspace = true
 
 [dependencies]
-cpprunner = { git = "https://github.com/Zorz42/CppRunner" }
+cpprunner = "0.1"
 ezcp_macros = { version = "0.2.0", path = "ezcp_macros" }
 serde = { version = "1.0", default-features = false, features = ["std", "derive"] }
 serde_json = { version = "1.0", default-features = false, features = ["std"] }

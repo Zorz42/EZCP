@@ -56,7 +56,8 @@ dependencies = [
 [[package]]
 name = "cpprunner"
 version = "0.1.0"
-source = "git+https://github.com/Zorz42/CppRunner#9ed0ade655db854be2d02b52c22c6a251fa70dda"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0717ab0e937878369728e20f7d47ebcde9550a22a7cfcdc24b13291306215515"
 dependencies = [
  "dunce",
  "libc",
