@@ -5,7 +5,7 @@
 //! it is forgotten and the `Rng` put back to before them. So the tests do not depend on the threads.
 
 use crate::error::panic_message;
-use crate::outcome::{Judged, Outcome, OutcomeCache, Verdict, official_output};
+use crate::outcome::{Judged, Outcome, Verdict, official_output};
 use crate::parallel::parallel_map;
 use crate::progress::ScopedProgressBar;
 use crate::report::{FailedTest, Mismatch, excerpt};
@@ -54,7 +54,6 @@ struct Run {
 struct Generation<'task, T: ToOutput> {
     task: &'task Task<T>,
     runner: &'task Runner,
-    cache: Option<&'task OutcomeCache>,
     subtask_idx: usize,
     subtask: &'task Subtask<T>,
     official: &'task str,
@@ -94,16 +93,7 @@ impl<T: ToOutput> Task<T> {
         }
     }
 
-    pub(crate) fn create_tests_for_subtask(
-        &self,
-        subtask_idx: usize,
-        rng: &mut Rng,
-        runner: &Runner,
-        cache: Option<&OutcomeCache>,
-        official: &str,
-        partials: &[&str],
-        mismatches: &mut Vec<Mismatch>,
-    ) -> Result<Vec<GeneratedTest>> {
+    pub(crate) fn create_tests_for_subtask(&self, subtask_idx: usize, rng: &mut Rng, runner: &Runner, official: &str, partials: &[&str], mismatches: &mut Vec<Mismatch>) -> Result<Vec<GeneratedTest>> {
         let subtask = &self.subtasks[subtask_idx];
         let (good, bad): (Vec<IndexedProgram>, Vec<IndexedProgram>) = partials.iter().copied().enumerate().partition(|&(i, _)| !self.solutions[i].should_fail(subtask_idx));
         let default_target = subtask.min_failures_per_solution.unwrap_or(self.min_failures_per_solution);
@@ -116,7 +106,6 @@ impl<T: ToOutput> Task<T> {
         let mut generation = Generation {
             task: self,
             runner,
-            cache,
             subtask_idx,
             subtask,
             official,
@@ -214,7 +203,7 @@ impl<'task, T: ToOutput> Generation<'task, T> {
             .collect();
         let jobs: Vec<_> = judged.iter().map(|&(_, _, job)| job).collect();
         let mut outcomes = vec![Vec::new(); new_inputs.len()];
-        self.task.judge_runs(self.runner, self.cache, &jobs, 0, &|_job| false, |job, outcome| {
+        self.task.judge_runs(self.runner, &jobs, 0, &|_job| false, |job, outcome| {
             if let Some(outcome) = outcome {
                 let (new, i, _) = judged[job];
                 outcomes[new].push((i, outcome));
@@ -246,7 +235,8 @@ impl<'task, T: ToOutput> Generation<'task, T> {
             Ok(output) => self.task.normalise_output(output),
             Err(err) => return self.write_problem_file("failing_test.in", &run.input).and(Err(err)),
         };
-        if !(self.task.checker)(&run.input, &official_output, &official_output) {
+        let accepted = self.runner.spawn_check(&self.task.checker, run.input.as_str(), official_output.as_str(), official_output.as_str())?;
+        if !accepted.wait()? {
             self.write_problem_file("failing_test.in", &run.input)?;
             return Err(Error::SolutionFailed {
                 test_path: "generation phase".to_owned(),

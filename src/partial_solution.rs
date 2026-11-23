@@ -1,5 +1,5 @@
 use crate::generate::GeneratedTest;
-use crate::outcome::{Judged, OutcomeCache, Verdict};
+use crate::outcome::{Judged, Verdict};
 use crate::progress::ScopedProgressBar;
 use crate::report::SubtaskResult;
 use crate::{Result, Task, ToOutput};
@@ -29,7 +29,6 @@ impl<T: ToOutput> Task<T> {
         &self,
         tests: &[Vec<GeneratedTest>],
         runner: &Runner,
-        cache: Option<&OutcomeCache>,
         program: &str,
         lines_of_code: usize,
         expected_to_fail: &dyn Fn(usize) -> bool,
@@ -56,7 +55,7 @@ impl<T: ToOutput> Task<T> {
 
         let mut outcomes = vec![None; runs.len()];
         let progress_bar = ScopedProgressBar::new(&self.logger, runs.len() as u64);
-        self.judge_runs(runner, cache, &jobs, self.timing_retries, &|run| is_past_failure(runs[run].0, runs[run].1), |run, outcome| {
+        self.judge_runs(runner, &jobs, self.timing_retries, &|run| is_past_failure(runs[run].0, runs[run].1), |run, outcome| {
             progress_bar.inc(1);
             let (subtask_idx, test_idx, _) = runs[run];
             if outcome.is_some_and(|outcome| outcome.verdict != Verdict::Ok) {

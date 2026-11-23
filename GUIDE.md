@@ -228,8 +228,9 @@ match rng.weighted_index(&[3, 2, 2, 1, 1]) {
   1 suits a subtask it is far too slow for.
 - Slow partial solutions spend the whole time limit on each test they are meant to fail; `--fail-fast`
   stops them at the first failure of such a subtask in the final run.
-- Several correct answers: `with_checker(|input, official_output, output| ...)`, which must accept the
-  official output itself.
+- Several correct answers: `with_checker(source)`, a C++ checker run as `checker input output
+  official_output` that exits with 0 to accept and 1 or 2 to reject. It must accept the official
+  output itself.
 
 ## When a run fails
 
@@ -238,6 +239,7 @@ match rng.weighted_index(&[3, 2, 2, 1, 1]) {
 | `CompilerError` | A C++ source did not compile; the message has the compiler's output. |
 | `SolutionTimedOut`, `SolutionOutOfMemory`, `SolutionCrash` | The official solution failed on a test (`failing_test.in`). Either it is wrong or slow, or the generator breaks the constraints: add or tighten the validator. |
 | `SolutionFailed` | The checker rejected the official solution's own output. |
+| `CheckerFailed` | The checker crashed, ran out of time or exited with a code other than 0, 1 or 2. |
 | `PartialSolutionFailsSubtask` | A partial solution failed a subtask it is declared to pass (verdict and generator in the message, test in the `failing_test*` files). Fix the solution, its subtask list, or the generator. |
 | `PartialSolutionPassesExtraSubtask` | No test of a subtask breaks a partial solution meant to fail it. Add a generator aimed at its weakness (count 0 if it should only hunt), raise `with_max_tries`, or fix the subtask list. |
 | `InvalidSubtaskIndex` | A subtask index counted from one. |

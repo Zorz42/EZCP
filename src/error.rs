@@ -25,6 +25,10 @@ pub enum Error {
     #[error("Could not measure a solution's run: {details}")]
     TimerFailed { details: String },
 
+    /// The checker crashed, timed out or exited with a code other than 0, 1 or 2.
+    #[error("The checker failed: {details}")]
+    CheckerFailed { details: String },
+
     #[error("Solution timed out on test {test_path} (generator {gen_id})")]
     SolutionTimedOut { test_path: String, gen_id: usize },
 
@@ -115,6 +119,7 @@ impl Error {
             Self::CompilerNotFound => "CompilerNotFound",
             Self::CompilerError { .. } => "CompilerError",
             Self::TimerFailed { .. } => "TimerFailed",
+            Self::CheckerFailed { .. } => "CheckerFailed",
             Self::SolutionTimedOut { .. } => "SolutionTimedOut",
             Self::SolutionOutOfMemory { .. } => "SolutionOutOfMemory",
             Self::SolutionCrash { .. } => "SolutionCrash",
@@ -151,6 +156,7 @@ impl From<cpprunner::Error> for Error {
             cpprunner::Error::CompilerNotFound => Self::CompilerNotFound,
             cpprunner::Error::CompilerError { stderr, stdout } => Self::CompilerError { stderr, stdout },
             cpprunner::Error::RunFailed { details } => Self::TimerFailed { details },
+            cpprunner::Error::CheckerFailed { details } => Self::CheckerFailed { details },
             other => Self::TimerFailed { details: other.to_string() },
         }
     }

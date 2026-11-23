@@ -1,7 +1,6 @@
 use crate::archiver::archive_files;
 use crate::generate::GeneratedTest;
 use crate::mode::Mode;
-use crate::outcome::OutcomeCache;
 use crate::parallel::parallel_map;
 use crate::progress::ScopedProgressBar;
 use crate::report::{Mismatch, PartialReport, Report, SubtaskInfo, SubtaskResult, TestInfo};
@@ -109,16 +108,13 @@ impl<T: ToOutput> Task<T> {
         runner.set_result_cache(self.outcome_cache);
         let official = self.solution_source.as_str();
         let partials: Vec<&str> = self.solutions.iter().map(|solution| solution.source.as_str()).collect();
-        for source in std::iter::once(official).chain(partials.iter().copied()) {
+        let checker = match &self.checker {
+            cpprunner::Check::Program(source) => Some(source.as_str()),
+            cpprunner::Check::Tokens => None,
+        };
+        for source in std::iter::once(official).chain(partials.iter().copied()).chain(checker) {
             runner.compile(source)?;
         }
-        let cache = if self.outcome_cache {
-            let path = OutcomeCache::path(&self.build_folder_path);
-            runner.keep(runner.build_folder().join(crate::outcome::CACHE_FILE));
-            Some(OutcomeCache::open(&path)?)
-        } else {
-            None
-        };
         // Only once every program is added: anything else is stale.
         runner.clean_build_folder()?;
 
@@ -136,7 +132,7 @@ impl<T: ToOutput> Task<T> {
             self.logger
                 .println(format!("{progress} {}", style(format!("Subtask {}: {}", subtask_idx + 1, subtask.name)).cyan().bold()))
                 .ok();
-            all_tests.push(self.create_tests_for_subtask(subtask_idx, &mut rng, &runner, cache.as_ref(), official, &partials, &mut report.mismatches)?);
+            all_tests.push(self.create_tests_for_subtask(subtask_idx, &mut rng, &runner, official, &partials, &mut report.mismatches)?);
         }
 
         self.check_tests_are_reproducible(self.reproducibility_checks(mode), &all_tests, runner.workers())?;
@@ -155,10 +151,10 @@ impl<T: ToOutput> Task<T> {
 
         self.log_result("Running official solution:")?;
         let lines_of_code = |source: &str| source.split('\n').count();
-        report.official = self.run_solution_on_tests(&all_tests, &runner, cache.as_ref(), official, lines_of_code(&self.solution_source), &|_subtask_idx| false)?;
+        report.official = self.run_solution_on_tests(&all_tests, &runner, official, lines_of_code(&self.solution_source), &|_subtask_idx| false)?;
         self.warn_about_unreproduced_passes("The official solution", |_subtask_idx| true, &report.official, &all_tests);
 
-        self.run_partial_solutions(&all_tests, &runner, cache.as_ref(), &partials, report)?;
+        self.run_partial_solutions(&all_tests, &runner, &partials, report)?;
         if !report.mismatches.is_empty() {
             return Err(Error::DeclarationsMismatch { count: report.mismatches.len() });
         }
@@ -184,11 +180,11 @@ impl<T: ToOutput> Task<T> {
 
     /// Runs each partial solution on the finished tests. Generation only finds one passing a subtask
     /// it should fail when it runs out of tries, so this records the rest.
-    fn run_partial_solutions(&self, all_tests: &[Vec<GeneratedTest>], runner: &cpprunner::Runner, cache: Option<&OutcomeCache>, partials: &[&str], report: &mut Report) -> Result<()> {
+    fn run_partial_solutions(&self, all_tests: &[Vec<GeneratedTest>], runner: &cpprunner::Runner, partials: &[&str], report: &mut Report) -> Result<()> {
         let lines_of_code = |source: &str| source.split('\n').count();
         for (i, (solution, &program)) in self.solutions.iter().zip(partials).enumerate() {
             self.log_result(&format!("Running partial solution {}: {}", i + 1, solution.name))?;
-            let results = self.run_solution_on_tests(all_tests, runner, cache, program, lines_of_code(&solution.source), &|subtask_idx| solution.should_fail(subtask_idx))?;
+            let results = self.run_solution_on_tests(all_tests, runner, program, lines_of_code(&solution.source), &|subtask_idx| solution.should_fail(subtask_idx))?;
             for subtask_idx in (0..self.subtasks.len()).filter(|&idx| results[idx].passed() && solution.should_fail(idx)) {
                 let recorded = |mismatch: &Mismatch| matches!(*mismatch, Mismatch::Passes { solution, subtask } if solution == i && subtask == subtask_idx);
                 if !report.mismatches.iter().any(recorded) {

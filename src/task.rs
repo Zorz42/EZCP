@@ -5,7 +5,7 @@ use crate::subtask::Subtask;
 use crate::to_output::ToOutput;
 use crate::{Error, Result};
 use console::style;
-use cpprunner::Limits;
+use cpprunner::{Check, Limits};
 use indicatif::MultiProgress;
 use indicatif_log_bridge::LogWrapper;
 use log::{LevelFilter, error, info};
@@ -22,8 +22,6 @@ static LOGGER_INIT: Once = Once::new();
 
 /// `(test, subtask, test_in_subtask)`, all from zero.
 type FileNamer = Box<dyn Fn(usize, usize, usize) -> String>;
-/// `(input, official_output, output) -> accepted`
-type Checker = Box<dyn Fn(&str, &str, &str) -> bool + Send + Sync>;
 
 /// A partial solution.
 pub struct Solution {
@@ -58,7 +56,7 @@ pub struct Task<T: ToOutput> {
     pub(crate) solutions: Vec<Solution>,
     pub(crate) min_failures_per_solution: usize,
     pub(crate) max_tries: usize,
-    pub(crate) checker: Checker,
+    pub(crate) checker: Check,
     pub(crate) trim_whitespace: bool,
     pub(crate) fail_fast: bool,
     pub(crate) keep_going: bool,
@@ -67,10 +65,6 @@ pub struct Task<T: ToOutput> {
     pub(crate) jobs: Option<usize>,
     pub(crate) debug_level: LevelFilter,
     pub(crate) logger: MultiProgress,
-}
-
-fn diff_checker(_input: &str, official_output: &str, output: &str) -> bool {
-    official_output.split_whitespace().eq(output.split_whitespace())
 }
 
 impl<T: ToOutput> Task<T> {
@@ -94,7 +88,7 @@ impl<T: ToOutput> Task<T> {
             solutions: Vec::new(),
             min_failures_per_solution: 5,
             max_tries: 100,
-            checker: Box::new(diff_checker),
+            checker: Check::Tokens,
             trim_whitespace: true,
             fail_fast: false,
             keep_going: false,
@@ -113,10 +107,12 @@ impl<T: ToOutput> Task<T> {
         self
     }
 
-    /// Called as `checker(input, official_output, output)`. The default compares whitespace-separated tokens.
+    /// The source of a C++ checker, run as `checker input output official_output` on three files. It
+    /// accepts by exiting with 0 and rejects with 1 or 2, as testlib checkers do; any other ending is
+    /// an error. Without one, whitespace-separated tokens are compared.
     #[must_use]
-    pub fn with_checker<F: Fn(&str, &str, &str) -> bool + Send + Sync + 'static>(mut self, checker: F) -> Self {
-        self.checker = Box::new(checker);
+    pub fn with_checker(mut self, source: &str) -> Self {
+        self.checker = Check::Program(source.to_owned());
         self
     }
 
@@ -271,9 +267,8 @@ impl<T: ToOutput> Task<T> {
     }
 
     /// Keep the outcomes of the solutions' runs in the build folder and reuse them: a run is not
-    /// repeated while the program, the input, the official output and the limits stay the same. The
-    /// checker is assumed not to change; delete `outcomes.cache` there when it does. `--cache` turns
-    /// it on.
+    /// repeated while the program, the input, the official output, the checker and the limits stay
+    /// the same. `--cache` turns it on.
     #[must_use]
     pub const fn with_outcome_cache(mut self, cache: bool) -> Self {
         self.outcome_cache = cache;

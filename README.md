@@ -128,8 +128,10 @@ Subtask::new(30, "n <= 1000")
 ```
 
 `Task::with_partial_solution(name, source, &[0, 2])` adds a solution that has to pass exactly the
-subtasks listed, counted from zero, and fail the others. `with_checker(|input, official_output,
-output| ...)` replaces the comparison of whitespace-separated tokens. `with_time_limit` is in
+subtasks listed, counted from zero, and fail the others. `with_checker(source)` replaces the
+comparison of whitespace-separated tokens with a C++ checker, run as `checker input output
+official_output` on three files, that exits with 0 to accept and 1 or 2 to reject, as testlib
+checkers do. `with_time_limit` is in
 milliseconds of CPU time (5000); `with_memory_limit` in megabytes of peak memory (none). The results
 list each solution's slowest time and largest memory on every subtask.
 
@@ -144,7 +146,7 @@ list each solution's slowest time and largest memory on every subtask.
 | `--jobs <count>` | Solutions run at once: one per CPU core, at most 4. The tests do not depend on it. |
 | `--fail-fast` | In the final run, stop a partial solution on a subtask it should fail at its first failure there, instead of spending the time limit on every test. |
 | `--keep-going` | Record every partial solution that does other than declared instead of stopping at the first; no tests are written if one does. |
-| `--cache` | Keep the solutions' outcomes in the build folder and reuse them while the program, input, official output and limits stay the same. |
+| `--cache` | Keep the solutions' outcomes in the build folder and reuse them while the program, input, official output, checker and limits stay the same. |
 | `--json` | Print what the run found as one JSON object on stdout. |
 
 `with_seed`, `with_jobs`, `with_fail_fast`, `with_keep_going` and `with_outcome_cache` set the same in

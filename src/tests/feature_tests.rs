@@ -3,8 +3,6 @@ use crate::task::DEFAULT_SEED;
 use crate::tests::{DOUBLE, test_files, test_task, wrong_when};
 use crate::{Error, Mode, Subtask, Task};
 use std::path::Path;
-use std::sync::Arc;
-use std::sync::atomic::{AtomicUsize, Ordering};
 
 fn number(range: std::ops::RangeInclusive<i64>) -> impl Fn(&mut Rng) -> String + Send + Sync {
     move |rng| format!("{}\n", rng.random_range(range.clone()))
@@ -157,24 +155,24 @@ fn without_a_memory_limit_nothing_is_over_it() {
 }
 
 #[test]
-fn a_checker_may_be_a_closure_with_state() {
-    let calls = Arc::new(AtomicUsize::new(0));
-    let counted = Arc::clone(&calls);
-    let tolerance = 1;
-    let (_dir, task) = test_task();
+fn a_checker_may_accept_more_than_the_official_output() {
+    let (dir, task) = test_task();
+    let log = dir.path().join("checks.log").display().to_string().replace('\\', "/");
+    let tolerant = format!(
+        "#include <cstdio>\n#include <cstdlib>\n#include <fstream>
+        int main(int argc, char** argv) {{ std::ifstream output(argv[2]), official(argv[3]); long long got = -1000, want = 0; output >> got; official >> want;
+        FILE* log = fopen({log:?}, \"a\"); fputs(\"x\\n\", log); fclose(log); return std::llabs(got - want) <= 1 ? 0 : 1; }}"
+    );
     task.with_solution_source(DOUBLE)
         .with_subtask(Subtask::new(40, "small").with_test(6, number(1..=100)))
         .with_subtask(Subtask::new(60, "large").with_test(12, number(101..=1_000_000)))
         .with_partial_solution("off by one", &wrong_when("true"), &[0, 1])
         .with_partial_solution("off by one or two", &wrong_when("true").replace("+ 1", "+ 1 + (n > 100)"), &[0])
-        .with_checker(move |_input, official, output| {
-            counted.fetch_add(1, Ordering::Relaxed);
-            let parse = |text: &str| text.trim().parse::<i64>().unwrap_or(i64::MIN);
-            (parse(official) - parse(output)).abs() <= tolerance
-        })
+        .with_checker(&tolerant)
         .run_mode(Mode::Files)
         .unwrap();
-    assert!(calls.load(Ordering::Relaxed) > 18, "the checker was hardly called");
+    let checks = std::fs::read_to_string(dir.path().join("checks.log")).unwrap().lines().count();
+    assert!(checks > 18, "the checker was hardly called");
 }
 
 #[test]
