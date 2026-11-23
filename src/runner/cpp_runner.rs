@@ -97,11 +97,10 @@ impl Drop for StopOnDrop<'_> {
     }
 }
 
-/// Compiles C++ programs into a cached build folder and runs them in parallel under the timer.
+/// Compiles C++ programs into a cached build folder and runs them in parallel.
 pub struct CppRunner {
     gcc: Gcc,
     build_folder: PathBuf,
-    timer: ProgramHandle,
     /// Executables and their hashes, indexed by `ProgramHandle`.
     programs: Vec<PathBuf>,
     hashes: Vec<u64>,
@@ -114,18 +113,15 @@ pub struct CppRunner {
 impl CppRunner {
     pub fn new(build_folder: &Path) -> Result<Self> {
         std::fs::create_dir_all(build_folder).map_err(Error::io(build_folder))?;
-        let mut runner = Self {
+        Ok(Self {
             gcc: Gcc::new()?,
             build_folder: canonicalize(build_folder)?,
-            timer: ProgramHandle(0),
             programs: Vec::new(),
             hashes: Vec::new(),
             hash_to_handle: HashMap::new(),
             necessary_files: HashSet::new(),
             workers: std::thread::available_parallelism().map_or(1, std::num::NonZeroUsize::get).min(MAX_DEFAULT_WORKERS),
-        };
-        runner.timer = runner.add_program(include_str!("timer.cpp"))?;
-        Ok(runner)
+        })
     }
 
     pub fn add_program(&mut self, source_code: &str) -> Result<ProgramHandle> {
@@ -180,7 +176,6 @@ impl CppRunner {
     /// `on_result` is called on this thread as each job ends (`None` if skipped), so it can change
     /// what `skip` answers.
     pub fn run_jobs<F: FnMut(usize, Option<RunResult>)>(&self, jobs: &[Job], limits: Limits, skip: &(dyn Fn(usize) -> bool + Sync), mut on_result: F) -> Result<()> {
-        let timer = self.programs[self.timer.0].as_path();
         let (next_job, stopped) = (AtomicUsize::new(0), AtomicBool::new(false));
         let (sender, receiver) = mpsc::channel();
         let mut first_error = None;
@@ -197,7 +192,7 @@ impl CppRunner {
                         let outcome = if skip(idx) {
                             Ok(None)
                         } else {
-                            catch_unwind(AssertUnwindSafe(|| run_solution(&self.programs[job.program.0], job.input, limits, timer)))
+                            catch_unwind(AssertUnwindSafe(|| run_solution(&self.programs[job.program.0], job.input, limits)))
                                 .unwrap_or_else(|_panic| {
                                     Err(Error::TimerFailed {
                                         details: format!("the worker thread for job {idx} panicked"),

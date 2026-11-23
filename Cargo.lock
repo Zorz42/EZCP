@@ -114,11 +114,13 @@ dependencies = [
  "ezcp_macros",
  "indicatif",
  "indicatif-log-bridge",
+ "libc",
  "log",
  "serde_json",
  "tempfile",
  "thiserror",
  "which",
+ "windows-sys",
  "zip",
 ]
 

@@ -107,7 +107,7 @@ impl Gcc {
         {
             // No dependency on the MinGW DLLs being on PATH.
             command.arg("-static");
-            // MinGW's default stack is 2 MB. The timer raises the limit on Linux instead.
+            // MinGW's default stack is 2 MB. On Linux the runner raises the limit instead.
             command.arg("-Wl,--stack,536870912");
         }
 
@@ -120,18 +120,12 @@ impl Gcc {
         // Not `#[cfg]`, which would leave `links_statically` unused elsewhere.
         if cfg!(target_os = "linux") {
             // A static program starts about a millisecond sooner, half of a short run. Without the
-            // static libraries, unused ones are still left out: for the timer, all of the C++ runtime.
+            // static libraries, unused ones are still left out.
             let links_statically = *self.links_statically.get_or_init(|| has_static_libraries(&self.path));
             command.arg(if links_statically { "-static" } else { "-Wl,--as-needed" });
         }
 
         command.arg(source).arg("-o").arg(executable);
-
-        #[cfg(windows)]
-        {
-            // For the timer's CommandLineToArgvW; it must come after the source.
-            command.arg("-lshell32");
-        }
 
         debug!("Running command: {command:?}");
         let process = command.output().map_err(Error::io(&self.path))?;

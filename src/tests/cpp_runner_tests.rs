@@ -91,13 +91,22 @@ fn test_runner_program_tle() {
 #[test]
 fn test_program_over_a_sub_second_limit_is_a_timeout() {
     let (_dir, mut runner) = runner();
-    // 400 ms: over the limit, but under the one second the timer rounds up to.
+    // 400 ms: over the limit, but under the one second the CPU limit rounds up to.
     let program = runner
         .add_program("#include <chrono>\nint main() { auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(400); while (std::chrono::steady_clock::now() < deadline) {} }")
         .unwrap();
 
     assert_eq!(runner.check_programs("", &[program], limits(100)).unwrap()[0], RunResult::TimedOut);
     assert!(matches!(runner.check_programs("", &[program], limits(5000)).unwrap()[0], RunResult::Ok { .. }));
+}
+
+/// Uses no CPU time, so only the wall clock stops it.
+#[test]
+fn test_blocked_solution_is_a_timeout() {
+    let source = "#include <chrono>\n#include <thread>\nint main() { std::this_thread::sleep_for(std::chrono::hours(1)); }";
+    let start = Instant::now();
+    assert_eq!(run_within(Duration::from_secs(60), "a solution that sleeps", move || run(source, "", 100)), RunResult::TimedOut);
+    assert!(start.elapsed() < Duration::from_secs(10), "took {:?}", start.elapsed());
 }
 
 #[test]
@@ -142,15 +151,14 @@ fn test_large_input_and_large_output() {
 
 #[test]
 fn test_solution_writing_to_stderr_is_still_measured() {
-    // Includes a fake marker and an unterminated line.
     let source = "#include <iostream>
-        int main() { std::cerr << \"debug 123\\nnot a number\\n__EZCP_RESULT__ TLE 999\\ntrailing without newline\"; std::cout << 42; }";
+        int main() { std::cerr << \"debug 123\\ntrailing without newline\"; std::cout << 42; }";
     assert_output(&run(source, "", 1000), "42");
 }
 
 #[test]
 fn test_solution_writing_a_lot_to_stderr_is_still_measured() {
-    // 16 MB, far more than the tail that is kept.
+    // 16 MB, far more than a pipe holds.
     let source = "#include <iostream>\n#include <string>
         int main() { std::string line(1 << 12, 'd'); for (int i = 0; i < 4096; i++) std::cerr << line << '\\n'; std::cout << 42; }";
     assert_output(&run(source, "", 5000), "42");
@@ -185,8 +193,8 @@ fn test_runners_sharing_a_build_folder() {
     for worker in workers {
         assert_output(&worker.join().unwrap().unwrap(), "Hello, World!");
     }
-    // The timer and the program, each a source and a binary; no scratch files.
-    assert_eq!(build_folder_files(tempdir.path()).len(), 4, "{:?}", build_folder_files(tempdir.path()));
+    // A source and a binary; no scratch files.
+    assert_eq!(build_folder_files(tempdir.path()).len(), 2, "{:?}", build_folder_files(tempdir.path()));
 }
 
 /// A crash would blame the solution, and count as a failure of a partial
@@ -201,9 +209,8 @@ fn test_missing_binary_is_not_reported_as_a_crash() {
             .collect::<Vec<_>>()
     };
 
-    let timer_only = binaries();
     let program = runner.add_program(HELLO_WORLD).unwrap();
-    std::fs::remove_file(binaries().into_iter().find(|path| !timer_only.contains(path)).unwrap()).unwrap();
+    std::fs::remove_file(&binaries()[0]).unwrap();
 
     let result = runner.check_programs("", &[program], limits(1000));
     assert!(matches!(result, Err(TimerFailed { .. })), "got {result:?}");
@@ -214,13 +221,11 @@ fn test_missing_binary_is_not_reported_as_a_crash() {
 fn test_run_all_reports_failure_without_hanging() {
     let result = run_within(Duration::from_secs(60), "running jobs that all fail to start", || {
         let (dir, mut runner) = runner();
-        // The timer is the only binary so far.
-        let timer: Vec<_> = build_folder_files(dir.path()).into_iter().filter(|path| path.extension().is_none()).collect();
-        assert_eq!(timer.len(), 1, "the timer should be the only binary in a fresh build folder");
         let program = runner.add_program(HELLO_WORLD).unwrap();
+        let binary: Vec<_> = build_folder_files(dir.path()).into_iter().filter(|path| path.extension().is_none()).collect();
 
         // Every job now fails. More jobs than workers, so some are still queued.
-        std::fs::remove_file(&timer[0]).unwrap();
+        std::fs::remove_file(&binary[0]).unwrap();
         runner.run_all(&[Job { program, input: "" }; 20], limits(1000))
     });
     assert!(result.is_err(), "a job that cannot be started must be reported, got {result:?}");

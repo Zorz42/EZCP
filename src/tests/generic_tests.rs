@@ -99,11 +99,11 @@ fn test_stale_build_artifacts_are_removed_on_the_next_run() {
 
     run_with(RETURN_ZERO);
     let after_first_run = sources_in_build_folder();
-    assert_eq!(after_first_run.len(), 2, "expected the timer and one solution, got {after_first_run:?}");
+    assert_eq!(after_first_run.len(), 1, "expected one solution, got {after_first_run:?}");
 
     run_with("int main() { return 1 - 1; }");
     let after_second_run = sources_in_build_folder();
-    assert_eq!(after_second_run.len(), 2, "the first solution should not have been kept, got {after_second_run:?}");
+    assert_eq!(after_second_run.len(), 1, "the first solution should not have been kept, got {after_second_run:?}");
     assert_ne!(after_first_run, after_second_run, "the edited solution should have replaced the original one");
 }
 

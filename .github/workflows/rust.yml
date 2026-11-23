@@ -61,8 +61,7 @@ jobs:
       - name: Rust Cache
         uses: Swatinem/rust-cache@v2.7.3
 
-      # --locked, so a dependency that raises its MSRV fails here. `check` is
-      # enough: timer.cpp is only compiled at run time.
+      # --locked, so a dependency that raises its MSRV fails here.
       - name: Check on the minimum supported Rust version
         run: cargo +1.88 check --workspace --all-targets --locked
 
