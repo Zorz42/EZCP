@@ -102,21 +102,11 @@ impl<T: ToOutput> Task<T> {
         }
 
         let runner = cpprunner::Runner::new(&self.build_folder_path)?;
-        if let Some(jobs) = self.jobs {
-            runner.set_workers(jobs);
-        }
+        runner.set_workers(self.workers());
         runner.set_result_cache(self.outcome_cache);
+        runner.set_timing_retries(self.timing_retries);
         let official = self.solution_source.as_str();
         let partials: Vec<&str> = self.solutions.iter().map(|solution| solution.source.as_str()).collect();
-        let checker = match &self.checker {
-            cpprunner::Check::Program(source) => Some(source.as_str()),
-            cpprunner::Check::Tokens => None,
-        };
-        for source in std::iter::once(official).chain(partials.iter().copied()).chain(checker) {
-            runner.compile(source)?;
-        }
-        // Only once every program is added: anything else is stale.
-        runner.clean_build_folder()?;
 
         if self.tests_path.exists() {
             remove_dir_all_with_retry(&self.tests_path)?;
@@ -135,7 +125,7 @@ impl<T: ToOutput> Task<T> {
             all_tests.push(self.create_tests_for_subtask(subtask_idx, &mut rng, &runner, official, &partials, &mut report.mismatches)?);
         }
 
-        self.check_tests_are_reproducible(self.reproducibility_checks(mode), &all_tests, runner.workers())?;
+        self.check_tests_are_reproducible(self.reproducibility_checks(mode), &all_tests, self.workers())?;
         let names = self.assign_file_names(&all_tests)?;
         report.tests = names
             .iter()
@@ -165,7 +155,7 @@ impl<T: ToOutput> Task<T> {
             let path = self.tests_path.join(name);
             fs::write(&path, contents.as_bytes()).map_err(Error::io(&path))?;
         }
-        archive_files(&files, &self.tests_archive_path, runner.workers(), &self.logger)?;
+        archive_files(&files, &self.tests_archive_path, self.workers(), &self.logger)?;
 
         let size = files.iter().map(|(_, contents)| contents.len()).sum();
         self.log_result(&format!("Tests size: {}", style(format_size(size)).bold()))?;

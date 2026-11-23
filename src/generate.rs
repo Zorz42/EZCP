@@ -163,7 +163,7 @@ impl<'task, T: ToOutput> Generation<'task, T> {
             })
             .collect();
         let (subtask_idx, subtask, trim_whitespace) = (self.subtask_idx, self.subtask, self.task.trim_whitespace);
-        let inputs = parallel_map(&draws, self.runner.workers(), |&(generator, seed, _)| subtask.generate_input(generator, seed, trim_whitespace));
+        let inputs = parallel_map(&draws, self.task.workers(), |&(generator, seed, _)| subtask.generate_input(generator, seed, trim_whitespace));
 
         // New to both the earlier tests and the earlier candidates of this wave.
         let mut hashes_in_wave = HashSet::new();
@@ -203,7 +203,7 @@ impl<'task, T: ToOutput> Generation<'task, T> {
             .collect();
         let jobs: Vec<_> = judged.iter().map(|&(_, _, job)| job).collect();
         let mut outcomes = vec![Vec::new(); new_inputs.len()];
-        self.task.judge_runs(self.runner, &jobs, 0, &|_job| false, |job, outcome| {
+        self.task.judge_runs(self.runner, &jobs, &|_job| false, |job, outcome| {
             if let Some(outcome) = outcome {
                 let (new, i, _) = judged[job];
                 outcomes[new].push((i, outcome));
@@ -330,7 +330,7 @@ impl<'task, T: ToOutput> Generation<'task, T> {
             let progress_bar = ScopedProgressBar::new(&self.task.logger, self.subtask.stress_tests as u64);
             let mut left = self.subtask.stress_tests;
             while left > 0 {
-                let wave = self.wave(rng, left.min(self.runner.workers()), |_rng| generator, &[])?;
+                let wave = self.wave(rng, left.min(self.task.workers()), |_rng| generator, &[])?;
                 left -= wave.len();
                 for candidate in wave {
                     if let Some(run) = candidate.run? {
@@ -352,7 +352,7 @@ impl<'task, T: ToOutput> Generation<'task, T> {
             let (mut got, mut repeats) = (0, 0);
             while got < needed && repeats < MAX_REPEATED_TESTS {
                 let owed = self.still_owed();
-                for candidate in self.wave(rng, (needed - got).min(self.runner.workers()), |_rng| generator, &owed)? {
+                for candidate in self.wave(rng, (needed - got).min(self.task.workers()), |_rng| generator, &owed)? {
                     if repeats == MAX_REPEATED_TESTS {
                         *rng = candidate.rng_before;
                         break;
@@ -389,7 +389,7 @@ impl<'task, T: ToOutput> Generation<'task, T> {
             }
 
             // No more than the tries left, so only finding every failure can end the hunt mid-wave.
-            let wave_size = self.runner.workers().min(self.task.max_tries - tries);
+            let wave_size = self.task.workers().min(self.task.max_tries - tries);
             for candidate in self.wave(rng, wave_size, |rng| subtask.pick_generator(rng).unwrap_or_default(), &owed)? {
                 if self.nothing_is_owed() {
                     *rng = candidate.rng_before;

@@ -17,6 +17,7 @@ use std::sync::Once;
 
 pub const DEFAULT_SEED: u64 = 0x455A_4350_5345_4544;
 pub const DEFAULT_REPRODUCIBILITY_CHECKS: usize = 10;
+pub const MAX_DEFAULT_JOBS: usize = 4;
 
 static LOGGER_INIT: Once = Once::new();
 
@@ -92,7 +93,7 @@ impl<T: ToOutput> Task<T> {
             trim_whitespace: true,
             fail_fast: false,
             keep_going: false,
-            outcome_cache: false,
+            outcome_cache: true,
             timing_retries: 0,
             jobs: None,
             debug_level: LevelFilter::Info,
@@ -266,17 +267,17 @@ impl<T: ToOutput> Task<T> {
         self
     }
 
-    /// Keep the outcomes of the solutions' runs in the build folder and reuse them: a run is not
-    /// repeated while the program, the input, the official output, the checker and the limits stay
-    /// the same. `--cache` turns it on.
+    /// On by default: keep the outcomes of the solutions' runs in the build folder and reuse them, so
+    /// that a run is not repeated while the program, the input, the official output, the checker and
+    /// the limits stay the same. `--no-cache` turns it off.
     #[must_use]
     pub const fn with_outcome_cache(mut self, cache: bool) -> Self {
         self.outcome_cache = cache;
         self
     }
 
-    /// In the final run, a solution that timed out or took over half the time limit on a test runs
-    /// on it `times` more times, and the best of the runs counts (none by default).
+    /// A solution that timed out or took over half the time limit on a test runs on it `times` more
+    /// times, and the best of the runs counts and is cached (none by default).
     #[must_use]
     pub const fn with_timing_retries(mut self, times: usize) -> Self {
         self.timing_retries = times;
@@ -298,6 +299,12 @@ impl<T: ToOutput> Task<T> {
         self
     }
 
+    /// How many solutions run at once.
+    pub(crate) fn workers(&self) -> usize {
+        self.jobs
+            .unwrap_or_else(|| std::thread::available_parallelism().map_or(1, std::num::NonZeroUsize::get).min(MAX_DEFAULT_JOBS))
+    }
+
     pub(crate) fn limits(&self) -> Limits {
         let time_ms = u64::try_from(self.time_limit_ms).ok().filter(|&time_ms| time_ms > 0).unwrap_or(Limits::new().time_ms);
         Limits::new().with_time_ms(time_ms).with_memory_kb(self.memory_limit_mb.map(|mb| mb as u64 * 1024))
@@ -314,7 +321,7 @@ impl<T: ToOutput> Task<T> {
         self.jobs = options.jobs.or(self.jobs);
         self.fail_fast |= options.fail_fast;
         self.keep_going |= options.keep_going;
-        self.outcome_cache |= options.cache;
+        self.outcome_cache &= !options.no_cache;
         let seed = options.seed.unwrap_or(self.seed);
         let report = self.report_with(options.mode, seed);
         if options.json {

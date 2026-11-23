@@ -1,6 +1,5 @@
 use crate::tests::test_task;
 use crate::{Error, Mode, Subtask, Task};
-use tempfile::TempDir;
 
 const RETURN_ZERO: &str = "int main() { return 0; }";
 const PRINT_ONE: &str = "#include <iostream>\nint main() { std::cout << \"1\\n\"; }";
@@ -75,36 +74,6 @@ fn test_compile_error() {
         .with_solution_source("int main() { this is a compile error }")
         .with_subtask(Subtask::new(0, "").with_test(1, |_rng| "1\n".to_owned()));
     assert!(matches!(task.run_mode(Mode::Files), Err(Error::CompilerError { .. })));
-}
-
-#[test]
-fn test_stale_build_artifacts_are_removed_on_the_next_run() {
-    let tempdir = TempDir::new().unwrap();
-    let sources_in_build_folder = || {
-        let mut sources = std::fs::read_dir(tempdir.path().join("build"))
-            .unwrap()
-            .map(|entry| entry.unwrap().path())
-            .filter(|path| path.extension().is_some_and(|extension| extension == "cpp"))
-            .collect::<Vec<_>>();
-        sources.sort();
-        sources
-    };
-    let run_with = |solution: &str| {
-        Task::new("stale artifacts", tempdir.path())
-            .with_solution_source(solution)
-            .with_subtask(Subtask::new(0, "").with_test(1, |_rng| "1\n".to_owned()))
-            .run_mode(Mode::Files)
-            .unwrap();
-    };
-
-    run_with(RETURN_ZERO);
-    let after_first_run = sources_in_build_folder();
-    assert_eq!(after_first_run.len(), 1, "expected one solution, got {after_first_run:?}");
-
-    run_with("int main() { return 1 - 1; }");
-    let after_second_run = sources_in_build_folder();
-    assert_eq!(after_second_run.len(), 1, "the first solution should not have been kept, got {after_second_run:?}");
-    assert_ne!(after_first_run, after_second_run, "the edited solution should have replaced the original one");
 }
 
 #[test]

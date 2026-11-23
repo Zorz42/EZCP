@@ -10,8 +10,8 @@ fn no_arguments_means_files_mode() {
 
 #[test]
 fn report_options_are_recognised() {
-    let options = CliOptions::parse(["--keep-going", "--cache", "--json"]).unwrap();
-    assert!(options.keep_going && options.cache && options.json);
+    let options = CliOptions::parse(["--keep-going", "--no-cache", "--json"]).unwrap();
+    assert!(options.keep_going && options.no_cache && options.json);
     assert!(!CliOptions::parse(["--fail-fast"]).unwrap().keep_going);
 }
 

@@ -34,7 +34,7 @@ pub struct CliOptions {
     pub jobs: Option<usize>,
     pub fail_fast: bool,
     pub keep_going: bool,
-    pub cache: bool,
+    pub no_cache: bool,
     pub json: bool,
     pub help: bool,
 }
@@ -62,8 +62,8 @@ Options:
   --keep-going      Record every partial solution that does other than declared,
                     rather than stopping at the first, and write no tests if any
                     does.
-  --cache           Reuse the solutions' earlier outcomes on the same tests, kept
-                    in the build folder.
+  --no-cache        Run every solution again rather than reuse its earlier
+                    outcomes on the same tests, kept in the build folder.
   --json            Print what the run found as one JSON object on stdout.
   -h, --help        Print this text.";
 
@@ -115,7 +115,7 @@ impl CliOptions {
                 "--jobs" => options.jobs = Some(parse_jobs(arguments.next().ok_or_else(|| invalid("--jobs needs a value".to_owned()))?.as_ref())?),
                 "--fail-fast" => options.fail_fast = true,
                 "--keep-going" => options.keep_going = true,
-                "--cache" => options.cache = true,
+                "--no-cache" => options.no_cache = true,
                 "--json" => options.json = true,
                 "-h" | "--help" => options.help = true,
                 _ => {

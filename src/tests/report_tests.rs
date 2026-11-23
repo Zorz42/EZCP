@@ -1,7 +1,7 @@
 use crate::report::{Mismatch, Verdict};
 use crate::rng::Rng;
 use crate::tests::{DOUBLE, test_files, test_task, wrong_when};
-use crate::{Compiler, Error, Mode, Subtask, Task};
+use crate::{Error, Mode, Subtask, Task};
 use log::LevelFilter;
 use serde_json::{Value, json};
 
@@ -118,40 +118,6 @@ fn a_partial_min_failures_override_ends_the_hunt_sooner() {
 }
 
 #[test]
-fn the_compiler_fills_the_build_folder_a_task_uses() {
-    let (dir, task) = test_task();
-    let build = dir.path().join("build");
-    let compiler = Compiler::new(&build).unwrap();
-    compiler.compile(DOUBLE).unwrap();
-    let Err(Error::CompilerError { stderr, .. }) = compiler.compile("int main() { nope }") else {
-        unreachable!("a broken source compiled");
-    };
-    assert!(stderr.contains("nope"), "{stderr}");
-
-    let executable = std::fs::read_dir(&build)
-        .unwrap()
-        .map(|entry| entry.unwrap().path())
-        .find(|path| path.extension().is_none_or(|extension| extension == "exe"))
-        .unwrap();
-    let modified = || std::fs::metadata(&executable).unwrap().modified().unwrap();
-    let before = modified();
-    task.with_solution_source(DOUBLE)
-        .with_subtask(Subtask::new(100, "all").with_test(2, number(1..=100)))
-        .run_mode(Mode::Files)
-        .unwrap();
-    assert_eq!(modified(), before);
-}
-
-#[test]
-fn a_retry_keeps_the_best_run() {
-    use crate::outcome::{Outcome, better};
-    let run = |verdict, time_ms| Outcome { verdict, time_ms, memory_kb: 0 };
-    assert_eq!(better(run(Verdict::TimedOut, 0), run(Verdict::Ok, 900)), run(Verdict::Ok, 900));
-    assert_eq!(better(run(Verdict::Ok, 900), run(Verdict::Ok, 700)), run(Verdict::Ok, 700));
-    assert_eq!(better(run(Verdict::Ok, 700), run(Verdict::TimedOut, 0)), run(Verdict::Ok, 700));
-}
-
-#[test]
 fn runs_near_the_time_limit_are_measured_again() {
     let (dir, task) = test_task();
     let log = dir.path().join("runs.log");
@@ -179,6 +145,6 @@ fn runs_near_the_time_limit_are_measured_again() {
         .with_jobs(1)
         .run_mode(Mode::Files)
         .unwrap();
-    // Once each while generating, then three times each for the report.
-    assert_eq!(std::fs::read_to_string(&log).unwrap().lines().count(), 2 + 2 * 3);
+    // Three times each while generating; the report reuses the best, which is cached.
+    assert_eq!(std::fs::read_to_string(&log).unwrap().lines().count(), 2 * 3);
 }

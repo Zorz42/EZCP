@@ -74,33 +74,16 @@ impl From<RunResult<bool>> for Outcome {
     }
 }
 
-/// Keeps the better: a pass over a failure, then the faster.
-pub const fn better(first: Outcome, second: Outcome) -> Outcome {
-    match (first.verdict, second.verdict) {
-        (Verdict::Ok, Verdict::Ok) if second.time_ms < first.time_ms => second,
-        (Verdict::Ok, _) => first,
-        (_, Verdict::Ok) => second,
-        _ => first,
-    }
-}
-
 impl<T: ToOutput> Task<T> {
-    /// Whether an outcome is close enough to the time limit to be measured again.
-    fn near_the_limit(&self, outcome: Outcome) -> bool {
-        outcome.verdict == Verdict::TimedOut || (outcome.verdict == Verdict::Ok && 2 * outcome.time_ms > self.time_limit_ms)
-    }
-
     /// Runs and judges the jobs. `skip` is asked right before a job would start, `on_outcome` told
-    /// each outcome (`None` if skipped) in the order of the jobs. A run near the time limit that was
-    /// not cached is repeated `retries` times and the best of them kept, which the runner caches.
-    pub(crate) fn judge_runs(&self, runner: &Runner, jobs: &[Judged], retries: usize, skip: &dyn Fn(usize) -> bool, mut on_outcome: impl FnMut(usize, Option<Outcome>)) -> Result<()> {
+    /// each outcome (`None` if skipped) in the order of the jobs.
+    pub(crate) fn judge_runs(&self, runner: &Runner, jobs: &[Judged], skip: &dyn Fn(usize) -> bool, mut on_outcome: impl FnMut(usize, Option<Outcome>)) -> Result<()> {
         let limits = self.limits();
         let mut handles = jobs
             .iter()
             .enumerate()
             .map(|(idx, job)| (!skip(idx)).then(|| runner.spawn_checked(job.program, job.input, job.expected, &self.checker, limits)).transpose())
             .collect::<cpprunner::Result<Vec<Option<RunHandle<RunResult<bool>>>>>>()?;
-        let mut near_the_limit = Vec::new();
         for idx in 0..jobs.len() {
             let Some(handle) = handles[idx].take() else {
                 on_outcome(idx, None);
@@ -109,16 +92,10 @@ impl<T: ToOutput> Task<T> {
             if skip(idx) {
                 handle.cancel();
             }
-            let cached = handle.is_cached();
-            let outcome = match handle.wait() {
-                Ok(verdict) => Some(Outcome::from(verdict)),
-                Err(cpprunner::Error::Cancelled) => None,
+            match handle.wait() {
+                Ok(result) => on_outcome(idx, Some(Outcome::from(result))),
+                Err(cpprunner::Error::Cancelled) => on_outcome(idx, None),
                 Err(err) => return Err(err.into()),
-            };
-            match outcome {
-                // Told once it has been measured again.
-                Some(outcome) if retries > 0 && !cached && self.near_the_limit(outcome) => near_the_limit.push((idx, outcome)),
-                _ => on_outcome(idx, outcome),
             }
             for (later, handle) in handles.iter().enumerate().skip(idx + 1) {
                 if let Some(handle) = handle
@@ -127,20 +104,6 @@ impl<T: ToOutput> Task<T> {
                     handle.cancel();
                 }
             }
-        }
-
-        let mut best: Vec<_> = near_the_limit.iter().map(|&(_, outcome)| outcome).collect();
-        for _ in 0..if near_the_limit.is_empty() { 0 } else { retries } {
-            let handles = near_the_limit
-                .iter()
-                .map(|&(idx, _)| runner.spawn_checked_fresh(jobs[idx].program, jobs[idx].input, jobs[idx].expected, &self.checker, limits))
-                .collect::<cpprunner::Result<Vec<_>>>()?;
-            for (best, handle) in best.iter_mut().zip(handles) {
-                *best = better(*best, Outcome::from(handle.wait()?));
-            }
-        }
-        for (&(idx, _), outcome) in near_the_limit.iter().zip(best) {
-            on_outcome(idx, Some(outcome));
         }
         Ok(())
     }

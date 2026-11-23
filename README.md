@@ -146,7 +146,7 @@ list each solution's slowest time and largest memory on every subtask.
 | `--jobs <count>` | Solutions run at once: one per CPU core, at most 4. The tests do not depend on it. |
 | `--fail-fast` | In the final run, stop a partial solution on a subtask it should fail at its first failure there, instead of spending the time limit on every test. |
 | `--keep-going` | Record every partial solution that does other than declared instead of stopping at the first; no tests are written if one does. |
-| `--cache` | Keep the solutions' outcomes in the build folder and reuse them while the program, input, official output, checker and limits stay the same. |
+| `--no-cache` | Run every solution again, rather than reuse the outcomes kept in the build folder while the program, input, official output, checker and limits stay the same. |
 | `--json` | Print what the run found as one JSON object on stdout. |
 
 `with_seed`, `with_jobs`, `with_fail_fast`, `with_keep_going` and `with_outcome_cache` set the same in
@@ -161,10 +161,8 @@ error, if any, with its kind. `to_json` gives what `--json` prints; in it everyt
 
 - `with_partial_min_failures(subtask, n)` after a partial solution sets how many tests of that subtask
   it has to fail. One is enough where failing is certain, and spares the hunt's time limits.
-- `with_timing_retries(n)` runs a solution again where it timed out or took over half the limit in the
-  final run, and keeps the best.
-- `Compiler::new(build_folder).compile(source)` compiles as a task does, into a build folder whose
-  programs a task then reuses; a `CompilerError` has the compiler's messages.
+- `with_timing_retries(n)` runs a solution again where it timed out or took over half the limit, and
+  keeps the best.
 - A generator that panics ends the run with `GeneratorPanicked`, a validator with `ValidatorRejected`,
   each with the subtask, generator, seed and message.
 

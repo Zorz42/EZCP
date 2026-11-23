@@ -4,7 +4,6 @@
 extern crate self as ezcp;
 
 mod archiver;
-mod compiler;
 mod create_tests;
 mod error;
 mod generate;
@@ -30,7 +29,6 @@ mod whitespace;
 #[doc = include_str!("../GUIDE.md")]
 struct Guide;
 
-pub use compiler::Compiler;
 pub use error::{Error, Result};
 pub use generators::{Graph, GraphFormat, array_generator, array_generator_custom};
 pub use mode::Mode;
