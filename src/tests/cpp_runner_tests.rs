@@ -237,10 +237,15 @@ fn test_clean_build_folder_keeps_compiled_programs() {
     let program = runner.add_program(HELLO_WORLD).unwrap();
     let stray = dir.path().join("stray.txt");
     std::fs::write(&stray, "junk").unwrap();
+    // As a compile cut short leaves it.
+    let scratch = dir.path().join(".scratch-abc");
+    std::fs::create_dir_all(&scratch).unwrap();
+    std::fs::write(scratch.join("p1.cpp"), "junk").unwrap();
 
     runner.clean_build_folder().unwrap();
 
     assert!(!stray.exists(), "cleanup should have removed the stray file");
+    assert!(!scratch.exists(), "cleanup should have removed the scratch folder");
     assert_output(&runner.check_programs("", &[program], limits(1000)).unwrap()[0], "Hello, World!");
 }
 

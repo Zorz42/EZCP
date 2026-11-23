@@ -12,11 +12,8 @@ use std::sync::mpsc;
 /// Low, so that contention between runs does not change verdicts.
 const MAX_DEFAULT_WORKERS: usize = 4;
 
-static SCRATCH_FILES: AtomicUsize = AtomicUsize::new(0);
-
-fn scratch_source_name(hash: u64) -> String {
-    format!("p{hash}-{}-{}.cpp", std::process::id(), SCRATCH_FILES.fetch_add(1, Ordering::Relaxed))
-}
+/// Names the folders compiles happen in, which `clean_build_folder` removes when one is left behind.
+const SCRATCH_PREFIX: &str = ".scratch-";
 
 /// Renames a finished file into place, so others see none or all of it. On Windows this fails while
 /// `destination` is open, but names are content hashes, so an existing `destination` is right.
@@ -40,20 +37,20 @@ fn program_hash(gcc: &Gcc, source_code: &str) -> u64 {
 }
 
 /// Compiles the source unless its executable is in the build folder already, returning the paths of
-/// both. Processes (such as servers a judge starts) may share the build folder, so each compiles a
-/// private copy and renames the results into place. Compiling the shared source breaks on Windows,
-/// where a rename over a file being read succeeds and the reader loses it.
+/// both. Processes (such as servers a judge starts) may share the build folder, so each compiles in a
+/// private scratch folder and renames the results into place. Compiling the shared source breaks on
+/// Windows, where a rename over a file being read succeeds and the reader loses it.
 fn compile_cached(gcc: &Gcc, build_folder: &Path, hash: u64, source_code: &str) -> Result<(PathBuf, PathBuf)> {
     let source_file = build_folder.join(format!("p{hash}.cpp"));
     let executable_file = Gcc::executable_path(&source_file)?;
     if !executable_file.exists() {
         trace!("Compiling: {}", executable_file.display());
-        let scratch_source = build_folder.join(scratch_source_name(hash));
+        // In the build folder, so the renames stay on one file system. Removed when dropped.
+        let scratch = tempfile::Builder::new().prefix(SCRATCH_PREFIX).tempdir_in(build_folder).map_err(Error::io(build_folder))?;
+        let scratch_source = scratch.path().join(format!("p{hash}.cpp"));
         std::fs::write(&scratch_source, source_code).map_err(Error::io(&scratch_source))?;
         let scratch_executable = Gcc::executable_path(&scratch_source)?;
         let compiled = gcc.compile(&scratch_source, &scratch_executable).and_then(|()| install(&scratch_executable, &executable_file));
-        // Only left behind by a failed compile.
-        let _ = std::fs::remove_file(&scratch_executable);
         install(&scratch_source, &source_file)?;
         compiled?;
     }
@@ -232,11 +229,15 @@ impl CppRunner {
     pub fn clean_build_folder(&self) -> Result<()> {
         for entry in std::fs::read_dir(&self.build_folder).map_err(Error::io(&self.build_folder))? {
             let path = entry.map_err(Error::io(&self.build_folder))?.path();
+            let removed = if path.is_file() && !self.necessary_files.contains(&path) {
+                std::fs::remove_file(&path)
+            } else if path.is_dir() && path.file_name().is_some_and(|name| name.to_string_lossy().starts_with(SCRATCH_PREFIX)) {
+                std::fs::remove_dir_all(&path)
+            } else {
+                continue;
+            };
             // A leftover only costs disk space.
-            if !self.necessary_files.contains(&path)
-                && path.is_file()
-                && let Err(err) = std::fs::remove_file(&path)
-            {
+            if let Err(err) = removed {
                 warn!("Could not remove {} from the build folder: {err}", path.display());
             }
         }
