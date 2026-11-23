@@ -19,12 +19,12 @@ jobs:
         os: [ ubuntu-latest, macos-latest, windows-latest ]
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - run: rustup toolchain install stable --profile minimal --component clippy
 
       - name: Rust Cache
-        uses: Swatinem/rust-cache@v2.7.3
+        uses: Swatinem/rust-cache@v2.9.3
 
       # Linux and macOS runners ship a C++ compiler; Windows needs MinGW on PATH.
       - name: Set up MinGW
@@ -54,12 +54,12 @@ jobs:
     name: MSRV (1.88)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - run: rustup toolchain install 1.88 --profile minimal
 
       - name: Rust Cache
-        uses: Swatinem/rust-cache@v2.7.3
+        uses: Swatinem/rust-cache@v2.9.3
 
       # --locked, so a dependency that raises its MSRV fails here.
       - name: Check on the minimum supported Rust version
@@ -69,6 +69,6 @@ jobs:
     name: Formatting
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - run: rustup toolchain install stable --profile minimal --component rustfmt
       - run: cargo fmt --all --check
