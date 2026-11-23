@@ -153,8 +153,19 @@ fn a_retry_keeps_the_best_run() {
 fn runs_near_the_time_limit_are_measured_again() {
     let (dir, task) = test_task();
     let log = dir.path().join("runs.log");
+    // MinGW's clock() measures wall time, which a loaded machine stretches.
+    let cpu_ms = [
+        "#ifdef _WIN32",
+        "#include <windows.h>",
+        "static long long cpu_ms() { FILETIME c, e, k, u; GetProcessTimes(GetCurrentProcess(), &c, &e, &k, &u); return ((long long)k.dwHighDateTime << 32 | k.dwLowDateTime) / 10000 + ((long long)u.dwHighDateTime << 32 | u.dwLowDateTime) / 10000; }",
+        "#else",
+        "#include <ctime>",
+        "static long long cpu_ms() { return std::clock() * 1000LL / CLOCKS_PER_SEC; }",
+        "#endif",
+    ]
+    .join("\n");
     let slow = format!(
-        "#include <cstdio>\n#include <ctime>\nint main() {{ long long n; if (scanf(\"%lld\", &n) != 1) return 1; while (std::clock() < 300 * (CLOCKS_PER_SEC / 1000)) {{}} FILE* f = fopen({:?}, \"a\"); fputs(\"x\\n\", f); fclose(f); printf(\"%lld\\n\", 2 * n); }}",
+        "#include <cstdio>\n{cpu_ms}\nint main() {{ long long n; if (scanf(\"%lld\", &n) != 1) return 1; while (cpu_ms() < 300) {{}} FILE* f = fopen({:?}, \"a\"); fputs(\"x\\n\", f); fclose(f); printf(\"%lld\\n\", 2 * n); }}",
         log.display().to_string()
     );
     task.with_solution_source(DOUBLE)
