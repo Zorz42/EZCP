@@ -150,7 +150,7 @@ fn a_partial_solution_meant_to_pass_but_over_the_memory_limit_is_named() {
 fn without_a_memory_limit_nothing_is_over_it() {
     let (_dir, task) = test_task();
     let mut task = megabytes(task, 8, 150).with_solution_source(ALLOCATE);
-    task.memory_limit_mb = None;
+    task.limits.memory_kb = None;
     task.run_mode(Mode::Files).unwrap();
 }
 

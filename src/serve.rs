@@ -1,8 +1,8 @@
 //! Serve mode. Answers are unframed, so a stub that cannot be answered writes nothing and ends the
 //! session with an error instead.
 
-use crate::outcome::official_output;
 use crate::stub::{Part, Stub, stable_hash};
+use crate::verdict::official_output;
 use crate::{Error, Result, Task, ToOutput};
 use cpprunner::Runner;
 use log::{debug, warn};
@@ -83,14 +83,8 @@ impl<T: ToOutput> Task<T> {
     }
 
     fn run_official_solution(&self, stub: &Stub, input: &str, official_solution: &mut Option<Runner>) -> Result<String> {
-        let runner = if let Some(runner) = official_solution {
-            runner
-        } else {
-            let runner = Runner::new(&self.build_folder_path)?;
-            runner.set_result_cache(self.outcome_cache);
-            official_solution.insert(runner)
-        };
-        let result = runner.spawn(&self.solution_source, input, self.limits())?.wait()?;
+        let runner = if let Some(runner) = official_solution { runner } else { official_solution.insert(self.runner()?) };
+        let result = runner.spawn(&self.solution_source, input, self.limits)?.wait()?;
         Ok(self.normalise_output(official_output(result, "on-demand generation", stub.generator + 1)?))
     }
 }

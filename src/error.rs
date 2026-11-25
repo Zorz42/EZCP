@@ -14,16 +14,17 @@ pub enum Error {
 
     #[error(
         "C++ compiler is not found. Make sure to install it first. If it is already installed, \
-    specify the path to compiler with the GCC_PATH environment variable."
+         specify the path to the compiler with the {} environment variable.",
+        cpprunner::COMPILER_ENV_VAR
     )]
     CompilerNotFound,
 
     #[error("Compiler error: {stderr}\n{stdout}")]
     CompilerError { stderr: String, stdout: String },
 
-    /// A fault of the harness, not of the solution.
-    #[error("Could not measure a solution's run: {details}")]
-    TimerFailed { details: String },
+    /// A fault of the harness, not of the program.
+    #[error("Could not run a program: {details}")]
+    RunFailed { details: String },
 
     /// The checker crashed, timed out or exited with a code other than 0, 1 or 2.
     #[error("The checker failed: {details}")]
@@ -118,7 +119,7 @@ impl Error {
             Self::TestAlreadyExists { .. } => "TestAlreadyExists",
             Self::CompilerNotFound => "CompilerNotFound",
             Self::CompilerError { .. } => "CompilerError",
-            Self::TimerFailed { .. } => "TimerFailed",
+            Self::RunFailed { .. } => "RunFailed",
             Self::CheckerFailed { .. } => "CheckerFailed",
             Self::SolutionTimedOut { .. } => "SolutionTimedOut",
             Self::SolutionOutOfMemory { .. } => "SolutionOutOfMemory",
@@ -155,9 +156,9 @@ impl From<cpprunner::Error> for Error {
             },
             cpprunner::Error::CompilerNotFound => Self::CompilerNotFound,
             cpprunner::Error::CompilerError { stderr, stdout } => Self::CompilerError { stderr, stdout },
-            cpprunner::Error::RunFailed { details } => Self::TimerFailed { details },
+            cpprunner::Error::RunFailed { details } => Self::RunFailed { details },
             cpprunner::Error::CheckerFailed { details } => Self::CheckerFailed { details },
-            other => Self::TimerFailed { details: other.to_string() },
+            other => Self::RunFailed { details: other.to_string() },
         }
     }
 }

@@ -2,7 +2,7 @@
 //! `--json` prints it. Solutions, subtasks, generators and tests count from zero here.
 
 use crate::Error;
-pub use crate::outcome::{Outcome, Verdict};
+pub use crate::verdict::Verdict;
 use serde::Serialize;
 use serde::ser::{SerializeStruct, Serializer};
 use std::collections::BTreeMap;
@@ -44,7 +44,7 @@ pub struct SubtaskResult {
     /// Not run after an earlier failure.
     pub skipped: usize,
     /// The largest over the tests it passed.
-    pub time_ms: i32,
+    pub time_ms: u64,
     pub memory_kb: u64,
     /// The first test it failed, counted within the subtask.
     pub first_failure: Option<usize>,

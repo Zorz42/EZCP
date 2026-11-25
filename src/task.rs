@@ -5,7 +5,7 @@ use crate::subtask::Subtask;
 use crate::to_output::ToOutput;
 use crate::{Error, Result};
 use console::style;
-use cpprunner::{Check, Limits};
+use cpprunner::{Check, Limits, Runner};
 use indicatif::MultiProgress;
 use indicatif_log_bridge::LogWrapper;
 use log::{LevelFilter, error, info};
@@ -45,8 +45,7 @@ pub struct Task<T: ToOutput> {
     pub(crate) tests_path: PathBuf,
     pub(crate) tests_archive_path: PathBuf,
     pub(crate) build_folder_path: PathBuf,
-    pub(crate) time_limit_ms: i32,
-    pub(crate) memory_limit_mb: Option<usize>,
+    pub(crate) limits: Limits,
     pub(crate) seed: SeedChoice,
     /// `None` leaves it to the mode.
     pub(crate) reproducibility_checks: Option<usize>,
@@ -78,8 +77,7 @@ impl<T: ToOutput> Task<T> {
             tests_path: path.join("tests"),
             tests_archive_path: path.join("tests.zip"),
             build_folder_path: path.join("build"),
-            time_limit_ms: 5000,
-            memory_limit_mb: None,
+            limits: Limits::new().with_time_ms(5000),
             seed: SeedChoice::Fixed(DEFAULT_SEED),
             reproducibility_checks: None,
             input_file_name: Box::new(|test, subtask, _| format!("test.{:02}.{:03}.in", subtask + 1, test + 1)),
@@ -194,15 +192,15 @@ impl<T: ToOutput> Task<T> {
 
     /// Milliseconds of CPU time (5000).
     #[must_use]
-    pub const fn with_time_limit(mut self, ms: i32) -> Self {
-        self.time_limit_ms = ms;
+    pub const fn with_time_limit(mut self, ms: u64) -> Self {
+        self.limits.time_ms = ms;
         self
     }
 
     /// Megabytes of peak memory: resident on Linux and macOS, committed on Windows. None by default.
     #[must_use]
-    pub const fn with_memory_limit(mut self, mb: usize) -> Self {
-        self.memory_limit_mb = Some(mb);
+    pub const fn with_memory_limit(mut self, mb: u64) -> Self {
+        self.limits = self.limits.with_memory_mb(mb);
         self
     }
 
@@ -305,9 +303,12 @@ impl<T: ToOutput> Task<T> {
             .unwrap_or_else(|| std::thread::available_parallelism().map_or(1, std::num::NonZeroUsize::get).min(MAX_DEFAULT_JOBS))
     }
 
-    pub(crate) fn limits(&self) -> Limits {
-        let time_ms = u64::try_from(self.time_limit_ms).ok().filter(|&time_ms| time_ms > 0).unwrap_or(Limits::new().time_ms);
-        Limits::new().with_time_ms(time_ms).with_memory_kb(self.memory_limit_mb.map(|mb| mb as u64 * 1024))
+    pub(crate) fn runner(&self) -> Result<Runner> {
+        let runner = Runner::new(&self.build_folder_path)?;
+        runner.set_workers(self.workers());
+        runner.set_result_cache(self.outcome_cache);
+        runner.set_timing_retries(self.timing_retries);
+        Ok(runner)
     }
 
     /// Runs in the mode the command line gives (`--help` lists it).

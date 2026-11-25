@@ -10,7 +10,6 @@ mod generate;
 mod generators;
 mod logger_format;
 mod mode;
-mod outcome;
 mod parallel;
 mod partial_solution;
 mod progress;
@@ -23,6 +22,7 @@ mod task;
 #[cfg(test)]
 mod tests;
 mod to_output;
+mod verdict;
 mod whitespace;
 
 #[cfg(doctest)]

@@ -5,18 +5,19 @@
 //! it is forgotten and the `Rng` put back to before them. So the tests do not depend on the threads.
 
 use crate::error::panic_message;
-use crate::outcome::{Judged, Outcome, Verdict, official_output};
 use crate::parallel::parallel_map;
 use crate::progress::ScopedProgressBar;
 use crate::report::{FailedTest, Mismatch, excerpt};
 use crate::rng::Rng;
 use crate::stub::stable_hash;
 use crate::subtask::Fault;
+use crate::verdict::{Verdict, official_output};
 use crate::whitespace::trim_whitespace_owned;
 use crate::{Error, Result, Subtask, Task, ToOutput};
 use cpprunner::{RunHandle, RunResult, Runner};
 use log::{error, info, warn};
 use std::collections::HashSet;
+use std::sync::Arc;
 
 /// Repeats a generator may produce in its initial batch before it is given up on; one with a small
 /// range may never reach its count.
@@ -25,8 +26,8 @@ const MAX_REPEATED_TESTS: usize = 100;
 pub struct GeneratedTest {
     pub generator: usize,
     pub seed: u64,
-    pub input: String,
-    pub output: String,
+    pub input: Arc<str>,
+    pub output: Arc<str>,
 }
 
 /// An index into `Task::solutions`, and the program's source.
@@ -42,13 +43,21 @@ struct Candidate {
     run: Result<Option<Run>>,
 }
 
+/// Its runs are only waited for once the candidate's turn comes; dropping it cancels those not yet started.
 struct Run {
-    input: String,
+    input: Arc<str>,
     hash: u64,
-    official: RunResult,
-    /// Of the good solutions and the bad ones that were run, by index into `Task::solutions`. None if
-    /// the official solution did not finish.
-    outcomes: Vec<(usize, Outcome)>,
+    /// The official solution failing is only an error once the candidate's turn comes.
+    official: Result<Official>,
+}
+
+struct Official {
+    /// Normalised.
+    output: Arc<str>,
+    /// Whether the checker accepts the output as an answer to the same input.
+    accepted: RunHandle<bool>,
+    /// Of the good solutions and the bad ones that were run, by index into `Task::solutions`.
+    partials: Vec<(usize, RunHandle<RunResult<bool>>)>,
 }
 
 struct Generation<'task, T: ToOutput> {
@@ -68,10 +77,6 @@ struct Generation<'task, T: ToOutput> {
     tests: Vec<GeneratedTest>,
     mismatches: &'task mut Vec<Mismatch>,
 }
-
-/// What `run` reveals: the official output, the solutions meant to pass that failed, and those of the
-/// bad ones run that failed.
-type Judgement = (String, Vec<(usize, Verdict)>, Vec<usize>);
 
 impl<T: ToOutput> Task<T> {
     pub(crate) fn normalise_output(&self, raw: String) -> String {
@@ -167,7 +172,7 @@ impl<'task, T: ToOutput> Generation<'task, T> {
 
         // New to both the earlier tests and the earlier candidates of this wave.
         let mut hashes_in_wave = HashSet::new();
-        let inputs: Vec<Result<Option<(u64, String)>>> = draws
+        let inputs: Vec<Result<Option<(u64, Arc<str>)>>> = draws
             .iter()
             .zip(inputs)
             .map(|(&(generator, seed, _), input)| {
@@ -175,50 +180,48 @@ impl<'task, T: ToOutput> Generation<'task, T> {
                     .unwrap_or_else(|panic| Err(Fault::Generator(panic_message(&*panic))))
                     .map_err(|fault| fault.into_error(subtask_idx, generator, seed))?;
                 let hash = stable_hash(&input);
-                Ok((!self.tried_inputs.contains(&hash) && hashes_in_wave.insert(hash)).then_some((hash, input)))
+                Ok((!self.tried_inputs.contains(&hash) && hashes_in_wave.insert(hash)).then(|| (hash, input.into())))
             })
             .collect();
 
-        let new_inputs: Vec<&str> = inputs.iter().filter_map(|input| Some(input.as_ref().ok()?.as_ref()?.1.as_str())).collect();
-        let official_runs = new_inputs
-            .iter()
-            .map(|&input| self.runner.spawn(self.official, input, self.task.limits()))
-            .collect::<cpprunner::Result<Vec<_>>>()?;
-        let official = official_runs.into_iter().map(RunHandle::wait).collect::<cpprunner::Result<Vec<_>>>()?;
-        let expected: Vec<_> = official
-            .iter()
-            .map(|result| match result {
-                RunResult::Ok { output, .. } => Some(self.task.normalise_output(output.clone())),
-                _ => None,
-            })
-            .collect();
-
+        // Each official run is followed straight away by the partial solutions' runs on its output.
+        let limits = self.task.limits;
         let partials: Vec<IndexedProgram> = self.good.iter().chain(bad).copied().collect();
-        let judged: Vec<(usize, usize, Judged)> = new_inputs
+        let official_runs = draws
             .iter()
-            .zip(&expected)
-            .enumerate()
-            .filter_map(|(new, (&input, expected))| Some((new, input, expected.as_deref()?)))
-            .flat_map(|(new, input, expected)| partials.iter().map(move |&(i, program)| (new, i, Judged { program, input, expected })))
-            .collect();
-        let jobs: Vec<_> = judged.iter().map(|&(_, _, job)| job).collect();
-        let mut outcomes = vec![Vec::new(); new_inputs.len()];
-        self.task.judge_runs(self.runner, &jobs, &|_job| false, |job, outcome| {
-            if let Some(outcome) = outcome {
-                let (new, i, _) = judged[job];
-                outcomes[new].push((i, outcome));
-            }
-        })?;
+            .zip(&inputs)
+            .filter_map(|(&(generator, ..), input)| Some((generator, input.as_ref().ok()?.as_ref()?.1.clone())))
+            .map(|(generator, input)| Ok((generator, input.clone(), self.runner.spawn(self.official, input, limits)?)))
+            .collect::<cpprunner::Result<Vec<_>>>()?;
+        let mut officials = Vec::with_capacity(official_runs.len());
+        for (generator, input, run) in official_runs {
+            let output: Arc<str> = match official_output(run.wait()?, "generation phase", generator + 1) {
+                Ok(output) => self.task.normalise_output(output).into(),
+                Err(err) => {
+                    officials.push(Err(err));
+                    continue;
+                }
+            };
+            let check = |program| self.runner.spawn_checked(program, input.clone(), output.clone(), &self.task.checker, limits);
+            officials.push(Ok(Official {
+                accepted: self.runner.spawn_check(&self.task.checker, input.clone(), output.clone(), output.clone())?,
+                partials: partials.iter().map(|&(i, program)| Ok((i, check(program)?))).collect::<cpprunner::Result<_>>()?,
+                output,
+            }));
+        }
 
-        let mut runs = official.into_iter().zip(outcomes);
+        let mut officials = officials.into_iter();
         let candidates = draws.into_iter().zip(inputs).map(|((generator, seed, rng_before), input)| Candidate {
             generator,
             seed,
             rng_before,
             run: input.map(|input| {
                 let (hash, input) = input?;
-                let (official, outcomes) = runs.next()?;
-                Some(Run { input, hash, official, outcomes })
+                Some(Run {
+                    input,
+                    hash,
+                    official: officials.next()?,
+                })
             }),
         });
         Ok(candidates.collect())
@@ -229,30 +232,42 @@ impl<'task, T: ToOutput> Generation<'task, T> {
         std::fs::write(&path, contents).map_err(Error::io(&path))
     }
 
-    /// The official solution failing is an error.
-    fn judge(&self, generator: usize, run: &Run, bad: &[IndexedProgram]) -> Result<Judgement> {
-        let official_output = match official_output(run.official.clone(), "generation phase", generator + 1) {
-            Ok(output) => self.task.normalise_output(output),
+    /// Waits for the candidate's runs. The official solution failing is an error, and so is a solution
+    /// meant to pass failing, unless the task keeps going. Returns the test, whether such a solution
+    /// failed it, and which of `bad` did.
+    fn judge(&mut self, generator: usize, seed: u64, run: Run, bad: &[IndexedProgram]) -> Result<(GeneratedTest, bool, Vec<usize>)> {
+        let official = match run.official {
+            Ok(official) => official,
             Err(err) => return self.write_problem_file("failing_test.in", &run.input).and(Err(err)),
         };
-        let accepted = self.runner.spawn_check(&self.task.checker, run.input.as_str(), official_output.as_str(), official_output.as_str())?;
-        if !accepted.wait()? {
+        if !official.accepted.wait()? {
             self.write_problem_file("failing_test.in", &run.input)?;
             return Err(Error::SolutionFailed {
                 test_path: "generation phase".to_owned(),
                 gen_id: generator + 1,
             });
         }
-        let failed = |i: usize| {
-            run.outcomes
-                .iter()
-                .find(|&&(j, _)| j == i)
-                .map(|&(_, outcome)| outcome.verdict)
-                .filter(|&verdict| verdict != Verdict::Ok)
+        let (mut good_failed, mut bad_failed) = (false, Vec::new());
+        for (i, partial) in official.partials {
+            let verdict = Verdict::from(&partial.wait()?);
+            if verdict == Verdict::Ok {
+                continue;
+            }
+            // One meant to pass may have left `good` earlier in the wave.
+            if self.good.iter().any(|&(j, _)| j == i) {
+                good_failed = true;
+                self.good_failed(i, verdict, generator, seed, &run.input, &official.output)?;
+            } else if bad.iter().any(|&(j, _)| j == i) {
+                bad_failed.push(i);
+            }
+        }
+        let test = GeneratedTest {
+            generator,
+            seed,
+            input: run.input,
+            output: official.output,
         };
-        let good_failed = self.good.iter().filter_map(|&(i, _)| Some((i, failed(i)?))).collect();
-        let bad_failed = bad.iter().filter(|&&(i, _)| failed(i).is_some()).map(|&(i, _)| i).collect();
-        Ok((official_output, good_failed, bad_failed))
+        Ok((test, good_failed, bad_failed))
     }
 
     /// Records a solution meant to pass the subtask failing a test of it. That ends the run, unless the
@@ -261,7 +276,7 @@ impl<'task, T: ToOutput> Generation<'task, T> {
         let Some(&(_, program)) = self.good.iter().find(|&&(i, _)| i == solution) else { return Ok(()) };
         self.good.retain(|&(i, _)| i != solution);
         // Outputs are not kept, so it is run again for its own.
-        let output = match self.runner.spawn(program, input, self.task.limits())?.wait()? {
+        let output = match self.runner.spawn(program, input, self.task.limits)?.wait()? {
             RunResult::Ok { output, .. } => Some(output),
             _ => None,
         };
@@ -304,23 +319,13 @@ impl<'task, T: ToOutput> Generation<'task, T> {
     /// owed failures.
     fn try_out(&mut self, generator: usize, seed: u64, run: Run, bad: &[IndexedProgram]) -> Result<(GeneratedTest, bool)> {
         self.tried_inputs.insert(run.hash);
-        let (output, good_failed, bad_failed) = self.judge(generator, &run, bad)?;
-        let mut counted = !good_failed.is_empty();
-        for (i, verdict) in good_failed {
-            self.good_failed(i, verdict, generator, seed, &run.input, &output)?;
-        }
+        let (test, mut counted, bad_failed) = self.judge(generator, seed, run, bad)?;
         for i in bad_failed {
             if self.owes(i) {
                 self.failures[i] += 1;
                 counted = true;
             }
         }
-        let test = GeneratedTest {
-            generator,
-            seed,
-            input: run.input,
-            output,
-        };
         Ok((test, counted))
     }
 
@@ -334,10 +339,7 @@ impl<'task, T: ToOutput> Generation<'task, T> {
                 left -= wave.len();
                 for candidate in wave {
                     if let Some(run) = candidate.run? {
-                        let (output, good_failed, _) = self.judge(generator, &run, &[])?;
-                        for (i, verdict) in good_failed {
-                            self.good_failed(i, verdict, generator, candidate.seed, &run.input, &output)?;
-                        }
+                        self.judge(generator, candidate.seed, run, &[])?;
                     }
                     progress_bar.inc(1);
                 }

@@ -8,6 +8,7 @@ use crate::rng::Rng;
 use crate::stub::{Part, Stub, stable_hash};
 use crate::{Error, Result, Task, ToOutput};
 use console::style;
+use cpprunner::Runner;
 use log::{debug, info, warn};
 use std::borrow::Cow;
 use std::collections::HashSet;
@@ -101,10 +102,7 @@ impl<T: ToOutput> Task<T> {
             return Err(Error::MissingSolution);
         }
 
-        let runner = cpprunner::Runner::new(&self.build_folder_path)?;
-        runner.set_workers(self.workers());
-        runner.set_result_cache(self.outcome_cache);
-        runner.set_timing_retries(self.timing_retries);
+        let runner = self.runner()?;
         let official = self.solution_source.as_str();
         let partials: Vec<&str> = self.solutions.iter().map(|solution| solution.source.as_str()).collect();
 
@@ -140,8 +138,7 @@ impl<T: ToOutput> Task<T> {
             .collect();
 
         self.log_result("Running official solution:")?;
-        let lines_of_code = |source: &str| source.split('\n').count();
-        report.official = self.run_solution_on_tests(&all_tests, &runner, official, lines_of_code(&self.solution_source), &|_subtask_idx| false)?;
+        report.official = self.run_solution_on_tests(&all_tests, &runner, official, &|_subtask_idx| false)?;
         self.warn_about_unreproduced_passes("The official solution", |_subtask_idx| true, &report.official, &all_tests);
 
         self.run_partial_solutions(&all_tests, &runner, &partials, report)?;
@@ -170,11 +167,10 @@ impl<T: ToOutput> Task<T> {
 
     /// Runs each partial solution on the finished tests. Generation only finds one passing a subtask
     /// it should fail when it runs out of tries, so this records the rest.
-    fn run_partial_solutions(&self, all_tests: &[Vec<GeneratedTest>], runner: &cpprunner::Runner, partials: &[&str], report: &mut Report) -> Result<()> {
-        let lines_of_code = |source: &str| source.split('\n').count();
+    fn run_partial_solutions(&self, all_tests: &[Vec<GeneratedTest>], runner: &Runner, partials: &[&str], report: &mut Report) -> Result<()> {
         for (i, (solution, &program)) in self.solutions.iter().zip(partials).enumerate() {
             self.log_result(&format!("Running partial solution {}: {}", i + 1, solution.name))?;
-            let results = self.run_solution_on_tests(all_tests, runner, program, lines_of_code(&solution.source), &|subtask_idx| solution.should_fail(subtask_idx))?;
+            let results = self.run_solution_on_tests(all_tests, runner, program, &|subtask_idx| solution.should_fail(subtask_idx))?;
             for subtask_idx in (0..self.subtasks.len()).filter(|&idx| results[idx].passed() && solution.should_fail(idx)) {
                 let recorded = |mismatch: &Mismatch| matches!(*mismatch, Mismatch::Passes { solution, subtask } if solution == i && subtask == subtask_idx);
                 if !report.mismatches.iter().any(recorded) {
@@ -219,7 +215,7 @@ impl<T: ToOutput> Task<T> {
                     .generate_input(test.generator, test.seed, trim_whitespace)
                     .unwrap_or_else(|fault| format!("{fault:?}"));
                 progress_bar.inc(1);
-                (rebuilt != test.input).then_some((attempt, rebuilt))
+                (*rebuilt != *test.input).then_some((attempt, rebuilt))
             })
         });
 
@@ -265,7 +261,7 @@ impl<T: ToOutput> Task<T> {
         for ((input_name, output_name), (subtask, test)) in names.into_iter().zip(with_subtasks(all_tests)) {
             for (name, part, contents) in [(input_name, Part::Input, &test.input), (output_name, Part::Output, &test.output)] {
                 let contents = if mode == Mode::Files {
-                    Cow::Borrowed(contents.as_str())
+                    Cow::Borrowed(&**contents)
                 } else {
                     let stub = Stub {
                         subtask,

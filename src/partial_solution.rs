@@ -1,11 +1,10 @@
 use crate::generate::GeneratedTest;
-use crate::outcome::{Judged, Verdict};
 use crate::progress::ScopedProgressBar;
 use crate::report::SubtaskResult;
+use crate::verdict::Verdict;
 use crate::{Result, Task, ToOutput};
-use cpprunner::Runner;
+use cpprunner::{RunResult, Runner};
 use std::fmt::{Display, Write as _};
-use std::sync::atomic::{AtomicUsize, Ordering};
 
 impl Display for SubtaskResult {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -25,62 +24,46 @@ impl Display for SubtaskResult {
 impl<T: ToOutput> Task<T> {
     /// Logs how the solution does on every test and returns how it did on each subtask. With
     /// fail-fast, the subtasks `expected_to_fail` names skip their tests after the first failure.
-    pub(crate) fn run_solution_on_tests(
-        &self,
-        tests: &[Vec<GeneratedTest>],
-        runner: &Runner,
-        program: &str,
-        lines_of_code: usize,
-        expected_to_fail: &dyn Fn(usize) -> bool,
-    ) -> Result<Vec<SubtaskResult>> {
-        let runs: Vec<_> = tests
+    pub(crate) fn run_solution_on_tests(&self, tests: &[Vec<GeneratedTest>], runner: &Runner, program: &str, expected_to_fail: &dyn Fn(usize) -> bool) -> Result<Vec<SubtaskResult>> {
+        let runs = tests
             .iter()
-            .enumerate()
-            .flat_map(|(subtask_idx, subtask_tests)| subtask_tests.iter().enumerate().map(move |(test_idx, test)| (subtask_idx, test_idx, test)))
-            .collect();
-        let jobs: Vec<_> = runs
-            .iter()
-            .map(|&(_, _, test)| Judged {
-                program,
-                input: &test.input,
-                expected: &test.output,
+            .map(|subtask_tests| {
+                subtask_tests
+                    .iter()
+                    .map(|test| runner.spawn_checked(program, test.input.clone(), test.output.clone(), &self.checker, self.limits))
+                    .collect::<cpprunner::Result<Vec<_>>>()
             })
-            .collect();
+            .collect::<cpprunner::Result<Vec<_>>>()?;
 
-        // Everything up to a subtask's first failed test is run, so the report does not depend on the
-        // order the runs finish in.
-        let first_failure: Vec<_> = tests.iter().map(|_| AtomicUsize::new(usize::MAX)).collect();
-        let stops_early: Vec<_> = (0..tests.len()).map(|subtask_idx| self.fail_fast && expected_to_fail(subtask_idx)).collect();
-        let is_past_failure = |subtask_idx: usize, test_idx: usize| stops_early[subtask_idx] && test_idx > first_failure[subtask_idx].load(Ordering::Relaxed);
-
-        let mut outcomes = vec![None; runs.len()];
-        let progress_bar = ScopedProgressBar::new(&self.logger, runs.len() as u64);
-        self.judge_runs(runner, &jobs, &|run| is_past_failure(runs[run].0, runs[run].1), |run, outcome| {
-            progress_bar.inc(1);
-            let (subtask_idx, test_idx, _) = runs[run];
-            if outcome.is_some_and(|outcome| outcome.verdict != Verdict::Ok) {
-                first_failure[subtask_idx].fetch_min(test_idx, Ordering::Relaxed);
-            }
-            outcomes[run] = outcome;
-        })?;
-        drop(progress_bar);
-
-        let mut results: Vec<_> = tests.iter().map(|_| SubtaskResult::default()).collect();
-        for (&(subtask_idx, test_idx, _), outcome) in runs.iter().zip(outcomes) {
-            let result = &mut results[subtask_idx];
-            // It may have run anyway, before the failure was known.
-            match outcome.filter(|_| !is_past_failure(subtask_idx, test_idx)) {
-                Some(outcome) => {
-                    *result.verdicts.entry(outcome.verdict).or_insert(0) += 1;
-                    result.time_ms = result.time_ms.max(outcome.time_ms);
-                    result.memory_kb = result.memory_kb.max(outcome.memory_kb);
+        let progress_bar = ScopedProgressBar::new(&self.logger, tests.iter().map(Vec::len).sum::<usize>() as u64);
+        let mut results = Vec::new();
+        for (subtask_idx, runs) in runs.into_iter().enumerate() {
+            let stops_early = self.fail_fast && expected_to_fail(subtask_idx);
+            let mut result = SubtaskResult::default();
+            let count = runs.len();
+            // Waited for in order, so the report does not depend on the order the runs finish in.
+            // Breaking out drops, and so cancels, the subtask's remaining runs.
+            for (test_idx, run) in runs.into_iter().enumerate() {
+                let run = run.wait()?;
+                progress_bar.inc(1);
+                let verdict = Verdict::from(&run);
+                *result.verdicts.entry(verdict).or_insert(0) += 1;
+                if let RunResult::Ok { time_ms, memory_kb, output: true } = run {
+                    result.time_ms = result.time_ms.max(time_ms);
+                    result.memory_kb = result.memory_kb.max(memory_kb);
                 }
-                None => result.skipped += 1,
+                if verdict != Verdict::Ok && result.first_failure.is_none() {
+                    result.first_failure = Some(test_idx);
+                    if stops_early {
+                        result.skipped = count - test_idx - 1;
+                        progress_bar.inc(result.skipped as u64);
+                        break;
+                    }
+                }
             }
+            results.push(result);
         }
-        for (result, first) in results.iter_mut().zip(&first_failure) {
-            result.first_failure = Some(first.load(Ordering::Relaxed)).filter(|&first| first != usize::MAX);
-        }
+        drop(progress_bar);
 
         let got_points: i32 = results.iter().zip(&self.subtasks).filter(|(result, _)| result.passed()).map(|(_, subtask)| subtask.points).sum();
         let total_points: i32 = self.subtasks.iter().map(|subtask| subtask.points).sum();
@@ -89,7 +72,7 @@ impl<T: ToOutput> Task<T> {
             write!(results_text, "\n- Subtask {}: {result}", subtask_idx + 1).ok();
         }
         self.log_result(&format!("Points {got_points}/{total_points}"))?;
-        self.log_result(&format!("Lines of code: {lines_of_code}"))?;
+        self.log_result(&format!("Lines of code: {}", program.split('\n').count()))?;
         self.log_result(&format!("Results: {results_text}"))?;
         Ok(results)
     }
